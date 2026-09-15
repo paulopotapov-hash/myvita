@@ -1,0 +1,69 @@
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.models import Appointment, Patient, Staff, User, UserRole
+from app.modules.appointments.schemas import AppointmentCreateRequest
+
+
+def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRequest) -> Appointment:
+    """
+    clinic_id comes from the authenticated staff member's session, never
+    from the request body. We still re-verify that both the patient and
+    the staff member actually belong to THIS clinic before creating the
+    appointment — otherwise a staff member could pass another clinic's
+    patient_id/staff_id and create a cross-tenant appointment (IDOR).
+    """
+    patient = db.get(Patient, payload.patient_id)
+    if patient is None or str(patient.clinic_id) != str(clinic_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente não encontrado nesta clínica.",
+        )
+
+    staff = db.get(Staff, payload.staff_id)
+    if staff is None or str(staff.clinic_id) != str(clinic_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profissional não encontrado nesta clínica.",
+        )
+
+    appointment = Appointment(
+        clinic_id=clinic_id,
+        patient_id=patient.id,
+        staff_id=staff.id,
+        scheduled_at=payload.scheduled_at,
+        duration_minutes=payload.duration_minutes,
+        reason=payload.reason,
+    )
+    db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
+def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
+    """
+    Patients only ever see their own appointments. Staff/clinic_admin see
+    every appointment within their own clinic — never another clinic's,
+    regardless of what they might try to pass in query params (there are
+    deliberately no clinic_id/patient_id filters accepted from the client
+    on this endpoint).
+    """
+    if user.role == UserRole.PATIENT:
+        patient = db.query(Patient).filter(Patient.user_id == user.id).first()
+        if patient is None:
+            return []
+        return (
+            db.query(Appointment)
+            .filter(Appointment.patient_id == patient.id)
+            .order_by(Appointment.scheduled_at)
+            .all()
+        )
+
+    # STAFF / CLINIC_ADMIN
+    return (
+        db.query(Appointment)
+        .filter(Appointment.clinic_id == user.clinic_id)
+        .order_by(Appointment.scheduled_at)
+        .all()
+    )
