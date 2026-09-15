@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyVita — A relação entre pacientes e clínicas, finalmente digital.</title>
+<meta name="description" content="A MyVita simplifica a relação entre pacientes e clínicas através de marcações, resultados e mensagens, sem telefonemas.">
+<meta property="og:title" content="MyVita — A relação entre pacientes e clínicas, finalmente digital.">
+<meta property="og:description" content="Marcações. Resultados. Mensagens. Sem telefonemas.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1F33'/%3E%3Cpath d='M9 17.5 13.2 22 23 10' stroke='%23C8A45D' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1F33;
+    --navy-2:#12395A;
+    --gold:#C8A45D;
+    --white:#FFFFFF;
+    --bg:#F6F8FA;
+    --ink:#101820;
+    --ink-soft:#4A5560;
+    --line:#E3E8ED;
+    --line-dark:rgba(255,255,255,.14);
+    --radius-s:10px;
+    --radius-m:16px;
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    background:var(--white);
+    -webkit-font-smoothing:antialiased;
+    font-size:16px;
+    line-height:1.6;
+  }
+  h1,h2,h3,h4{
+    font-family:'Manrope',sans-serif;
+    font-weight:700;
+    letter-spacing:-0.015em;
+    margin:0;
+    color:var(--navy);
+  }
+  p{margin:0;}
+  a{color:inherit;text-decoration:none;}
+  img{max-width:100%;display:block;}
+  ul{margin:0;padding:0;list-style:none;}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;}
+  .container{
+    max-width:1180px;
+    margin:0 auto;
+    padding:0 32px;
+  }
+  section{padding:120px 0; scroll-margin-top:96px;}
+  header#hero{scroll-margin-top:0;}
+  @media (max-width:900px){
+    section{padding:76px 0;}
+    .container{padding:0 22px;}
+  }
+
+  /* Reveal on scroll */
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s var(--ease), transform .7s var(--ease);}
+  .reveal.in{opacity:1;transform:translateY(0);}
+  @media (prefers-reduced-motion: reduce){
+    .reveal{opacity:1;transform:none;transition:none;}
+    html{scroll-behavior:auto;}
+  }
+
+  .eyebrow{
+    font-size:13px;
+    font-weight:600;
+    color:var(--gold);
+    letter-spacing:.01em;
+    margin-bottom:14px;
+    display:block;
+  }
+  .section-head{max-width:640px;margin-bottom:64px;}
+  .section-head h2{font-size:clamp(28px,3.4vw,40px);line-height:1.18;}
+  .section-head .lede{margin-top:16px;font-size:17px;color:var(--ink-soft);max-width:560px;}
+
+  /* Buttons */
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding:14px 26px;
+    border-radius:100px;
+    font-weight:600;
+    font-size:15px;
+    transition:transform .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease), color .25s var(--ease);
+    white-space:nowrap;
+  }
+  .btn-primary{
+    background:var(--navy);
+    color:var(--white);
+  }
+  .btn-primary:hover{background:#0e2a44; transform:translateY(-1px);}
+  .btn-ghost{
+    background:transparent;
+    color:var(--navy);
+    border:1px solid var(--line);
+  }
+  .btn-ghost:hover{border-color:var(--navy); transform:translateY(-1px);}
+  .btn-gold{
+    background:var(--gold);
+    color:var(--navy);
+  }
+  .btn-gold:hover{background:#d6b579; transform:translateY(-1px);}
+  .btn-on-dark{
+    background:transparent;
+    color:var(--white);
+    border:1px solid var(--line-dark);
+  }
+  .btn-on-dark:hover{border-color:var(--gold); color:var(--gold);}
+
+  /* ---------- NAVBAR ---------- */
+  #navbar{
+    position:fixed;
+    top:0; left:0; right:0;
+    z-index:100;
+    padding:22px 0;
+    transition:padding .35s var(--ease), background .35s var(--ease), box-shadow .35s var(--ease);
+  }
+  #navbar .nav-inner{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  #navbar.scrolled{
+    padding:13px 0;
+    background:rgba(255,255,255,.88);
+    backdrop-filter:blur(14px);
+    box-shadow:0 1px 0 var(--line);
+  }
+  .logo{
+    font-family:'Manrope',sans-serif;
+    font-weight:800;
+    font-size:20px;
+    color:var(--navy);
+    letter-spacing:-0.02em;
+  }
+  .nav-links{
+    display:flex;
+    gap:36px;
+    align-items:center;
+  }
+  .nav-links a{
+    font-size:14.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    transition:color .2s;
+  }
+  .nav-links a:hover{color:var(--navy);}
+  .nav-cta{display:flex;align-items:center;gap:22px;}
+  .nav-cta .btn{padding:11px 22px;font-size:14px;}
+  .burger{display:none;width:24px;height:18px;position:relative;}
+  .burger span{position:absolute;left:0;right:0;height:2px;background:var(--navy);transition:.3s;}
+  .burger span:nth-child(1){top:0;}
+  .burger span:nth-child(2){top:8px;}
+  .burger span:nth-child(3){top:16px;}
+  #navbar.open .burger span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+  #navbar.open .burger span:nth-child(2){opacity:0;}
+  #navbar.open .burger span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+  @media (max-width:860px){
+    .nav-links{
+      position:fixed; top:64px; left:0; right:0;
+      background:var(--white);
+      flex-direction:column;
+      align-items:flex-start;
+      gap:0;
+      padding:8px 22px 18px;
+      box-shadow:0 12px 24px rgba(11,31,51,.08);
+      transform:translateY(-12px);
+      opacity:0;
+      pointer-events:none;
+      transition:.3s var(--ease);
+    }
+    .nav-links a{padding:13px 0; width:100%; border-bottom:1px solid var(--line);}
+    #navbar.open .nav-links{transform:translateY(0); opacity:1; pointer-events:auto;}
+    .nav-cta .btn:first-child{display:none;}
+    .burger{display:block;}
+  }
+
+  /* ---------- HERO ---------- */
+  #hero{
+    padding:172px 0 120px;
+    background:
+      radial-gradient(720px 420px at 82% -8%, rgba(200,164,93,.10), transparent 60%),
+      var(--white);
+    overflow:hidden;
+  }
+  .hero-grid{
+    display:grid;
+    grid-template-columns:1fr 0.95fr;
+    gap:64px;
+    align-items:center;
+  }
+  .hero-tag{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:7px 14px;
+    border:1px solid var(--line);
+    border-radius:100px;
+    font-size:12.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    margin-bottom:26px;
+  }
+  .hero-tag .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);}
+  h1.hero-title{
+    font-size:clamp(34px,4.6vw,56px);
+    line-height:1.08;
+    letter-spacing:-0.02em;
+  }
+  .hero-sub{
+    font-family:'Manrope',sans-serif;
+    font-weight:600;
+    font-size:clamp(16px,1.7vw,19px);
+    color:var(--navy-2);
+    margin-top:22px;
+  }
+  .hero-copy{
+    font-size:16.5px;
+    color:var(--ink-soft);
+    margin-top:16px;
+    max-width:460px;
+  }
+  .hero-ctas{
+    display:flex;
+    gap:14px;
+    margin-top:36px;
+    flex-wrap:wrap;
+  }
+  /* Hero mockup composition */
+  .hero-visual{position:relative; height:480px;}
+  .device{
+    position:absolute;
+    border-radius:22px;
+    background:var(--navy);
+    box-shadow:0 30px 60px -20px rgba(11,31,51,.35);
+    overflow:hidden;
+  }
+  .device.phone{
+    width:238px; height:440px;
+    right:36px; top:16px;
+    padding:14px 12px;
+    z-index:3;
+  }
+  .device.laptop{
+    width:420px; height:270px;
+    left:0; bottom:8px;
+    border-radius:14px;
+    padding:16px;
+    z-index:2;
+  }
+  .device-screen{
+    width:100%; height:100%;
+    background:var(--white);
+    border-radius:12px;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .device .device-screen .scr-tag{
+    font-size:9.5px; font-weight:600; letter-spacing:.03em; color:var(--gold); text-transform:uppercase;
+  }
+  .scr-bar{height:9px;border-radius:5px;background:var(--line);}
+  .scr-bar.w70{width:70%;} .scr-bar.w40{width:40%;} .scr-bar.w90{width:90%;} .scr-bar.w55{width:55%;}
+  .scr-card{
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .scr-row{display:flex; align-items:center; gap:8px;}
+  .scr-chip{width:26px;height:26px;border-radius:50%;background:var(--bg);flex:none;}
+  .scr-pill{
+    font-size:9px; font-weight:600; padding:3px 8px; border-radius:100px;
+    background:rgba(200,164,93,.16); color:#8a6a34;
+  }
+  @media (max-width:900px){
+    .hero-grid{grid-template-columns:1fr; text-align:left;}
+    .hero-visual{height:380px; margin-top:12px;}
+    .device.laptop{width:88%;}
+    .device.phone{width:180px; height:340px; right:0;}
+  }
+
+  /* ---------- PROBLEMA ---------- */
+  #problema{background:var(--bg);}
+  .problema-cols{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:40px;
+    align-items:stretch;
+  }
+  .prob-col{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:var(--radius-m);
+    padding:34px 30px;
+  }
+  .prob-col h3{font-size:19px;margin-bottom:6px;}
+  .prob-col .who{font-size:13px;color:var(--gold);font-weight:600;margin-bottom:10px;display:block;}
+  .prob-list{margin-top:20px;display:flex;flex-direction:column;gap:13px;}
+  .prob-list li{
+    display:flex; gap:10px; font-size:14.5px; color:var(--ink-soft);
+    padding-bottom:13px; border-bottom:1px solid var(--line);
+  }
+  .prob-list li:last-child{border-bottom:none;padding-bottom:0;}
+  .prob-list li:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--navy-2);margin-top:8px;flex:none;}
+  .problema-eq{
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Manrope',sans-serif; font-size:26px; color:var(--line); font-weight:700;
+  }
+  .problema-result{
+    margin-top:48px;
+    text-align:center;
+    font-family:'Manrope',sans-serif;
+    font-size:clamp(20px,2.4vw,26px);
+    font-weight:700;
+    color:var(--navy);
+  }
+  @media (max-width:760px){
+    .problema-cols{grid-template-columns:1fr;}
+    .problema-eq{display:none;}
+  }
+
+  /* ---------- SOLUÇÃO ---------- */
+  .solucao-flow{
+    display:flex; align-items:center; justify-content:center; gap:22px;
+    margin-bottom:56px; flex-wrap:wrap;
+  }
+  .flow-node{
+    padding:16px 26px;
+    border-radius:100px;
+    font-family:'Manrope',sans-serif;
+    font-weight:700;
+    font-size:15px;
+  }
+  .flow-node.patient, .flow-node.clinic{
+    background:var(--bg); color:var(--navy); border:1px solid var(--line);
+  }
+  .flow-node.myvita{
+    background:var(--navy); color:var(--white);
+  }
+  .flow-arrow{color:var(--line); font-size:20px;}
+  @media (max-width:640px){ .solucao-flow{flex-direction:column;} .flow-arrow{transform:rotate(90deg);} }
+
+  .pillars{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    border-radius:var(--radius-m);
+    overflow:hidden;
+  }
+  .pillar{
+    background:var(--white);
+    padding:36px 30px;
+  }
+  .pillar .num{
+    font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; color:var(--gold);
+    margin-bottom:16px; display:block;
+  }
+  .pillar h4{font-size:18px; margin-bottom:8px;}
+  .pillar p{font-size:14.5px; color:var(--ink-soft);}
+  @media (max-width:760px){ .pillars{grid-template-columns:1fr;} }
+
+  /* ---------- COMO FUNCIONA ---------- */
+  #como-funciona{background:var(--navy); color:var(--white);}
+  #como-funciona .section-head h2{color:var(--white);}
+  #como-funciona .section-head .lede{color:rgba(255,255,255,.6);}
+  .steps{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:0;
+    position:relative;
+  }
+  .step{
+    padding:28px 22px 28px 0;
+    border-top:1px solid var(--line-dark);
+    position:relative;
+  }
+  .step .step-num{
+    font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; color:var(--gold);
+    display:block; margin-bottom:14px;
+  }
+  .step p{font-size:14.5px; color:rgba(255,255,255,.82); line-height:1.5;}
+  @media (max-width:900px){ .steps{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .steps{grid-template-columns:1fr;} }
+  .como-note{
+    margin-top:44px; padding-top:28px; border-top:1px solid var(--line-dark);
+    font-size:14.5px; color:rgba(255,255,255,.6); max-width:560px;
+  }
+
+  /* ---------- PARA CLÍNICAS ---------- */
+  .clinicas-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:64px;
+    align-items:start;
+  }
+  .value-list{display:flex; flex-direction:column;}
+  .value-item{
+    display:flex; gap:20px;
+    padding:26px 0;
+    border-top:1px solid var(--line);
+  }
+  .value-item:last-child{border-bottom:1px solid var(--line);}
+  .value-icon{
+    flex:none; width:40px; height:40px; border-radius:10px;
+    background:var(--bg); display:flex; align-items:center; justify-content:center;
+    color:var(--navy-2); font-family:'Manrope',sans-serif; font-weight:700; font-size:14px;
+  }
+  .value-item h4{font-size:16.5px; margin-bottom:5px;}
+  .value-item p{font-size:14.5px; color:var(--ink-soft);}
+  .clinicas-cta{
+    background:var(--bg); border-radius:var(--radius-m); padding:40px;
+    position:sticky; top:120px;
+  }
+  .clinicas-cta h3{font-size:22px; margin-bottom:14px;}
+  .clinicas-cta p{font-size:14.5px; color:var(--ink-soft); margin-bottom:26px;}
+  @media (max-width:900px){
+    .clinicas-grid{grid-template-columns:1fr;}
+    .clinicas-cta{position:static;}
+  }
+
+  /* ---------- EXPERIÊNCIA DO PACIENTE ---------- */
+  #paciente{background:var(--bg);}
+  .paciente-grid{
+    display:grid;
+    grid-template-columns:0.95fr 1fr;
+    gap:60px;
+    align-items:center;
+  }
+  .paciente-feats{display:flex;flex-direction:column;gap:28px;}
+  .pf{display:flex; gap:16px;}
+  .pf-mark{
+    flex:none; width:8px; height:8px; border-radius:50%; background:var(--gold); margin-top:9px;
+  }
+  .pf h4{font-size:17px; margin-bottom:6px;}
+  .pf p{font-size:14.5px; color:var(--ink-soft);}
+  .phone-showcase{display:flex; justify-content:center;}
+  @media (max-width:900px){ .paciente-grid{grid-template-columns:1fr;} .phone-showcase{order:-1;} }
+
+  /* ---------- PRODUTO ---------- */
+  .produto-tabs{
+    display:flex; gap:10px; margin-bottom:40px;
+  }
+  .produto-tab{
+    padding:11px 22px; border-radius:100px; border:1px solid var(--line);
+    font-size:14px; font-weight:600; color:var(--ink-soft);
+    transition:.2s;
+  }
+  .produto-tab.active{background:var(--navy); color:var(--white); border-color:var(--navy);}
+  .produto-panel{display:none;}
+  .produto-panel.active{display:grid;}
+  .screens-grid{
+    grid-template-columns:repeat(4,1fr);
+    gap:18px;
+  }
+  @media (max-width:900px){ .screens-grid{grid-template-columns:repeat(2,1fr);} }
+  .screen-card{
+    border:1px solid var(--line);
+    border-radius:var(--radius-m);
+    overflow:hidden;
+    background:var(--white);
+  }
+  .screen-frame{
+    aspect-ratio:9/16;
+    background:linear-gradient(160deg, var(--bg), var(--white));
+    display:flex; align-items:center; justify-content:center;
+    padding:18px;
+  }
+  .screen-mock{
+    width:100%; height:100%; border:1px dashed var(--line); border-radius:10px;
+    display:flex; flex-direction:column; gap:8px; padding:14px;
+  }
+  .screen-label{
+    padding:14px 16px;
+    font-size:13.5px; font-weight:600; color:var(--navy);
+    border-top:1px solid var(--line);
+  }
+  .produto-note{
+    margin-top:32px; font-size:13.5px; color:var(--ink-soft);
+    display:flex; align-items:center; gap:8px;
+  }
+  .produto-note .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);flex:none;}
+
+  /* ---------- VISÃO ---------- */
+  #visao{background:var(--navy); color:var(--white);}
+  #visao .section-head h2{color:var(--white);}
+  #visao .section-head .lede{color:rgba(255,255,255,.6);}
+  .visao-path{
+    display:flex; flex-direction:column; gap:0;
+  }
+  .visao-stage{
+    display:grid; grid-template-columns:160px 1fr; gap:32px;
+    padding:34px 0;
+    border-top:1px solid var(--line-dark);
+    align-items:start;
+  }
+  .visao-stage:last-child{border-bottom:1px solid var(--line-dark);}
+  .visao-stage .stage-label{
+    font-family:'Manrope',sans-serif; font-weight:700; font-size:13px;
+    color:var(--gold); letter-spacing:.02em;
+  }
+  .visao-stage h4{color:var(--white); font-size:19px; margin-bottom:8px;}
+  .visao-stage p{color:rgba(255,255,255,.65); font-size:15px; max-width:520px;}
+  @media (max-width:640px){ .visao-stage{grid-template-columns:1fr; gap:10px;} }
+
+  /* ---------- ESTADO ATUAL ---------- */
+  .roadmap-track{
+    display:flex; align-items:center; gap:0; margin-bottom:52px; flex-wrap:wrap;
+  }
+  .rm-point{display:flex; flex-direction:column; align-items:center; gap:10px; min-width:120px;}
+  .rm-dot{width:14px; height:14px; border-radius:50%; background:var(--line); border:2px solid var(--line);}
+  .rm-point.done .rm-dot{background:var(--gold); border-color:var(--gold);}
+  .rm-label{font-size:13px; font-weight:600; color:var(--ink-soft); text-align:center;}
+  .rm-point.done .rm-label{color:var(--navy);}
+  .rm-line{flex:1; height:2px; background:var(--line); min-width:24px;}
+  @media (max-width:760px){
+    .roadmap-track{justify-content:flex-start;}
+    .rm-line{min-width:16px;}
+  }
+  .estado-copy{
+    max-width:640px; font-size:16px; color:var(--ink-soft);
+    background:var(--bg); border-radius:var(--radius-m); padding:30px 34px;
+  }
+
+  /* ---------- CTA FINAL ---------- */
+  #cta-final{
+    background:linear-gradient(150deg, var(--navy), var(--navy-2));
+    color:var(--white);
+    text-align:center;
+  }
+  #cta-final h2{color:var(--white); font-size:clamp(26px,3.6vw,40px); max-width:720px; margin:0 auto;}
+  #cta-final p{color:rgba(255,255,255,.66); max-width:560px; margin:20px auto 0; font-size:16px;}
+  .cta-buttons{display:flex; gap:14px; justify-content:center; margin-top:38px; flex-wrap:wrap;}
+
+  #contacto{background:var(--white);}
+  .contacto-grid{display:grid; grid-template-columns:0.85fr 1fr; gap:64px;}
+  .contacto-info h3{font-size:24px; margin-bottom:14px;}
+  .contacto-info p{font-size:15px; color:var(--ink-soft); margin-bottom:24px;}
+  .info-line{display:flex; gap:12px; padding:14px 0; border-top:1px solid var(--line); font-size:14.5px;}
+  .info-line b{color:var(--navy); font-weight:600; min-width:110px; display:inline-block;}
+  form.contact-form{display:flex; flex-direction:column; gap:18px;}
+  .form-row{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  .field{display:flex; flex-direction:column; gap:7px;}
+  .field label{font-size:13px; font-weight:600; color:var(--navy);}
+  .field input, .field select, .field textarea{
+    padding:13px 14px; border:1px solid var(--line); border-radius:var(--radius-s);
+    font-family:inherit; font-size:14.5px; color:var(--ink); background:var(--white);
+    transition:border-color .2s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{
+    outline:none; border-color:var(--navy-2);
+  }
+  .field textarea{resize:vertical; min-height:110px;}
+  .form-note{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+  .form-status{font-size:14px; margin-top:4px; display:none;}
+  @media (max-width:860px){ .contacto-grid{grid-template-columns:1fr;} .form-row{grid-template-columns:1fr;} }
+
+  /* ---------- FOOTER ---------- */
+  footer{background:var(--navy); color:rgba(255,255,255,.6); padding:64px 0 32px;}
+  .footer-top{
+    display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:40px;
+    padding-bottom:44px; border-bottom:1px solid var(--line-dark);
+  }
+  .footer-brand .logo{color:var(--white);}
+  .footer-brand p{margin-top:10px; font-size:14px; max-width:280px;}
+  .footer-cols{display:flex; gap:64px; flex-wrap:wrap;}
+  .footer-col h5{color:var(--white); font-size:13px; font-weight:600; margin-bottom:16px;}
+  .footer-col a{display:block; font-size:14px; padding:6px 0; color:rgba(255,255,255,.6); transition:.2s;}
+  .footer-col a:hover{color:var(--gold);}
+  .footer-bottom{
+    display:flex; justify-content:space-between; padding-top:24px; font-size:13px; flex-wrap:wrap; gap:10px;
+  }
+  .footer-col .link-disabled{
+    display:block; font-size:14px; padding:6px 0; color:rgba(255,255,255,.32); cursor:default;
+  }
+
+  /* ---------- ACCESSIBILITY / FOCUS ---------- */
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:3px;
+    border-radius:4px;
+  }
+  .produto-tab:focus-visible{ outline-offset:2px; }
+
+  /* ---------- FORM VALIDATION / STATES ---------- */
+  .field input[aria-invalid="true"],
+  .field select[aria-invalid="true"],
+  .field textarea[aria-invalid="true"]{
+    border-color:#B23A3A;
+  }
+  .field-error{
+    font-size:12.5px; color:#B23A3A; min-height:16px; display:block;
+  }
+  .form-status{
+    font-size:14px; margin-top:4px; display:none;
+    padding:13px 16px; border-radius:var(--radius-s);
+  }
+  .form-status.status-success{display:block; background:rgba(200,164,93,.14); color:#8a6a34;}
+  .form-status.status-error{display:block; background:rgba(178,58,58,.08); color:#B23A3A;}
+  .btn[disabled]{opacity:.7; cursor:default; pointer-events:none;}
+  .btn .spinner{
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){
+    .btn .spinner{ animation-duration:1.4s; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= NAVBAR ================= -->
+<nav id="navbar">
+  <div class="container nav-inner">
+    <a href="#hero" class="logo">MyVita</a>
+    <div class="nav-links" id="navLinks">
+      <a href="#produto">Produto</a>
+      <a href="#clinicas">Para Clínicas</a>
+      <a href="#visao">Visão</a>
+      <a href="#estado">Sobre nós</a>
+    </div>
+    <div class="nav-cta">
+      <a href="#contacto" class="btn btn-ghost">Falar com a MyVita</a>
+      <button type="button" class="burger" id="burgerBtn" aria-label="Abrir menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+</nav>
+
+<!-- ================= HERO ================= -->
+<header id="hero">
+  <div class="container hero-grid">
+    <div>
+      <span class="hero-tag reveal"><span class="dot"></span> Protótipo funcional · Em fase de validação</span>
+      <h1 class="hero-title reveal">A relação entre pacientes e clínicas, finalmente digital.</h1>
+      <p class="hero-sub reveal">Marcações. Resultados. Mensagens. Sem telefonemas.</p>
+      <p class="hero-copy reveal">A MyVita simplifica as interações mais frequentes entre pacientes e prestadores de saúde, substituindo processos dispersos por uma experiência digital simples e centralizada.</p>
+      <div class="hero-ctas reveal">
+        <a href="#produto" class="btn btn-primary">Conhecer a MyVita</a>
+        <a href="#contacto" class="btn btn-ghost">Falar connosco</a>
+      </div>
+    </div>
+    <div class="hero-visual reveal">
+      <div class="device laptop">
+        <div class="device-screen">
+          <span class="scr-tag">Dashboard · Clínica</span>
+          <div class="scr-row"><div class="scr-chip"></div><div style="flex:1"><div class="scr-bar w40"></div></div><span class="scr-pill">3 novos</span></div>
+          <div class="scr-card">
+            <div class="scr-row"><div class="scr-bar w70"></div><span class="scr-pill">Pendente</span></div>
+            <div class="scr-bar w40"></div>
+          </div>
+          <div class="scr-card">
+            <div class="scr-row"><div class="scr-bar w55"></div><span class="scr-pill">Confirmado</span></div>
+            <div class="scr-bar w90"></div>
+          </div>
+        </div>
+      </div>
+      <div class="device phone">
+        <div class="device-screen">
+          <span class="scr-tag">Home · Paciente</span>
+          <div class="scr-row"><div class="scr-chip"></div><div style="flex:1"><div class="scr-bar w70"></div></div></div>
+          <div class="scr-card"><div class="scr-bar w90"></div><div class="scr-bar w40"></div></div>
+          <div class="scr-card"><div class="scr-bar w55"></div><div class="scr-bar w70"></div></div>
+          <div class="scr-card"><div class="scr-bar w40"></div><div class="scr-bar w90"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ================= PROBLEMA ================= -->
+<section id="problema">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>A saúde continua demasiado dependente do telefone.</h2>
+      <p class="lede">Do lado do paciente e do lado da clínica, o mesmo processo gera fricção todos os dias.</p>
+    </div>
+    <div class="problema-cols">
+      <div class="prob-col reveal">
+        <span class="who">Paciente</span>
+        <h3>Uma relação fragmentada com a clínica</h3>
+        <ul class="prob-list">
+          <li>Telefonemas para marcar consultas</li>
+          <li>Tempos de espera ao telefone</li>
+          <li>Resultados que exigem contacto direto</li>
+          <li>Informação espalhada por vários canais</li>
+          <li>Dificuldade em obter respostas rápidas</li>
+        </ul>
+      </div>
+      <div class="problema-eq reveal">=</div>
+      <div class="prob-col reveal">
+        <span class="who">Clínica</span>
+        <h3>Demasiado trabalho administrativo</h3>
+        <ul class="prob-list">
+          <li>Elevado volume de chamadas</li>
+          <li>Gestão manual de pedidos</li>
+          <li>Confirmações feitas uma a uma</li>
+          <li>Comunicação dispersa por canais</li>
+          <li>Processos que consomem tempo da equipa</li>
+        </ul>
+      </div>
+    </div>
+    <p class="problema-result reveal">A clínica perde eficiência. O paciente perde tempo.</p>
+  </div>
+</section>
+
+<!-- ================= SOLUÇÃO ================= -->
+<section id="solucao">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>Uma relação digital entre paciente e clínica.</h2>
+      <p class="lede">Começamos por resolver três interações frequentes — a visão é digitalizar progressivamente toda a relação.</p>
+    </div>
+    <div class="solucao-flow reveal">
+      <span class="flow-node patient">Paciente</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node myvita">MyVita</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node clinic">Clínica</span>
+    </div>
+    <div class="pillars reveal">
+      <div class="pillar">
+        <span class="num">Marcações</span>
+        <h4>Pedir e gerir marcações</h4>
+        <p>Pedido → aprovação → confirmação, sem depender de uma chamada.</p>
+      </div>
+      <div class="pillar">
+        <span class="num">Resultados</span>
+        <h4>Consultar resultados</h4>
+        <p>Publicação → notificação → consulta, tudo dentro da mesma plataforma.</p>
+      </div>
+      <div class="pillar">
+        <span class="num">Mensagens</span>
+        <h4>Comunicar com a clínica</h4>
+        <p>Mensagem → resposta → histórico, com contexto sempre disponível.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= COMO FUNCIONA ================= -->
+<section id="como-funciona">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>Do pedido à confirmação, sem um telefonema.</h2>
+      <p class="lede">Comunicação bidirecional integrada — pedidos, resultados e mensagens, tudo no mesmo lugar.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><span class="step-num">01</span><p>O paciente pede uma marcação.</p></div>
+      <div class="step reveal"><span class="step-num">02</span><p>A clínica recebe o pedido.</p></div>
+      <div class="step reveal"><span class="step-num">03</span><p>A clínica aceita ou rejeita.</p></div>
+      <div class="step reveal"><span class="step-num">04</span><p>O paciente recebe a confirmação.</p></div>
+      <div class="step reveal"><span class="step-num">05</span><p>A clínica disponibiliza resultados.</p></div>
+      <div class="step reveal"><span class="step-num">06</span><p>O paciente é notificado.</p></div>
+      <div class="step reveal"><span class="step-num">07</span><p>Paciente e clínica comunicam livremente.</p></div>
+      <div class="step reveal" style="opacity:0;pointer-events:none;"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PARA CLÍNICAS ================= -->
+<section id="clinicas">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>Menos chamadas. Mais eficiência.</h2>
+      <p class="lede">A clínica não compra uma aplicação. Compra tempo de volta para a equipa e uma relação mais próxima com quem já é seu paciente.</p>
+    </div>
+    <div class="clinicas-grid">
+      <div class="value-list">
+        <div class="value-item reveal">
+          <div class="value-icon">1</div>
+          <div><h4>Menos interrupções</h4><p>Reduzir a dependência de chamadas para tarefas administrativas frequentes.</p></div>
+        </div>
+        <div class="value-item reveal">
+          <div class="value-icon">2</div>
+          <div><h4>Processos mais organizados</h4><p>Centralizar pedidos, resultados e comunicação num único local.</p></div>
+        </div>
+        <div class="value-item reveal">
+          <div class="value-icon">3</div>
+          <div><h4>Melhor experiência</h4><p>Oferecer aos pacientes uma forma moderna de interagir com a clínica.</p></div>
+        </div>
+        <div class="value-item reveal">
+          <div class="value-icon">4</div>
+          <div><h4>Relação contínua</h4><p>Passar de interações isoladas para uma relação digital contínua.</p></div>
+        </div>
+      </div>
+      <div class="clinicas-cta reveal">
+        <h3>Quer perceber como a MyVita se aplicaria à sua clínica?</h3>
+        <p>Estamos a falar com clínicas privadas para validar o produto e desenhar os primeiros pilotos.</p>
+        <a href="#contacto" class="btn btn-primary" style="width:100%;">Quero conhecer a MyVita</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= EXPERIÊNCIA DO PACIENTE ================= -->
+<section id="paciente">
+  <div class="container">
+    <div class="paciente-grid">
+      <div>
+        <div class="section-head reveal" style="margin-bottom:36px;">
+          <h2>Tudo o que precisa, num só lugar.</h2>
+          <p class="lede">Sem sistemas complexos para aprender — só o que já sabe fazer, mas mais simples.</p>
+        </div>
+        <div class="paciente-feats">
+          <div class="pf reveal"><div class="pf-mark"></div><div><h4>Marcações</h4><p>Pede uma consulta em poucos toques e acompanha o estado do pedido.</p></div></div>
+          <div class="pf reveal"><div class="pf-mark"></div><div><h4>Resultados</h4><p>Consulta os resultados assim que a clínica os disponibiliza.</p></div></div>
+          <div class="pf reveal"><div class="pf-mark"></div><div><h4>Mensagens</h4><p>Fala diretamente com a clínica, com o histórico sempre à mão.</p></div></div>
+        </div>
+      </div>
+      <div class="phone-showcase reveal">
+        <div class="device phone" style="position:static;">
+          <div class="device-screen">
+            <span class="scr-tag">Mensagens · Paciente</span>
+            <div class="scr-row"><div class="scr-chip"></div><div style="flex:1"><div class="scr-bar w55"></div></div></div>
+            <div class="scr-card"><div class="scr-bar w90"></div><div class="scr-bar w40"></div></div>
+            <div class="scr-card"><div class="scr-bar w70"></div></div>
+            <div class="scr-card"><div class="scr-bar w40"></div><div class="scr-bar w55"></div></div>
+            <div class="scr-card"><div class="scr-bar w90"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PRODUTO / PROTÓTIPO ================= -->
+<section id="produto">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>O produto já existe — em protótipo.</h2>
+      <p class="lede">Uma experiência pensada para dois lados: quem pede e quem responde.</p>
+    </div>
+    <div class="produto-tabs reveal" role="tablist" aria-label="Áreas do produto">
+      <button type="button" class="produto-tab active" id="tab-paciente" data-tab="paciente-tab" role="tab" aria-selected="true" aria-controls="paciente-tab">Área do Paciente</button>
+      <button type="button" class="produto-tab" id="tab-clinica" data-tab="clinica-tab" role="tab" aria-selected="false" aria-controls="clinica-tab">Área da Clínica</button>
+    </div>
+
+    <div class="produto-panel active screens-grid" id="paciente-tab" role="tabpanel" aria-labelledby="tab-paciente" style="display:grid;">
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w40"></div><div class="scr-card"><div class="scr-bar w70"></div><div class="scr-bar w40"></div></div><div class="scr-card"><div class="scr-bar w55"></div></div></div></div>
+        <div class="screen-label">Home</div>
+      </div>
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w55"></div><div class="scr-card"><div class="scr-bar w90"></div><div class="scr-bar w40"></div></div><div class="scr-card"><div class="scr-bar w40"></div></div></div></div>
+        <div class="screen-label">Nova marcação</div>
+      </div>
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w40"></div><div class="scr-card"><div class="scr-bar w70"></div></div><div class="scr-card"><div class="scr-bar w90"></div><div class="scr-bar w55"></div></div></div></div>
+        <div class="screen-label">Resultados</div>
+      </div>
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w70"></div><div class="scr-card"><div class="scr-bar w40"></div></div><div class="scr-card"><div class="scr-bar w55"></div></div></div></div>
+        <div class="screen-label">Mensagens</div>
+      </div>
+    </div>
+
+    <div class="produto-panel screens-grid" id="clinica-tab" role="tabpanel" aria-labelledby="tab-clinica" style="display:none;">
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w40"></div><div class="scr-card"><div class="scr-bar w90"></div><div class="scr-bar w55"></div></div><div class="scr-card"><div class="scr-bar w70"></div></div></div></div>
+        <div class="screen-label">Dashboard</div>
+      </div>
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w55"></div><div class="scr-card"><div class="scr-bar w40"></div><div class="scr-bar w90"></div></div><div class="scr-card"><div class="scr-bar w70"></div></div></div></div>
+        <div class="screen-label">Pedidos</div>
+      </div>
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w70"></div><div class="scr-card"><div class="scr-bar w55"></div></div><div class="scr-card"><div class="scr-bar w40"></div></div></div></div>
+        <div class="screen-label">Resultados</div>
+      </div>
+      <div class="screen-card reveal">
+        <div class="screen-frame"><div class="screen-mock"><div class="scr-bar w40"></div><div class="scr-card"><div class="scr-bar w70"></div></div><div class="scr-card"><div class="scr-bar w90"></div></div></div></div>
+        <div class="screen-label">Mensagens</div>
+      </div>
+    </div>
+
+    <p class="produto-note reveal"><span class="dot"></span> Protótipo funcional em React, com dados fictícios e estado em memória — a substituir por capturas de ecrã reais do produto.</p>
+  </div>
+</section>
+
+<!-- ================= VISÃO ================= -->
+<section id="visao">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>Começamos por três interações. Queremos transformar toda a relação digital.</h2>
+    </div>
+    <div class="visao-path">
+      <div class="visao-stage reveal">
+        <span class="stage-label">Hoje</span>
+        <div><h4>Marcações, resultados e mensagens</h4><p>As três interações mais frequentes entre paciente e clínica, resolvidas sem telefonemas.</p></div>
+      </div>
+      <div class="visao-stage reveal">
+        <span class="stage-label">Próxima fase</span>
+        <div><h4>Uma relação digital mais completa</h4><p>Expandir progressivamente as interações cobertas entre paciente e prestador de saúde.</p></div>
+      </div>
+      <div class="visao-stage reveal">
+        <span class="stage-label">Visão</span>
+        <div><h4>Uma plataforma de relação em saúde</h4><p>Tornar-se uma das principais plataformas digitais de relação entre pacientes e prestadores de saúde em Portugal.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ESTADO ATUAL ================= -->
+<section id="estado">
+  <div class="container">
+    <div class="section-head reveal">
+      <h2>Estamos a construir.</h2>
+    </div>
+    <div class="roadmap-track reveal">
+      <div class="rm-point done"><div class="rm-dot"></div><span class="rm-label">Protótipo<br>funcional</span></div>
+      <div class="rm-line"></div>
+      <div class="rm-point"><div class="rm-dot"></div><span class="rm-label">MVP</span></div>
+      <div class="rm-line"></div>
+      <div class="rm-point"><div class="rm-dot"></div><span class="rm-label">Validação<br>com clínicas</span></div>
+      <div class="rm-line"></div>
+      <div class="rm-point"><div class="rm-dot"></div><span class="rm-label">Primeiros<br>pilotos</span></div>
+      <div class="rm-line"></div>
+      <div class="rm-point"><div class="rm-dot"></div><span class="rm-label">Escala</span></div>
+    </div>
+    <p class="estado-copy reveal">A MyVita encontra-se numa fase inicial, com um protótipo funcional e foco na validação do problema, do produto e do modelo de negócio junto do mercado.</p>
+  </div>
+</section>
+
+<!-- ================= CTA FINAL ================= -->
+<section id="cta-final">
+  <div class="container">
+    <h2 class="reveal">Vamos tornar a relação entre pacientes e clínicas mais simples.</h2>
+    <p class="reveal">Estamos a falar com clínicas e parceiros para validar a próxima geração da relação digital em saúde.</p>
+    <div class="cta-buttons reveal">
+      <a href="#contacto" class="btn btn-gold">Falar com a MyVita</a>
+      <a href="#produto" class="btn btn-on-dark">Conhecer o produto</a>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CONTACTO ================= -->
+<section id="contacto">
+  <div class="container contacto-grid">
+    <div class="contacto-info reveal">
+      <h3>Vamos falar.</h3>
+      <p>Se representa uma clínica, um investidor, um parceiro ou simplesmente quer saber mais sobre a MyVita, escreva-nos.</p>
+      <div class="info-line"><b>Email</b><span class="contact-email">PRTLABS.OFFICIAL@GMAIL.COM</span></div>
+      <div class="info-line"><b>Sede</b><span>Coimbra, Portugal</span></div>
+      <div class="info-line"><b>Fase atual</b><span>Pré-seed · Protótipo funcional</span></div>
+    </div>
+    <form class="contact-form reveal" id="contactForm" novalidate>
+      <div class="form-row">
+        <div class="field">
+          <label for="fname">Nome</label>
+          <input id="fname" name="nome" type="text" required aria-describedby="fname-error">
+          <span class="field-error" id="fname-error" aria-live="polite"></span>
+        </div>
+        <div class="field">
+          <label for="forg">Clínica / Empresa</label>
+          <input id="forg" name="organizacao" type="text">
+          <span class="field-error" id="forg-error" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="femail">Email</label>
+          <input id="femail" name="email" type="email" required aria-describedby="femail-error">
+          <span class="field-error" id="femail-error" aria-live="polite"></span>
+        </div>
+        <div class="field">
+          <label for="fphone">Telefone (opcional)</label>
+          <input id="fphone" name="telefone" type="tel" aria-describedby="fphone-error">
+          <span class="field-error" id="fphone-error" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="fsubject">Motivo do contacto</label>
+        <select id="fsubject" name="assunto">
+          <option>Utilizar a MyVita na minha clínica</option>
+          <option>Parceria</option>
+          <option>Investimento</option>
+          <option>Outro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fmsg">Mensagem</label>
+        <textarea id="fmsg" name="mensagem" required aria-describedby="fmsg-error"></textarea>
+        <span class="field-error" id="fmsg-error" aria-live="polite"></span>
+      </div>
+      <button type="submit" class="btn btn-primary" id="submitBtn">
+        <span id="submitLabel">Enviar mensagem</span>
+      </button>
+      <p class="form-note">Este formulário ainda não está ligado a um serviço de envio automático (Formspree, Resend ou Supabase). Ao validar, prepara a mensagem e abre o seu cliente de email para a enviar para <span class="contact-email">PRTLABS.OFFICIAL@GMAIL.COM</span>.</p>
+      <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <span class="logo">MyVita</span>
+        <p>Marcações. Resultados. Mensagens. Sem telefonemas.<br>HealthTech · Portugal</p>
+      </div>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h5>Website</h5>
+          <a href="#produto">Produto</a>
+          <a href="#clinicas">Para Clínicas</a>
+          <a href="#visao">Visão</a>
+          <a href="#contacto">Contacto</a>
+        </div>
+        <div class="footer-col">
+          <h5>Ligações</h5>
+          <span class="link-disabled" title="Brevemente disponível" aria-disabled="true">LinkedIn</span>
+          <a href="mailto:PRTLABS.OFFICIAL@GMAIL.COM" class="contact-email" rel="noopener">PRTLABS.OFFICIAL@GMAIL.COM</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 MyVita. Todos os direitos reservados.</span>
+      <span>Confidencial — protótipo em fase de validação.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ---------- CONFIG ----------
+  // Ponto único de configuração: alterar aqui quando o email/serviço de envio estiverem definidos.
+  const CONFIG = {
+    CONTACT_EMAIL: 'PRTLABS.OFFICIAL@GMAIL.COM'
+  };
+  document.querySelectorAll('.contact-email').forEach(el => {
+    el.textContent = CONFIG.CONTACT_EMAIL;
+    if (el.tagName === 'A') el.setAttribute('href', 'mailto:' + CONFIG.CONTACT_EMAIL);
+  });
+
+  const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- NAVBAR SCROLL STATE ----------
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    navbar.classList.toggle('scrolled', window.scrollY > 12);
+  });
+
+  // ---------- MOBILE MENU ----------
+  const burgerBtn = document.getElementById('burgerBtn');
+  const navLinks = document.getElementById('navLinks');
+
+  function openMenu(){
+    navbar.classList.add('open');
+    burgerBtn.setAttribute('aria-expanded', 'true');
+    burgerBtn.setAttribute('aria-label', 'Fechar menu');
+  }
+  function closeMenu(){
+    navbar.classList.remove('open');
+    burgerBtn.setAttribute('aria-expanded', 'false');
+    burgerBtn.setAttribute('aria-label', 'Abrir menu');
+  }
+  function toggleMenu(){
+    navbar.classList.contains('open') ? closeMenu() : openMenu();
+  }
+  burgerBtn.addEventListener('click', toggleMenu);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && navbar.classList.contains('open')) {
+      closeMenu();
+      burgerBtn.focus();
+    }
+  });
+
+  // ---------- INTERNAL SMOOTH SCROLL (sem abrir novas abas) ----------
+  function scrollToId(id){
+    const target = document.getElementById(id);
+    if (!target) return false;
+    const navOffset = navbar.offsetHeight + 16;
+    const top = target.getBoundingClientRect().top + window.pageYOffset - navOffset;
+    window.scrollTo({ top: Math.max(top, 0), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    return true;
+  }
+
+  document.querySelectorAll('a[href^="#"]').forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    if (!id || !document.getElementById(id)) return; // sem alvo válido: deixar comportamento nativo
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToId(id);
+      if (navbar.classList.contains('open')) closeMenu();
+      if (history.pushState) history.pushState(null, '', '#' + id);
+    });
+  });
+
+  // ---------- SCROLL REVEAL ----------
+  const revealEls = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+  revealEls.forEach(el => io.observe(el));
+
+  // Hero staged entrance (single orchestrated sequence)
+  window.addEventListener('DOMContentLoaded', () => {
+    const heroEls = document.querySelectorAll('#hero .reveal');
+    heroEls.forEach((el, i) => {
+      setTimeout(() => el.classList.add('in'), 120 + i * 130);
+    });
+  });
+
+  // ---------- PRODUTO TABS ----------
+  document.querySelectorAll('.produto-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.produto-tab').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      document.querySelectorAll('.produto-panel').forEach(p => p.style.display = 'none');
+      const target = document.getElementById(tab.dataset.tab);
+      target.style.display = 'grid';
+      target.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    });
+  });
+
+  // ---------- CONTACT FORM ----------
+  // Ainda sem backend próprio. A validação é real; o "envio" prepara uma mensagem
+  // e abre o cliente de email do utilizador (mailto) — nada é fingido como enviado
+  // por um servidor que não existe. Quando houver um serviço (ex. Formspree),
+  // substituir o bloco "submissão" por um fetch/POST real.
+  const form = document.getElementById('contactForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const submitLabel = document.getElementById('submitLabel');
+  const formStatus = document.getElementById('formStatus');
+  let isSubmitting = false;
+
+  function setFieldError(id, message){
+    const errorEl = document.getElementById(id + '-error');
+    const inputEl = document.getElementById(id);
+    if (errorEl) errorEl.textContent = message || '';
+    if (inputEl) inputEl.setAttribute('aria-invalid', message ? 'true' : 'false');
+  }
+
+  function validateForm(data){
+    let firstInvalidId = null;
+    let valid = true;
+
+    if (!data.nome.trim()) {
+      setFieldError('fname', 'Indique o seu nome.');
+      valid = false; firstInvalidId = firstInvalidId || 'fname';
+    } else setFieldError('fname', '');
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim());
+    if (!data.email.trim()) {
+      setFieldError('femail', 'Indique o seu email.');
+      valid = false; firstInvalidId = firstInvalidId || 'femail';
+    } else if (!emailOk) {
+      setFieldError('femail', 'Email inválido.');
+      valid = false; firstInvalidId = firstInvalidId || 'femail';
+    } else setFieldError('femail', '');
+
+    if (data.telefone.trim() && !/^[0-9+()\-\s]{9,}$/.test(data.telefone.trim())) {
+      setFieldError('fphone', 'Telefone inválido.');
+      valid = false; firstInvalidId = firstInvalidId || 'fphone';
+    } else setFieldError('fphone', '');
+
+    if (!data.mensagem.trim()) {
+      setFieldError('fmsg', 'Escreva uma mensagem.');
+      valid = false; firstInvalidId = firstInvalidId || 'fmsg';
+    } else setFieldError('fmsg', '');
+
+    return { valid, firstInvalidId };
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (isSubmitting) return; // impede submissões múltiplas acidentais
+
+    const data = {
+      nome: form.nome.value,
+      organizacao: form.organizacao.value,
+      email: form.email.value,
+      telefone: form.telefone.value,
+      assunto: form.assunto.value,
+      mensagem: form.mensagem.value
+    };
+
+    const { valid, firstInvalidId } = validateForm(data);
+
+    formStatus.className = 'form-status';
+    formStatus.textContent = '';
+
+    if (!valid) {
+      formStatus.classList.add('status-error');
+      formStatus.textContent = 'Por favor corrija os campos assinalados antes de enviar.';
+      const invalidEl = document.getElementById(firstInvalidId);
+      if (invalidEl) invalidEl.focus();
+      return;
+    }
+
+    isSubmitting = true;
+    submitBtn.setAttribute('disabled', 'true');
+    submitLabel.innerHTML = '<span class="spinner" aria-hidden="true"></span> A preparar…';
+
+    setTimeout(() => {
+      const subject = encodeURIComponent('Contacto via website — ' + data.assunto);
+      const bodyLines = [
+        'Nome: ' + data.nome,
+        data.organizacao ? 'Clínica / Empresa: ' + data.organizacao : null,
+        'Email: ' + data.email,
+        data.telefone ? 'Telefone: ' + data.telefone : null,
+        'Motivo: ' + data.assunto,
+        '',
+        data.mensagem
+      ].filter(Boolean).join('\n');
+      const mailtoUrl = 'mailto:' + CONFIG.CONTACT_EMAIL + '?subject=' + subject + '&body=' + encodeURIComponent(bodyLines);
+
+      window.location.href = mailtoUrl;
+
+      formStatus.classList.remove('status-error');
+      formStatus.classList.add('status-success');
+      formStatus.textContent = 'Mensagem preparada. Estamos a abrir o seu cliente de email para a enviar — se não abrir automaticamente, escreva diretamente para ' + CONFIG.CONTACT_EMAIL + '.';
+
+      submitBtn.removeAttribute('disabled');
+      submitLabel.textContent = 'Enviar mensagem';
+      isSubmitting = false;
+    }, 500);
+  });
+
+  // Limpar o estado de erro de um campo assim que o utilizador o corrige
+  ['fname', 'femail', 'fphone', 'fmsg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => setFieldError(id, ''));
+  });
+</script>
+
+</body>
+</html>
