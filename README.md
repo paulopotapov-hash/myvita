@@ -1,16 +1,38 @@
 # myVita — Backend
 
-## Correr localmente (Docker)
+## Como correr (Docker — recomendado)
 
 ```bash
+cd myvita
 cp backend/.env.example backend/.env
-# edita backend/.env e define um JWT_SECRET_KEY real
+```
+
+Abre `backend/.env` e substitui `JWT_SECRET_KEY` por um valor real, por exemplo gerado com:
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+Depois:
+```bash
 docker compose up --build
 ```
 
 - API: http://localhost:8000
-- Docs (Swagger): http://localhost:8000/docs
-- Health: http://localhost:8000/health · Ready: http://localhost:8000/ready
+- Docs interativas (Swagger): http://localhost:8000/docs
+- Health: http://localhost:8000/health · Ready (confirma ligação à BD): http://localhost:8000/ready
+
+Para parar: `Ctrl+C`, depois `docker compose down` (ou `docker compose down -v` para apagar também os dados da BD).
+
+## Correr sem Docker (dev local)
+
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # edita DATABASE_URL para apontar a um Postgres local
+alembic upgrade head
+uvicorn app.main:app --reload
+```
 
 ## Migrations
 
@@ -38,12 +60,12 @@ Implementado:
 - Modelos: `User`, `Clinic`, `Patient`, `Staff`, `Appointment`, com isolamento multi-tenant via `clinic_id`
 - Migration inicial validada (upgrade/downgrade reversível, testado com dados reais)
 - Auth: Argon2id, cookie httpOnly + JWT, invalidação de sessão via `token_epoch`
-- Endpoints: onboarding de clínica, registo de paciente, login/logout/me
-- 16 testes automatizados (integridade de dados, segurança, integração HTTP)
+- Endpoints: onboarding de clínica, registo de paciente, gestão de staff, marcação de consultas, login/logout/me
+- Proteção anti-IDOR: uma clínica nunca consegue marcar consultas usando pacientes/staff de outra clínica (testado e bloqueado)
+- 22 testes automatizados (integridade de dados, segurança, integração HTTP, isolamento entre clínicas)
 
 Por fazer:
-- Endpoints de consultas (`appointments`) — CRUD com scoping por clínica
-- Gestão de staff pela clínica (convite/criação de médicos)
+- Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`)
 - Modelos adiados: `Medication`, `Notification`, `Consent`
 - Rate limiting nos endpoints de login/registo
 - CI (correr `pytest` automaticamente)
