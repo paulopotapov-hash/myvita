@@ -212,7 +212,7 @@ function LoginScreen({ patients, onEnter }) {
                 <Stethoscope size={22} />
                 <span className="mv-mono" style={{ fontSize: 12, letterSpacing: 1, opacity: 0.85 }}>PROTÓTIPO</span>
               </div>
-              <h1 className="mv-display" style={{ fontSize: 30, margin: 0, fontWeight: 600 }}>myVita</h1>
+              <h1 className="mv-display" style={{ fontSize: 30, margin: 0, fontWeight: 600 }}>MyVita</h1>
               <p style={{ margin: "4px 0 0", fontSize: 13, opacity: 0.85 }}>Marcações, resultados e mensagens, sem telefonemas.</p>
             </div>
           </div>
@@ -279,7 +279,7 @@ function Shell({ title, subtitle, nav, activeTab, setActiveTab, onLogout, childr
       <aside style={{ width: 220, borderRight: "1px solid var(--border)", padding: 20, display: "flex", flexDirection: "column", background: "var(--surface)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 28, padding: "0 6px" }}>
           <Stethoscope size={20} color="var(--primary)" />
-          <span className="mv-display" style={{ fontWeight: 600, fontSize: 19, color: "var(--primary)" }}>myVita</span>
+          <span className="mv-display" style={{ fontWeight: 600, fontSize: 19, color: "var(--primary)" }}>MyVita</span>
         </div>
         <nav style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
           {nav.map((item) => (

@@ -42,7 +42,7 @@ export function SiteNavbar() {
 export function SiteFooter() {
   return <footer><div className="container footer-inner">
     <div><Link to="/" className="footer-brand"><img src={logo} alt="" className="brand-logo" /><strong>MyVita</strong></Link><p>Marcações. Resultados. Mensagens. Sem telefonemas.</p></div>
-    <div className="footer-links">{siteLinks.map(([label, path]) => <Link key={path} to={path}>{label}</Link>)}<Link to="/contacto">Contacto</Link></div>
+    <div className="footer-links">{siteLinks.map(([label, path]) => <Link key={path} to={path}>{label}</Link>)}<Link to="/contacto">Contacto</Link><Link to="/clinica-piloto">Clínica Piloto</Link></div>
     <small>© 2026 MyVita · Protótipo em fase de validação.</small>
   </div></footer>;
 }

@@ -1,60 +1,48 @@
 import React, { useState } from "react";
-import { ArrowRight, Check } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ArrowRight, Calendar, Check, FileText, MessageCircle, ShieldCheck } from "lucide-react";
 import { SiteFooter, SiteNavbar } from "../components/SiteChrome.jsx";
 
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/meaojzoo";
 
 const initialForm = {
-  clinicName: "",
-  city: "",
-  professionals: "",
-  healthAreas: "",
-  website: "",
-  contactName: "",
+  name: "",
+  clinic: "",
   role: "",
   email: "",
   phone: "",
+  specialties: "",
+  patientsPerMonth: "",
   appointments: "",
-  results: "",
-  patientCommunication: "",
-  currentSoftware: "",
-  callVolume: "",
-  patientRelationship: "",
-  importantFeatures: "",
-  interest: "",
+  communication: "",
+  improvement: "",
+  notes: "",
+  consent: false,
 };
 
-const requiredFields = {
-  clinicName: "Indique o nome da clínica.",
-  city: "Indique a cidade.",
-  professionals: "Indique o número aproximado de profissionais.",
-  healthAreas: "Indique a área de saúde.",
-  contactName: "Indique o seu nome.",
+const requiredMessages = {
+  name: "Indique o seu nome.",
+  clinic: "Indique o nome da clínica.",
   role: "Indique o seu cargo ou função.",
   email: "Indique um email profissional válido.",
   phone: "Indique um telefone.",
-  appointments: "Descreva como fazem atualmente as marcações.",
-  results: "Descreva como comunicam resultados.",
-  patientCommunication: "Descreva como comunicam com pacientes.",
-  currentSoftware: "Indique o software utilizado atualmente.",
-  patientRelationship: "Indique o que gostaria de melhorar.",
-  importantFeatures: "Indique as funcionalidades mais importantes.",
-  interest: "Indique o seu interesse no piloto.",
+  specialties: "Indique as especialidades da clínica.",
+  patientsPerMonth: "Selecione uma estimativa.",
+  appointments: "Explique como fazem atualmente as marcações.",
+  communication: "Explique como comunicam atualmente com os pacientes.",
+  improvement: "Indique o que gostariam de melhorar.",
+  consent: "É necessário aceitar esta autorização para enviar a candidatura.",
 };
 
-function Field({ label, name, value, onChange, error, required = false, type = "text", children, rows }) {
-  return (
-    <label className="pilot-field">
-      <span>{label}{required && <b aria-hidden="true"> *</b>}</span>
-      {children || (rows ? <textarea name={name} rows={rows} value={value} onChange={onChange} aria-invalid={!!error} required={required} /> : <input name={name} type={type} value={value} onChange={onChange} aria-invalid={!!error} required={required} />)}
-      {error && <small>{error}</small>}
-    </label>
-  );
+function Field({ label, name, value, onChange, error, required = false, type = "text", children, rows = 0 }) {
+  return <label className="pilot-field">
+    <span>{label}{required && <b aria-hidden="true"> *</b>}</span>
+    {children || (rows ? <textarea name={name} rows={rows} value={value} onChange={onChange} aria-invalid={!!error} required={required} /> : <input name={name} type={type} value={value} onChange={onChange} aria-invalid={!!error} required={required} />)}
+    {error && <small>{error}</small>}
+  </label>;
 }
 
-function PilotSection({ number, title, children }) {
-  return <section className="pilot-form-section"><div className="pilot-section-title"><span>{number}</span><h2>{title}</h2></div>{children}</section>;
+function ValidationCard({ icon: Icon, title, text }) {
+  return <article className="pilot-validation-card"><Icon size={21} /><span>{title}</span><p>{text}</p></article>;
 }
 
 export default function PilotClinic() {
@@ -64,19 +52,26 @@ export default function PilotClinic() {
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const update = e => setForm({ ...form, [e.target.name]: e.target.value });
+  const update = event => {
+    const { name, type, checked, value } = event.target;
+    setForm(current => ({ ...current, [name]: type === "checkbox" ? checked : value }));
+    if (errors[name]) setErrors(current => ({ ...current, [name]: "" }));
+  };
 
-  const submit = async e => {
-    e.preventDefault();
+  const goToForm = event => {
+    event.preventDefault();
+    document.getElementById("candidatura")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const submit = async event => {
+    event.preventDefault();
     setSent(false);
     setFormError("");
     const nextErrors = {};
-    Object.entries(requiredFields).forEach(([name, message]) => {
-      if (!form[name].trim()) nextErrors[name] = message;
+    Object.entries(requiredMessages).forEach(([name, message]) => {
+      if (name === "consent" ? !form.consent : !form[name].trim()) nextErrors[name] = message;
     });
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      nextErrors.email = "Indique um email profissional válido.";
-    }
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) nextErrors.email = "Indique um email profissional válido.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
@@ -85,14 +80,14 @@ export default function PilotClinic() {
       const response = await fetch(FORMSPREE_ENDPOINT, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, _subject: "MyVita — Candidatura de clínica piloto" }),
+        body: JSON.stringify({ ...form, consent: "Aceito ser contactado relativamente à MyVita.", _subject: "MyVita — Candidatura de clínica piloto" }),
       });
       if (!response.ok) throw new Error("Formspree rejected the submission");
-      setErrors({});
       setForm(initialForm);
+      setErrors({});
       setSent(true);
     } catch {
-      setFormError("Não foi possível enviar a candidatura. Tente novamente ou contacte-nos através de PRTLABS.OFFICIAL@GMAIL.COM.");
+      setFormError("Não foi possível enviar a candidatura. Tente novamente ou contacte PRTLABS.OFFICIAL@GMAIL.COM.");
     } finally {
       setSubmitting(false);
     }
@@ -101,15 +96,23 @@ export default function PilotClinic() {
   return <div className="pilot-page">
     <SiteNavbar />
     <main>
-      <section className="pilot-hero"><div className="container pilot-hero-inner"><span className="eyebrow">Programa de validação</span><h1>Quero ser clínica piloto</h1><p>Estamos a selecionar as primeiras clínicas para testar e desenvolver a MyVita em conjunto com profissionais de saúde.</p><p className="pilot-intro">Participar no programa piloto significa conhecer a plataforma numa fase inicial, partilhar a experiência da sua equipa e ajudar a definir as funcionalidades que podem tornar a relação com os pacientes mais simples.</p></div></section>
-      <section className="pilot-benefits"><div className="container"><div className="pilot-benefits-head"><span className="eyebrow">Uma construção conjunta</span><h2>O que significa ser clínica piloto?</h2></div><div className="benefit-grid">{["Acesso antecipado à plataforma", "Participação no desenvolvimento do produto", "Feedback direto com a equipa MyVita", "Teste de funcionalidades em contexto real"].map(item => <div className="benefit-item" key={item}><Check size={17} /><span>{item}</span></div>)}</div></div></section>
-      <section className="pilot-form-wrap"><div className="container pilot-form-layout"><div className="pilot-form-aside"><span className="eyebrow">Candidatura</span><h2>Conte-nos como trabalha hoje.</h2><p>As suas respostas ajudam-nos a perceber o contexto da sua clínica e onde a MyVita pode criar valor real.</p><p className="required-note"><b>*</b> Campos obrigatórios</p></div><form className="pilot-form" onSubmit={submit} noValidate>
-        <PilotSection number="01" title="Sobre a clínica"><div className="pilot-fields two"><Field label="Nome da clínica" name="clinicName" value={form.clinicName} onChange={update} error={errors.clinicName} required /><Field label="Cidade" name="city" value={form.city} onChange={update} error={errors.city} required /><Field label="Número aproximado de profissionais" name="professionals" value={form.professionals} onChange={update} error={errors.professionals} required><select name="professionals" value={form.professionals} onChange={update} aria-invalid={!!errors.professionals} required><option value="">Selecionar</option><option>1–5 profissionais</option><option>6–20 profissionais</option><option>21–50 profissionais</option><option>Mais de 50 profissionais</option></select></Field><Field label="Área(s) de saúde" name="healthAreas" value={form.healthAreas} onChange={update} error={errors.healthAreas} required /><Field label="Website" name="website" value={form.website} onChange={update} type="url" /></div></PilotSection>
-        <PilotSection number="02" title="Contacto"><div className="pilot-fields two"><Field label="Nome" name="contactName" value={form.contactName} onChange={update} error={errors.contactName} required /><Field label="Cargo / função" name="role" value={form.role} onChange={update} error={errors.role} required /><Field label="Email profissional" name="email" value={form.email} onChange={update} error={errors.email} required type="email" /><Field label="Telefone" name="phone" value={form.phone} onChange={update} error={errors.phone} required type="tel" /></div></PilotSection>
-        <PilotSection number="03" title="Processos atuais"><div className="pilot-fields"><Field label="Como fazem atualmente as marcações?" name="appointments" value={form.appointments} onChange={update} error={errors.appointments} required rows="3" /><Field label="Como comunicam resultados?" name="results" value={form.results} onChange={update} error={errors.results} required rows="3" /><Field label="Como comunicam com pacientes?" name="patientCommunication" value={form.patientCommunication} onChange={update} error={errors.patientCommunication} required rows="3" /><Field label="Que software utilizam atualmente?" name="currentSoftware" value={form.currentSoftware} onChange={update} error={errors.currentSoftware} required /><Field label="Volume aproximado de chamadas recebidas" name="callVolume" value={form.callVolume} onChange={update}><select name="callVolume" value={form.callVolume} onChange={update}><option value="">Selecionar (opcional)</option><option>Até 20 por dia</option><option>21–50 por dia</option><option>51–100 por dia</option><option>Mais de 100 por dia</option></select></Field></div></PilotSection>
-        <PilotSection number="04" title="Interesse na MyVita"><div className="pilot-fields"><Field label="O que gostaria de melhorar na relação com os pacientes?" name="patientRelationship" value={form.patientRelationship} onChange={update} error={errors.patientRelationship} required rows="4" /><Field label="Que funcionalidades seriam mais importantes?" name="importantFeatures" value={form.importantFeatures} onChange={update} error={errors.importantFeatures} required rows="4" /><Field label="Teria interesse em participar num piloto?" name="interest" value={form.interest} onChange={update} error={errors.interest} required><select name="interest" value={form.interest} onChange={update} aria-invalid={!!errors.interest} required><option value="">Selecionar</option><option>Sim, tenho interesse</option><option>Gostaria de saber mais primeiro</option><option>Não neste momento</option></select></Field></div></PilotSection>
-        <PilotSection number="05" title="Submissão"><div className="pilot-submit"><p>Ao enviar, a sua candidatura será encaminhada para a equipa MyVita através do Formspree.</p><button className="btn btn-primary" type="submit" disabled={submitting}>{submitting ? "A enviar..." : "Enviar candidatura"} {!submitting && <ArrowRight size={16} />}</button>{sent && <p className="form-note success" role="status">Obrigado. Recebemos a sua candidatura e entraremos em contacto consigo.</p>}{formError && <p className="form-note error" role="alert">{formError}</p>}</div></PilotSection>
+      <section className="pilot-hero"><div className="container pilot-hero-inner"><div className="pilot-hero-copy"><span className="eyebrow">Programa de validação</span><h1>Faça parte das primeiras clínicas a testar a MyVita.</h1><p>Estamos a selecionar clínicas para uma fase inicial de validação da plataforma. O objetivo é perceber como a MyVita pode simplificar a comunicação com os pacientes e reduzir processos dependentes do telefone.</p><span className="pilot-status">Fase de validação inicial <i /> Portugal</span></div></div></section>
+
+      <section className="section pilot-validation"><div className="container"><div className="section-head"><span className="eyebrow">O que estamos a validar</span><h2>Começar pelos momentos que mais impactam a relação.</h2></div><div className="pilot-validation-grid"><ValidationCard icon={Calendar} title="MARCAÇÕES" text="Receber e gerir pedidos de marcação de forma digital." /><ValidationCard icon={FileText} title="RESULTADOS" text="Disponibilizar resultados ao paciente através de uma experiência centralizada." /><ValidationCard icon={MessageCircle} title="MENSAGENS" text="Criar um canal digital direto entre clínica e paciente." /><ValidationCard icon={ShieldCheck} title="EXPERIÊNCIA" text="Perceber onde a comunicação atual gera mais fricção e como pode ser simplificada." /></div></div></section>
+
+      <section className="section soft"><div className="container pilot-looking"><div className="pilot-looking-copy"><span className="eyebrow">O que procuramos</span><h2>Procuramos clínicas interessadas em construir connosco.</h2><p>Estamos numa fase inicial e queremos trabalhar diretamente com clínicas para compreender os seus processos, recolher feedback e validar a solução em contexto real.</p></div><ul className="pilot-profile-list">{["Clínicas privadas", "Consultórios e grupos de saúde", "Diferentes especialidades", "Equipas abertas à inovação digital", "Clínicas interessadas em melhorar a comunicação com pacientes"].map(item => <li key={item}><Check size={16} />{item}</li>)}</ul></div></section>
+
+      <section className="section"><div className="container"><div className="section-head"><span className="eyebrow">Como funciona</span><h2>Uma conversa antes de qualquer compromisso.</h2><p>O envio do formulário não garante participação num piloto. Serve para conhecermos melhor o seu contexto e percebermos se existe alinhamento.</p></div><div className="pilot-process-grid">{[["01", "Candidatura", "Partilhe algumas informações sobre a sua clínica e o atual processo de comunicação com pacientes."], ["02", "Conversa", "Falamos consigo para perceber os principais desafios e apresentar a MyVita."], ["03", "Validação", "Se existir alinhamento, exploramos a possibilidade de participação numa fase piloto."]].map(([number, title, text]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div></div></section>
+
+      <section className="pilot-form-wrap" id="candidatura"><div className="container pilot-form-layout"><div className="pilot-form-aside"><span className="eyebrow">Candidatura</span><h2>Conte-nos como trabalha hoje.</h2><p>As suas respostas ajudam-nos a perceber onde a MyVita pode criar valor real para a sua equipa e para os seus pacientes.</p><p className="required-note"><b>*</b> Campos obrigatórios</p></div><form className="pilot-form" onSubmit={submit} noValidate>
+        <div className="pilot-form-section"><div className="pilot-section-title"><span>01</span><h2>Sobre si e a clínica</h2></div><div className="pilot-fields two"><Field label="Nome" name="name" value={form.name} onChange={update} error={errors.name} required /><Field label="Clínica" name="clinic" value={form.clinic} onChange={update} error={errors.clinic} required /><Field label="Cargo / Função" name="role" value={form.role} onChange={update} error={errors.role} required /><Field label="Email profissional" name="email" value={form.email} onChange={update} error={errors.email} required type="email" /><Field label="Telefone" name="phone" value={form.phone} onChange={update} error={errors.phone} required type="tel" /><Field label="Especialidades da clínica" name="specialties" value={form.specialties} onChange={update} error={errors.specialties} required /></div></div>
+        <div className="pilot-form-section"><div className="pilot-section-title"><span>02</span><h2>Processos atuais</h2></div><div className="pilot-fields"><Field label="Número aproximado de pacientes por mês" name="patientsPerMonth" value={form.patientsPerMonth} onChange={update} error={errors.patientsPerMonth} required><select name="patientsPerMonth" value={form.patientsPerMonth} onChange={update} aria-invalid={!!errors.patientsPerMonth} required><option value="">Selecionar</option><option>Até 250 pacientes</option><option>251–500 pacientes</option><option>501–1.000 pacientes</option><option>Mais de 1.000 pacientes</option></select></Field><Field label="Como fazem atualmente as marcações?" name="appointments" value={form.appointments} onChange={update} error={errors.appointments} required rows={4} /><Field label="Como comunicam atualmente com os pacientes?" name="communication" value={form.communication} onChange={update} error={errors.communication} required rows={4} /><Field label="O que mais gostariam de melhorar?" name="improvement" value={form.improvement} onChange={update} error={errors.improvement} required rows={4} /><Field label="Observações adicionais (opcional)" name="notes" value={form.notes} onChange={update} rows={4} /></div></div>
+        <div className="pilot-form-section pilot-submit-section"><div className="pilot-section-title"><span>03</span><h2>Autorização e envio</h2></div><label className={`pilot-consent ${errors.consent ? "has-error" : ""}`}><input type="checkbox" name="consent" checked={form.consent} onChange={update} /> <span>Li e aceito que os dados submetidos sejam utilizados para entrar em contacto comigo relativamente à MyVita.</span></label>{errors.consent && <small className="pilot-consent-error">{errors.consent}</small>}<button className="btn btn-primary" type="submit" disabled={submitting}>{submitting ? "A enviar..." : "Enviar candidatura"} {!submitting && <ArrowRight size={16} />}</button>{sent && <p className="form-note success" role="status">Obrigado pelo seu interesse na MyVita.<br />Recebemos a sua candidatura e entraremos em contacto consigo.</p>}{formError && <p className="form-note error" role="alert">{formError}</p>}</div>
       </form></div></section>
+
+      <section className="section soft pilot-trust"><div className="container"><div className="pilot-trust-heading"><ShieldCheck size={22} /><h2>Estamos a construir a MyVita com uma prioridade desde o início: confiança.</h2></div><div className="pilot-principles">{["Privacidade", "Segurança", "Controlo de acessos", "Proteção de dados", "Arquitetura preparada para os requisitos do setor da saúde"].map(item => <span key={item}>{item}</span>)}</div></div></section>
+
+      <section className="section dark-section pilot-final-cta"><div className="container"><span className="eyebrow">Próximo passo</span><h2>A próxima fase da MyVita começa com as primeiras clínicas.</h2><p>Se acredita que a relação entre clínicas e pacientes pode ser mais simples, queremos falar consigo.</p><a className="btn btn-gold" href="#candidatura" onClick={goToForm}>Quero ser clínica piloto <ArrowRight size={17} /></a></div></section>
     </main>
     <SiteFooter />
   </div>;

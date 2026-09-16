@@ -359,7 +359,7 @@ E como o prazo termina **hoje, 15 de setembro às 23h59**, eu candidatava-me, se
 
 
 
-# MYVITA — GUIA MESTRE CONSOLIDADO
+# MyVita — GUIA MESTRE CONSOLIDADO
 
 Este documento deve servir como referência operacional para a MyVita. Mantém sempre a distinção entre o que já existe, o que está a ser construído e o que é visão futura.
 
