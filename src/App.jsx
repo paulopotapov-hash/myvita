@@ -5,49 +5,16 @@ import {
   FileText, MessageCircle, Menu, Send, ShieldCheck, User, X, Zap
 } from "lucide-react";
 import Prototype from "./pages/Prototype.jsx";
+import PilotClinic from "./pages/PilotClinic.jsx";
+import { SiteNavbar, SiteFooter } from "./components/SiteChrome.jsx";
+import { ClinicsPage, ContactPage, CurrentStatePage, FaqPage, PatientsPage, ProductPage, VisionPage } from "./pages/MarketingPages.jsx";
 import logo from "./assets/myvita-logo-transparent.png";
 import "./styles.css";
 
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/meaojzoo";
 
-const sections = [
-  ["Produto", "produto"],
-  ["Para Clínicas", "clinicas"],
-  ["Para Pacientes", "paciente"],
-  ["Visão", "visao"],
-  ["Estado atual", "estado"],
-  ["FAQ", "faq"],
-];
-
-function scrollToId(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 82, behavior: "smooth" });
-}
-
 function Navbar() {
-  const [open, setOpen] = useState(false);
-  return (
-    <nav className="navbar">
-      <div className="container nav-inner">
-        <button className="brand-button" onClick={() => { setOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Ir para o início">
-          <img src={logo} alt="MyVita" className="brand-logo" />
-          <span>MyVita</span>
-        </button>
-        <div className={`nav-links ${open ? "open" : ""}`}>
-          {sections.map(([label, id]) => (
-            <button key={id} onClick={() => { setOpen(false); scrollToId(id); }}>{label}</button>
-          ))}
-        </div>
-        <div className="nav-actions">
-          <button className="btn btn-ghost nav-contact" onClick={() => scrollToId("contacto")}>Falar connosco</button>
-          <button className="menu-btn" onClick={() => setOpen(!open)} aria-label={open ? "Fechar menu" : "Abrir menu"} aria-expanded={open}>
-            {open ? <X size={21} /> : <Menu size={21} />}
-          </button>
-        </div>
-      </div>
-    </nav>
-  );
+  return <SiteNavbar />;
 }
 
 function Mockup({ clinic = false }) {
@@ -129,8 +96,8 @@ function Home() {
             <p className="hero-tagline">Marcações. Resultados. Mensagens. Sem telefonemas.</p>
             <p className="hero-text">A MyVita simplifica as interações mais frequentes entre pacientes e prestadores de saúde, substituindo processos dispersos por uma experiência digital simples e centralizada.</p>
             <div className="hero-actions">
-              <button className="btn btn-primary" onClick={() => scrollToId("contacto")}>Quero ser clínica piloto <ArrowRight size={17} /></button>
-              <button className="btn btn-ghost" onClick={() => scrollToId("contacto")}>Quero ser clínica piloto</button>
+              <Link className="btn btn-primary" to="/clinica-piloto">Quero ser clínica piloto <ArrowRight size={17} /></Link>
+              <Link className="btn btn-ghost" to="/prototipo">Ver como funciona <ArrowRight size={17} /></Link>
             </div>
             <div className="hero-note"><ShieldCheck size={15} /> Demonstração com dados fictícios</div>
           </div>
@@ -179,15 +146,15 @@ function Home() {
           <div><SectionHead eyebrow="Para clínicas" title="Menos chamadas. Mais tempo para a clínica.">A MyVita centraliza pedidos de marcação, resultados e comunicação com pacientes numa experiência digital simples.</SectionHead>
             <div className="value-list">{[["01", "Menos chamadas e tarefas repetitivas", "Pode ajudar a reduzir a dependência de chamadas para interações administrativas frequentes."], ["02", "Comunicação mais organizada", "Permite centralizar pedidos, respostas e contexto numa relação paciente-clínica mais clara."], ["03", "Uma experiência digital contínua", "O objetivo é tornar mais simples a passagem entre marcações, resultados e mensagens." ]].map(x => <div className="value-item" key={x[0]}><b>{x[0]}</b><div><h3>{x[1]}</h3><p>{x[2]}</p></div></div>)}</div>
           </div>
-          <aside className="clinic-cta"><span className="eyebrow">Validação</span><h3>Faz sentido explorar um piloto?</h3><p>Estamos a procurar clínicas interessadas em conhecer o conceito e testar o que pode ser mais útil na sua operação.</p><div className="clinic-actions"><button className="btn btn-primary full" onClick={() => scrollToId("contacto")}>Quero ser clínica piloto <ArrowRight size={17} /></button><button className="btn btn-ghost full" onClick={() => scrollToId("contacto")}>Falar connosco</button></div></aside>
+          <aside className="clinic-cta"><span className="eyebrow">Validação</span><h3>Faz sentido explorar um piloto?</h3><p>Estamos a procurar clínicas interessadas em conhecer o conceito e testar o que pode ser mais útil na sua operação.</p><div className="clinic-actions"><Link className="btn btn-primary full" to="/clinica-piloto">Quero ser clínica piloto <ArrowRight size={17} /></Link><Link className="btn btn-ghost full" to="/contacto">Falar connosco</Link></div></aside>
         </div>
       </section>
 
-      <section id="piloto" className="section soft"><div className="container pilot-section"><SectionHead eyebrow="Como funciona o piloto" title="Uma proposta para aprender em conjunto.">O piloto é uma possibilidade futura, a definir com cada clínica. O âmbito e os critérios serão ajustados durante a validação.</SectionHead><div className="pilot-steps">{[["01", "Conhecemos o processo atual", "Percebemos como a clínica gere hoje marcações, comunicação e resultados."], ["02", "Configuramos o piloto", "Definimos o âmbito inicial e acompanhamos a implementação."], ["03", "Medimos e aprendemos", "Recolhemos feedback da equipa e dos pacientes para melhorar o produto."]].map(([number, title, text]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div><button className="btn btn-primary" onClick={() => scrollToId("contacto")}>Quero falar sobre um piloto <ArrowRight size={17} /></button></div></section>
+      <section id="piloto" className="section soft"><div className="container pilot-section"><SectionHead eyebrow="Como funciona o piloto" title="Uma proposta para aprender em conjunto.">O piloto é uma possibilidade futura, a definir com cada clínica. O âmbito e os critérios serão ajustados durante a validação.</SectionHead><div className="pilot-steps">{[["01", "Conhecemos o processo atual", "Percebemos como a clínica gere hoje marcações, comunicação e resultados."], ["02", "Configuramos o piloto", "Definimos o âmbito inicial e acompanhamos a implementação."], ["03", "Medimos e aprendemos", "Recolhemos feedback da equipa e dos pacientes para melhorar o produto."]].map(([number, title, text]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div><Link className="btn btn-primary" to="/clinica-piloto">Quero falar sobre um piloto <ArrowRight size={17} /></Link></div></section>
 
       <section id="paciente" className="section soft"><div className="container two-col patient-section"><div><SectionHead eyebrow="Experiência do paciente" title="Tudo o que precisa, num só lugar.">Sem sistemas complexos para aprender — só o que já sabe fazer, mas mais simples.</SectionHead><div className="feature-stack">{[["Marcações", "Pedir uma consulta e acompanhar o estado do pedido."], ["Resultados", "Consultar resultados assim que a clínica os disponibiliza."], ["Mensagens", "Falar diretamente com a clínica, com o histórico sempre à mão."]].map(x => <div key={x[0]}><i /><h3>{x[0]}</h3><p>{x[1]}</p></div>)}</div></div><div className="patient-phone"><Mockup /></div></div></section>
 
-      <section id="porque" className="section"><div className="container"><SectionHead eyebrow="Porque MyVita?" title="Uma base simples para uma relação mais próxima.">A MyVita parte de interações concretas e de uma ideia clara: tornar a comunicação entre pacientes e clínicas mais organizada.</SectionHead><div className="why-grid">{[["01", "Começar pelo essencial", "Marcações, resultados e mensagens num protótipo focado no que acontece com frequência."], ["02", "Pensar nos dois lados", "Uma experiência para o paciente e uma operação pensada para a equipa clínica."], ["03", "Construir com validação", "Cada próxima decisão deve ser aprendida com clínicas, parceiros e utilizadores."], ["04", "Avançar com responsabilidade", "A infraestrutura, a segurança e as integrações fazem parte do caminho a construir."]].map(([number, title, text]) => <article className="why-item" key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div><div className="center-actions why-cta"><button className="btn btn-primary" onClick={() => scrollToId("contacto")}>Falar com a equipa <ArrowRight size={17} /></button></div></div></section>
+      <section id="porque" className="section"><div className="container"><SectionHead eyebrow="Porque MyVita?" title="Uma base simples para uma relação mais próxima.">A MyVita parte de interações concretas e de uma ideia clara: tornar a comunicação entre pacientes e clínicas mais organizada.</SectionHead><div className="why-grid">{[["01", "Começar pelo essencial", "Marcações, resultados e mensagens num protótipo focado no que acontece com frequência."], ["02", "Pensar nos dois lados", "Uma experiência para o paciente e uma operação pensada para a equipa clínica."], ["03", "Construir com validação", "Cada próxima decisão deve ser aprendida com clínicas, parceiros e utilizadores."], ["04", "Avançar com responsabilidade", "A infraestrutura, a segurança e as integrações fazem parte do caminho a construir."]].map(([number, title, text]) => <article className="why-item" key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div><div className="center-actions why-cta"><Link className="btn btn-primary" to="/contacto">Falar com a equipa <ArrowRight size={17} /></Link></div></div></section>
 
       <section id="produto" className="section"><div className="container"><SectionHead eyebrow="Produto" title="O produto já existe — em protótipo.">Uma experiência pensada para dois lados: quem pede e quem responde.</SectionHead>
         <div className="tabs"><button className={tab === "patient" ? "active" : ""} onClick={() => setTab("patient")}>Área do Paciente</button><button className={tab === "clinic" ? "active" : ""} onClick={() => setTab("clinic")}>Área da Clínica</button></div>
@@ -201,7 +168,7 @@ function Home() {
 
       <section id="faq" className="section soft"><div className="container faq-layout"><SectionHead eyebrow="Perguntas frequentes" title="Clareza antes do próximo passo.">As respostas essenciais sobre o produto e o momento atual da MyVita.</SectionHead><div className="faq-list">{[["Para que tipo de clínicas é a MyVita?", "Nesta fase, procuramos conhecer diferentes operações clínicas para perceber onde o conceito pode criar mais valor."], ["A MyVita substitui o software clínico da clínica?", "Não. A proposta atual é organizar a relação e a comunicação com pacientes, sem apresentar a MyVita como substituto do software clínico."], ["A MyVita já está disponível?", "Existe atualmente um protótipo funcional. Estamos a preparar o MVP e a fase de validação com clínicas."], ["Como funciona um piloto?", "É uma proposta futura: conhecemos o processo atual, definimos um âmbito inicial e aprendemos com o feedback da equipa e dos pacientes."], ["Os dados apresentados no protótipo são reais?", "Não. A demonstração usa exclusivamente dados fictícios e estado mantido em memória."]].map(([question, answer]) => <details key={question}><summary>{question}<ChevronRight size={17} /></summary><p>{answer}</p></details>)}</div></div></section>
 
-      <section id="cta-final" className="section dark-section cta-section"><div className="container"><SectionHead dark title="Vamos perceber se a MyVita faz sentido para a sua clínica.">Estamos a procurar clínicas interessadas em conhecer o conceito e conversar sobre um possível piloto.</SectionHead><div className="center-actions"><button className="btn btn-gold" onClick={() => scrollToId("contacto")}>Quero falar sobre um piloto <ArrowRight size={17} /></button><button className="btn btn-on-dark" onClick={() => scrollToId("contacto")}>Falar connosco</button></div></div></section>
+      <section id="cta-final" className="section dark-section cta-section"><div className="container"><SectionHead dark title="Vamos perceber se a MyVita faz sentido para a sua clínica.">Estamos a procurar clínicas interessadas em conhecer o conceito e conversar sobre um possível piloto.</SectionHead><div className="center-actions"><Link className="btn btn-gold" to="/clinica-piloto">Quero falar sobre um piloto <ArrowRight size={17} /></Link><Link className="btn btn-on-dark" to="/contacto">Falar connosco</Link></div></div></section>
 
       <section id="contacto" className="section"><div className="container contact-grid"><div><SectionHead eyebrow="Falar connosco" title="Vamos validar a próxima fase juntos.">Se representa uma clínica, um parceiro ou um investidor, estamos disponíveis para apresentar o protótipo e ouvir os desafios da sua operação.</SectionHead><div className="contact-details"><p><strong>Email</strong><a href="mailto:PRTLABS.OFFICIAL@GMAIL.COM">PRTLABS.OFFICIAL@GMAIL.COM</a></p><p><strong>Sede</strong>Coimbra, Portugal</p><p><strong>Fase</strong>Protótipo funcional · Em validação</p></div></div>
           <form onSubmit={submit} method="POST" action={FORMSPREE_ENDPOINT} className="contact-form" noValidate>
@@ -218,10 +185,22 @@ function Home() {
       </div></section>
       <section className="section soft legal-section"><div className="container legal-grid"><article id="privacidade"><span className="eyebrow">Privacidade</span><h3>Política de Privacidade</h3><p>Estrutura inicial para revisão jurídica antes do lançamento público. O protótipo usa dados fictícios e o formulário não guarda dados numa base de dados.</p></article><article id="termos"><span className="eyebrow">Termos</span><h3>Termos de Utilização</h3><p>Estrutura inicial para definir as condições de utilização do website e do protótipo, sujeita a revisão jurídica.</p></article></div></section>
     </main>
-    <footer><div className="container footer-inner"><div><img src={logo} alt="" className="brand-logo" /><strong>MyVita</strong><p>Marcações. Resultados. Mensagens. Sem telefonemas.</p></div><div><button onClick={() => scrollToId("produto")}>Produto</button><button onClick={() => scrollToId("clinicas")}>Para Clínicas</button><button onClick={() => scrollToId("visao")}>Visão</button><button onClick={() => scrollToId("contacto")}>Contacto</button><button onClick={() => scrollToId("privacidade")}>Privacidade</button><button onClick={() => scrollToId("termos")}>Termos</button></div><small>© 2026 MyVita · Protótipo em fase de validação.</small></div></footer>
+    <SiteFooter />
   </>;
 }
 
 export default function App() {
-  return <Routes><Route path="/" element={<Home />} /><Route path="/prototipo" element={<Prototype />} /><Route path="*" element={<Home />} /></Routes>;
+  return <Routes>
+    <Route path="/" element={<Home />} />
+    <Route path="/produto" element={<ProductPage />} />
+    <Route path="/clinicas" element={<ClinicsPage />} />
+    <Route path="/pacientes" element={<PatientsPage />} />
+    <Route path="/visao" element={<VisionPage />} />
+    <Route path="/estado-atual" element={<CurrentStatePage />} />
+    <Route path="/faq" element={<FaqPage />} />
+    <Route path="/contacto" element={<ContactPage />} />
+    <Route path="/clinica-piloto" element={<PilotClinic />} />
+    <Route path="/prototipo" element={<Prototype />} />
+    <Route path="*" element={<Home />} />
+  </Routes>;
 }
