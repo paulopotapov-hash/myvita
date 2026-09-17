@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = True  # False only for local http dev
     COOKIE_SAMESITE: str = "lax"
 
+    # CSRF (double-submit cookie, HMAC-bound to the session)
+    CSRF_COOKIE_NAME: str = "myvita_csrf"
+    CSRF_HEADER_NAME: str = "X-CSRF-Token"
+
     # CORS
     CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
