@@ -54,15 +54,43 @@ export TEST_DATABASE_URL=postgresql+psycopg://myvita:myvita@localhost:5432/myvit
 pytest -v
 ```
 
+## Segurança: CSRF
+
+Todos os pedidos autenticados que mudam estado (`POST`/`PUT`/`PATCH`/`DELETE`) exigem um token CSRF, além do cookie de sessão. Estratégia: **double-submit cookie assinado (HMAC) e ligado à sessão**.
+
+Como o frontend deve usar isto:
+1. Após login/registo, o backend define dois cookies: `myvita_session` (httpOnly, como sempre) e `myvita_csrf` (**não** httpOnly — de propósito, para o JS conseguir lê-lo).
+2. Antes de qualquer `POST`/`PUT`/`PATCH`/`DELETE`, lê o valor de `myvita_csrf` via `document.cookie` e envia-o no header `X-CSRF-Token`.
+3. Pedidos `GET`/`HEAD`/`OPTIONS` não precisam deste header.
+
+```js
+function getCookie(name) {
+  return document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1];
+}
+
+fetch('/api/v1/staff', {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': getCookie('myvita_csrf'),
+  },
+  body: JSON.stringify(payload),
+});
+```
+
+O token CSRF invalida-se automaticamente ao fazer logout (está ligado ao `token_epoch` do utilizador) — não precisas de o gerir manualmente além de o reler a cada login.
+
 ## Estado atual
 
 Implementado:
 - Modelos: `User`, `Clinic`, `Patient`, `Staff`, `Appointment`, com isolamento multi-tenant via `clinic_id`
 - Migration inicial validada (upgrade/downgrade reversível, testado com dados reais)
 - Auth: Argon2id, cookie httpOnly + JWT, invalidação de sessão via `token_epoch`
+- Proteção CSRF: double-submit cookie assinado (HMAC), ligado à sessão — ver secção acima
 - Endpoints: onboarding de clínica, registo de paciente, gestão de staff, marcação de consultas, login/logout/me
 - Proteção anti-IDOR: uma clínica nunca consegue marcar consultas usando pacientes/staff de outra clínica (testado e bloqueado)
-- 22 testes automatizados (integridade de dados, segurança, integração HTTP, isolamento entre clínicas)
+- 37 testes automatizados (integridade de dados, segurança, CSRF, integração HTTP, isolamento entre clínicas)
 
 Por fazer:
 - Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`)
