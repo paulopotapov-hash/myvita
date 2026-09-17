@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base, get_db
 from app.main import app
-from tests.conftest import TEST_DATABASE_URL
+from tests.conftest import TEST_DATABASE_URL, csrf_headers
 
 
 @pytest.fixture()
@@ -112,7 +112,7 @@ def test_logout_immediately_invalidates_the_cookie_even_if_reused(client):
     )
     stolen_cookie = login.cookies.get("myvita_session")
 
-    logout = client.post("/api/v1/auth/logout")
+    logout = client.post("/api/v1/auth/logout", headers=csrf_headers(client))
     assert logout.status_code == 204
 
     client.cookies.set("myvita_session", stolen_cookie)

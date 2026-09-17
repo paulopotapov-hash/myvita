@@ -20,6 +20,21 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
+def csrf_headers(client) -> dict:
+    """
+    Reads the (non-httpOnly) CSRF cookie the app set after login/registration
+    and returns it as the header the frontend is expected to send back on
+    every state-changing authenticated request. Test helper only — the
+    frontend does the equivalent by reading document.cookie.
+    """
+    from app.core.config import settings
+
+    token = client.cookies.get(settings.CSRF_COOKIE_NAME)
+    if not token:
+        return {}
+    return {settings.CSRF_HEADER_NAME: token}
+
+
 @pytest.fixture(scope="session")
 def engine():
     eng = create_engine(TEST_DATABASE_URL, future=True)
