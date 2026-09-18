@@ -1,7 +1,9 @@
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.core.validators import validate_password_strength
 
 
 class PatientRegisterRequest(BaseModel):
@@ -12,6 +14,11 @@ class PatientRegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     birth_date: date | None = None
     phone: str | None = Field(default=None, max_length=30)
+
+    @field_validator("password")
+    @classmethod
+    def password_not_trivial(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class PatientPublic(BaseModel):

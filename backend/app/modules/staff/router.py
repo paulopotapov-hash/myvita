@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, require_roles
 from app.models import User, UserRole
 from app.modules.staff.schemas import StaffCreateRequest, StaffPublic
@@ -11,7 +12,9 @@ router = APIRouter()
 
 
 @router.post("", response_model=StaffPublic, status_code=201)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
 def create(
+    request: Request,
     payload: StaffCreateRequest,
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),

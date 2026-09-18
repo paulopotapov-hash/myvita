@@ -1,7 +1,8 @@
 import uuid
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.core.validators import validate_password_strength
 from app.models.staff import StaffRole
 
 
@@ -14,6 +15,11 @@ class StaffCreateRequest(BaseModel):
     staff_role: StaffRole
     specialty: str | None = Field(default=None, max_length=255)
     license_number: str | None = Field(default=None, max_length=50)
+
+    @field_validator("password")
+    @classmethod
+    def password_not_trivial(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class StaffPublic(BaseModel):

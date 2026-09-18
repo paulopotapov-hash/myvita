@@ -14,6 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
+from app.core.rate_limit import limiter
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://myvita:myvita@localhost:5432/myvita"
@@ -33,6 +34,20 @@ def csrf_headers(client) -> dict:
     if not token:
         return {}
     return {settings.CSRF_HEADER_NAME: token}
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """
+    The rate limiter's in-memory storage is process-global (by design — it
+    has to survive across requests within one running app). Left alone, one
+    test's login/registration attempts would count against another test's
+    quota since the test client always calls from the same fake address.
+    Reset before every test so each one gets a fresh bucket, exactly like a
+    real deployment where these limits reset per client per time window.
+    """
+    limiter.reset()
+    yield
 
 
 @pytest.fixture(scope="session")

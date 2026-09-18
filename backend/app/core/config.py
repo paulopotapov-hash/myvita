@@ -7,8 +7,14 @@ Nothing sensitive is hardcoded here.
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# jwt.encode/decode also accepts "none" and asymmetric algorithms (RS*, ES*,
+# EdDSA) we have no key material for. Restricting to the HMAC family we
+# actually use closes off both a misconfiguration (typo'd env var silently
+# picking "none") and the classic "alg confusion" class of JWT bugs.
+_ALLOWED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
 
 
 class Settings(BaseSettings):
@@ -39,6 +45,21 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+
+    @field_validator("JWT_ALGORITHM")
+    @classmethod
+    def _jwt_algorithm_must_be_hmac(cls, v: str) -> str:
+        if v not in _ALLOWED_JWT_ALGORITHMS:
+            raise ValueError(
+                f"JWT_ALGORITHM must be one of {sorted(_ALLOWED_JWT_ALGORITHMS)}, got {v!r}."
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _refuse_insecure_production_config(self) -> "Settings":
+        if self.is_production and not self.COOKIE_SECURE:
+            raise ValueError("COOKIE_SECURE must be true when ENVIRONMENT=production.")
+        return self
 
     @property
     def is_production(self) -> bool:

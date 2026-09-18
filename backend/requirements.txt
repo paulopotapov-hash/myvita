@@ -9,6 +9,7 @@ pydantic-settings==2.7.0
 passlib[argon2]==1.7.4
 pyjwt==2.10.1
 python-multipart==0.0.20
+slowapi==0.1.10
 
 # testing
 pytest==8.3.4

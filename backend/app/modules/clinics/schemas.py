@@ -2,6 +2,8 @@ import uuid
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.core.validators import validate_password_strength
+
 
 class ClinicOnboardingRequest(BaseModel):
     """
@@ -22,9 +24,7 @@ class ClinicOnboardingRequest(BaseModel):
     @field_validator("admin_password")
     @classmethod
     def password_not_trivial(cls, v: str) -> str:
-        if v.lower() in {"password", "12345678", "password123"}:
-            raise ValueError("Password demasiado fraca.")
-        return v
+        return validate_password_strength(v)
 
 
 class ClinicPublic(BaseModel):

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import set_session_cookie
 from app.models import Clinic
 from app.modules.clinics.schemas import ClinicOnboardingRequest, ClinicPublic, ClinicSummary
@@ -11,7 +12,8 @@ router = APIRouter()
 
 
 @router.post("", response_model=ClinicPublic, status_code=201)
-def create_clinic(payload: ClinicOnboardingRequest, response: Response, db: Session = Depends(get_db)):
+@limiter.limit(REGISTRATION_RATE_LIMIT)
+def create_clinic(request: Request, payload: ClinicOnboardingRequest, response: Response, db: Session = Depends(get_db)):
     clinic, admin_user = onboard_clinic(db, payload)
     set_session_cookie(response, admin_user)  # auto-login the new admin
     return clinic
