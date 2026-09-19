@@ -11,7 +11,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base, get_db
-from app.core.rate_limit import limiter
 from app.main import app
 from tests.conftest import TEST_DATABASE_URL, csrf_headers
 
@@ -160,16 +159,20 @@ def test_baseline_security_headers_present_on_every_response(client):
 
 
 def test_jwt_algorithm_outside_allowlist_is_rejected():
+    from pydantic import ValidationError
+
     from app.core.config import Settings
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Settings(JWT_SECRET_KEY="x", JWT_ALGORITHM="none")
 
 
 def test_production_requires_cookie_secure():
+    from pydantic import ValidationError
+
     from app.core.config import Settings
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Settings(JWT_SECRET_KEY="x", ENVIRONMENT="production", COOKIE_SECURE=False)
 
 

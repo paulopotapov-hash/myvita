@@ -1,0 +1,61 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["app", "tests"]
+# Alembic-generated migration files aren't hand-maintained code; linting
+# them (and rewriting them for lint compliance) isn't worth the risk to
+# files that must stay byte-for-byte reproducible with what already ran
+# against production-shaped databases.
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint]
+# Small, deliberate set: pyflakes + pycodestyle + import sorting + bugbear.
+# Not "every ruleset ruff ships" — that produces thousands of stylistic
+# warnings unrelated to real bugs and invites blanket ignores.
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length is enforced by the formatter/line-length above, not worth failing CI over
+    # UserRole/StaffRole/AppointmentStatus deliberately inherit (str, Enum),
+    # not enum.StrEnum: str(StrEnum member) and f"{member}" behave
+    # differently from (str, Enum) in ways that would silently change JWT
+    # payload/log/JSON output for these exact, security-relevant enums.
+    # Not worth the behavioral risk for a style preference.
+    "UP042",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency injection is *designed* around calling Depends(...)
+# (and friends) as an argument default — that's how the framework wires up
+# request-scoped dependencies, not an accidental mutable-default bug.
+# Without this, B008 fires on every single endpoint in the app.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Cookie", "fastapi.Header", "fastapi.Query", "fastapi.Path", "fastapi.Body",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+plugins = ["pydantic.mypy"]
+
+# Progressive adoption, not "ignore_errors = true": the app package must be
+# clean. Third-party libraries without stubs are silenced per-module below
+# (documented), not globally.
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+no_implicit_optional = true
+
+# No official type stubs published for these; silencing import errors here
+# is scoped to exactly these two libraries, not the whole codebase.
+[[tool.mypy.overrides]]
+module = ["jwt.*", "passlib.*", "slowapi.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

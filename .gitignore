@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
 
@@ -9,7 +11,14 @@ venv/
 !.env.example
 
 .coverage
+coverage.xml
 htmlcov/
+
+# Database dumps/backups — never belong in git, regardless of where the
+# backup script is run from.
+*.dump
+*.sql
+backups/
 
 .DS_Store
 node_modules/

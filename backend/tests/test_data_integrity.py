@@ -5,7 +5,7 @@ silently overrode the DB's ON DELETE RESTRICT, letting a clinic with
 patients be deleted. Keep these tests so that bug (and its class) can't
 come back unnoticed.
 """
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -36,7 +36,7 @@ def _make_clinic_with_full_graph(db):
     db.add(patient)
     db.flush()
 
-    appt = Appointment(clinic_id=clinic.id, patient_id=patient.id, staff_id=staff.id, scheduled_at=datetime.now(timezone.utc))
+    appt = Appointment(clinic_id=clinic.id, patient_id=patient.id, staff_id=staff.id, scheduled_at=datetime.now(UTC))
     db.add(appt)
     db.commit()
     return clinic, staff, patient, appt

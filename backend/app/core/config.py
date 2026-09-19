@@ -5,7 +5,7 @@ All settings are loaded from environment variables (see .env.example).
 Nothing sensitive is hardcoded here.
 """
 from functools import lru_cache
-from typing import List
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,14 +37,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     COOKIE_NAME: str = "myvita_session"
     COOKIE_SECURE: bool = True  # False only for local http dev
-    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
 
     # CSRF (double-submit cookie, HMAC-bound to the session)
     CSRF_COOKIE_NAME: str = "myvita_csrf"
     CSRF_HEADER_NAME: str = "X-CSRF-Token"
 
     # CORS
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     @field_validator("JWT_ALGORITHM")
     @classmethod
@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()
 
 
 settings = get_settings()

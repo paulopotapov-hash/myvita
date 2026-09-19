@@ -15,3 +15,11 @@ slowapi==0.1.10
 pytest==8.3.4
 pytest-cov==6.0.0
 httpx==0.28.1
+
+# quality tooling (lint / type checking / dependency scanning) — CI-only,
+# not needed at runtime, but kept in the same file as the rest of the
+# project's dev/test deps rather than splitting into a second requirements
+# file for three tools.
+ruff==0.16.8
+mypy==2.3.1
+pip-audit==2.10.1

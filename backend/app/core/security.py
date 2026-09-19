@@ -16,8 +16,8 @@ Design decisions (do not change without discussion):
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import Cookie, Depends, HTTPException, Request, Response, status
@@ -44,7 +44,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user: User) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user.id),
         "clinic_id": str(user.clinic_id) if user.clinic_id else None,
@@ -59,11 +59,11 @@ def create_access_token(user: User) -> str:
 def decode_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão inválida ou expirada.",
-        )
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +137,7 @@ def _enforce_csrf(request: Request, user: User) -> None:
     header_token = request.headers.get(settings.CSRF_HEADER_NAME)
 
     if not cookie_token or not header_token:
+        _audit_csrf_failure(request, user, "Token CSRF em falta.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Token CSRF em falta.",
@@ -144,6 +145,7 @@ def _enforce_csrf(request: Request, user: User) -> None:
 
     # Double-submit check: header must match cookie exactly (constant-time).
     if not hmac.compare_digest(cookie_token, header_token):
+        _audit_csrf_failure(request, user, "Token CSRF inválido (cookie != header).")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Token CSRF inválido.",
@@ -153,10 +155,31 @@ def _enforce_csrf(request: Request, user: User) -> None:
     # server issued for THIS user's current session (not forged, not
     # replayed from a previous/different session after logout).
     if not _csrf_token_is_valid_for_user(cookie_token, user):
+        _audit_csrf_failure(request, user, "Token CSRF inválido (assinatura/epoch).")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Token CSRF inválido.",
         )
+
+
+def _audit_csrf_failure(request: Request, user: User, reason: str) -> None:
+    # Local import: app.core.audit imports app.models, which would otherwise
+    # be a circular import at module load time (app.models.audit_log does
+    # not import security, but keeping this import local avoids ever having
+    # to think about import order between this module and app.models).
+    from app.core.audit import client_ip, record_audit_event
+    from app.models import AuditAction, AuditResult
+
+    record_audit_event(
+        action=AuditAction.CSRF_FAILURE,
+        result=AuditResult.DENIED,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"reason": reason, "path": request.url.path},
+    )
 
 
 def _origin_is_allowed(request: Request) -> bool:
@@ -205,7 +228,7 @@ def clear_session_cookie(response: Response) -> None:
 
 def get_current_user(
     request: Request,
-    session_token: Optional[str] = Cookie(default=None, alias=settings.COOKIE_NAME),
+    session_token: str | None = Cookie(default=None, alias=settings.COOKIE_NAME),
     db: Session = Depends(get_db),
 ) -> User:
     """
@@ -251,14 +274,27 @@ def get_current_user(
     return user
 
 
-def require_roles(*allowed_roles: UserRole):
+def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
     """
     Dependency factory for endpoint-level authorization.
     Usage: Depends(require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN))
     """
 
-    def _checker(user: User = Depends(get_current_user)) -> User:
+    def _checker(request: Request, user: User = Depends(get_current_user)) -> User:
         if user.role not in allowed_roles:
+            from app.core.audit import client_ip, record_audit_event
+            from app.models import AuditAction, AuditResult
+
+            record_audit_event(
+                action=AuditAction.PERMISSION_DENIED,
+                result=AuditResult.DENIED,
+                clinic_id=user.clinic_id,
+                actor_user_id=user.id,
+                actor_email=user.email,
+                ip_address=client_ip(request),
+                user_agent=request.headers.get("user-agent"),
+                metadata={"path": request.url.path, "required_roles": [r.value for r in allowed_roles]},
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Sem permissões para aceder a este recurso.",
