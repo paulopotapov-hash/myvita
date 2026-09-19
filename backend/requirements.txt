@@ -13,7 +13,7 @@ slowapi==0.1.10
 
 # testing
 pytest==9.0.3
-pytest-cov==6.0.0
+pytest-cov==7.1.0
 httpx==0.28.1
 
 # quality tooling (lint / type checking / dependency scanning) — CI-only,
