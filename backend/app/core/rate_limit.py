@@ -13,9 +13,16 @@ replicas share the same counters — see slowapi/limits docs. That's a
 deployment-time config change, not a code change.
 """
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+from app.core.client_ip import get_client_ip
+
+# NOT slowapi's default get_remote_address: that reads request.client.host
+# directly, which — behind the reverse proxy docker-compose.prod.yml
+# assumes — would be the proxy's own IP on every single request, collapsing
+# rate limiting into one shared bucket for every real user. get_client_ip
+# only trusts X-Forwarded-For from configured TRUSTED_PROXIES (see
+# app/core/client_ip.py), so this stays correct with or without a proxy.
+limiter = Limiter(key_func=get_client_ip)
 
 # Deliberately generous enough not to bother a real user who mistypes a
 # password a couple of times, tight enough to make credential-stuffing /

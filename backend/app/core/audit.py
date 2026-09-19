@@ -7,8 +7,11 @@ import logging
 import uuid
 from typing import Any
 
+from app.core.client_ip import get_client_ip as client_ip  # re-exported: see app/core/client_ip.py
 from app.core.database import SessionLocal
 from app.models.audit_log import AuditAction, AuditLog, AuditResult
+
+__all__ = ["record_audit_event", "client_ip"]
 
 logger = logging.getLogger("myvita.audit")
 
@@ -65,14 +68,3 @@ def record_audit_event(
         session.rollback()
     finally:
         session.close()
-
-
-def client_ip(request: Any) -> str | None:
-    """Best-effort client IP: honors X-Forwarded-For (set by a trusted
-    reverse proxy in production) before falling back to the raw socket peer."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None

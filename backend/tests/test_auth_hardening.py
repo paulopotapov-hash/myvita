@@ -179,5 +179,16 @@ def test_production_requires_cookie_secure():
 def test_production_with_cookie_secure_is_accepted():
     from app.core.config import Settings
 
-    settings = Settings(JWT_SECRET_KEY="x", ENVIRONMENT="production", COOKIE_SECURE=True)
+    settings = Settings(
+        JWT_SECRET_KEY="x" * 32, ENVIRONMENT="production", COOKIE_SECURE=True, CORS_ORIGINS=["https://app.myvita.pt"]
+    )
     assert settings.is_production
+
+
+def test_jwt_secret_key_too_short_is_rejected():
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(JWT_SECRET_KEY="too-short")

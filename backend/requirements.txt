@@ -7,12 +7,12 @@ pydantic==2.10.3
 pydantic[email]==2.10.3
 pydantic-settings==2.7.0
 passlib[argon2]==1.7.4
-pyjwt==2.10.1
-python-multipart==0.0.20
+pyjwt==2.13.0
+python-multipart==0.0.31
 slowapi==0.1.10
 
 # testing
-pytest==8.3.4
+pytest==9.0.3
 pytest-cov==6.0.0
 httpx==0.28.1
 

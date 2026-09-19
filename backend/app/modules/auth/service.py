@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit_event
+from app.core.metrics import auth_failures_total
 from app.core.security import hash_password, verify_password
 from app.models import AuditAction, AuditResult, User
 
@@ -44,6 +45,7 @@ def authenticate(
         # which must stay generic): this is for security monitoring, not
         # sent back to whoever made the request.
         logger.warning("Tentativa de login falhada (email desconhecido ou inativo): %s", email)
+        auth_failures_total.inc()
         record_audit_event(
             action=AuditAction.LOGIN_FAILURE,
             result=AuditResult.FAILURE,
@@ -55,6 +57,7 @@ def authenticate(
 
     if not verify_password(password, user.hashed_password):
         logger.warning("Tentativa de login falhada (password incorreta): user_id=%s", user.id)
+        auth_failures_total.inc()
         record_audit_event(
             action=AuditAction.LOGIN_FAILURE,
             result=AuditResult.FAILURE,
