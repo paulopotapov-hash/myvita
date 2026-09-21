@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
-from app.core.security import get_current_clinic_id, require_roles
-from app.models import AuditAction, AuditResult, User, UserRole
+from app.core.security import get_current_clinic_id, get_current_user, require_roles
+from app.models import AuditAction, AuditResult, Staff, User, UserRole
 from app.modules.staff.schemas import StaffCreateRequest, StaffPublic
 from app.modules.staff.service import create_staff_member
 
@@ -44,3 +44,33 @@ def create(
         staff_role=staff.staff_role,
         specialty=staff.specialty,
     )
+
+
+@router.get("", response_model=list[StaffPublic])
+def list_mine(
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    _user: User = Depends(get_current_user),
+) -> list[StaffPublic]:
+    """
+    Staff directory for the caller's own clinic. Open to any authenticated
+    role in the clinic (patients included) — this is "who are our doctors",
+    not sensitive clinical data, and staff/clinic_admin need it to pick a
+    staff member when creating an appointment.
+    """
+    staff_members = (
+        db.query(Staff)
+        .options(selectinload(Staff.user))
+        .filter(Staff.clinic_id == clinic_id)
+        .all()
+    )
+    return [
+        StaffPublic(
+            id=s.id,
+            clinic_id=s.clinic_id,
+            full_name=s.user.full_name,
+            staff_role=s.staff_role,
+            specialty=s.specialty,
+        )
+        for s in staff_members
+    ]

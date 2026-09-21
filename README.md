@@ -1,4 +1,4 @@
-# myVita — Backend
+# myVita — Backend + Frontend
 
 ## Como correr (Docker — recomendado)
 
@@ -17,11 +17,14 @@ Depois:
 docker compose up --build
 ```
 
+- Frontend: http://localhost:5173
 - API: http://localhost:8000
 - Docs interativas (Swagger): http://localhost:8000/docs
 - Health: http://localhost:8000/health · Ready (confirma ligação à BD): http://localhost:8000/ready
 
 Para parar: `Ctrl+C`, depois `docker compose down` (ou `docker compose down -v` para apagar também os dados da BD).
+
+Documentação específica do frontend (stack, variáveis de ambiente, decisões de segurança, recomendação de produção): `frontend/README.md`.
 
 ## Correr sem Docker (dev local)
 
@@ -32,6 +35,13 @@ pip install -r requirements.txt
 cp .env.example .env   # edita DATABASE_URL para apontar a um Postgres local
 alembic upgrade head
 uvicorn app.main:app --reload
+```
+
+Frontend, num terminal separado:
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ## Migrations
@@ -207,7 +217,8 @@ Implementado:
 - Audit logging + clinical access logging (tabela `audit_logs`, sessão própria, sem dados sensíveis)
 - Request ID por pedido, logging estruturado (JSON em produção/staging), métricas mínimas em `/metrics` (protegido por token, 404 por omissão)
 - Tratamento de erros que nunca expõe stack traces/SQL/credenciais ao cliente
-- Endpoints: onboarding de clínica, registo de paciente, gestão de staff, marcação de consultas, login/logout/me
+- Endpoints: onboarding de clínica, registo de paciente, gestão de staff, marcação de consultas, login/logout/me, diretório de pacientes (`GET /patients`, staff/admin) e de staff (`GET /staff`, qualquer autenticado) — os dois últimos adicionados para o frontend conseguir mostrar nomes em vez de UUIDs e escolher paciente/profissional ao marcar consulta
+- Frontend (`frontend/`): React + Vite + TypeScript + Tailwind + React Router + TanStack Query + Zod — ver `frontend/README.md`
 - Proteção anti-IDOR: uma clínica nunca consegue marcar consultas usando pacientes/staff de outra clínica (testado e bloqueado)
 - CI (GitHub Actions): lint (ruff), type checking (mypy), testes com Postgres real, migrations (upgrade + downgrade + upgrade), coverage, dependency scanning **bloqueante** (pip-audit com exceções documentadas em `SECURITY-EXCEPTIONS.md`), build da imagem Docker
 - Dependabot (pip, GitHub Actions, Docker base image)

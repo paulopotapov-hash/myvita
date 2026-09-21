@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import hash_password
 from app.models import Clinic, Patient, User, UserRole
@@ -41,3 +41,19 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
     db.refresh(patient)
     db.refresh(user)
     return patient, user
+
+
+def list_patients_for_clinic(db: Session, clinic_id: str) -> list[Patient]:
+    """
+    Staff/clinic_admin only (enforced in the router) — the patient directory
+    for their own clinic. `clinic_id` always comes from the authenticated
+    staff member's own session, never from a client-supplied filter.
+    """
+    return (
+        db.query(Patient)
+        .options(selectinload(Patient.user))
+        .filter(Patient.clinic_id == clinic_id)
+        .join(User, Patient.user_id == User.id)
+        .order_by(User.full_name)
+        .all()
+    )

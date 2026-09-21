@@ -30,5 +30,21 @@ services:
       - ./backend/app:/app/app
       - ./backend/migrations:/app/migrations
 
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      # See frontend/vite.config.ts — "localhost" from inside this
+      # container is this container, not the backend one.
+      VITE_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+
 volumes:
   myvita_pg_data:
