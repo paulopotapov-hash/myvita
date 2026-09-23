@@ -5,8 +5,15 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.database import get_db
+from app.core.pagination import DEFAULT_PAGE_SIZE, Limit, Offset
 from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
-from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
+from app.core.security import (
+    ClinicalPermission,
+    get_current_clinic_id,
+    get_current_user,
+    require_permission,
+    set_session_cookie,
+)
 from app.models import AuditAction, AuditResult, Patient, User, UserRole
 from app.modules.patients.schemas import PatientPublic, PatientRegisterRequest, PatientUpdateRequest
 from app.modules.patients.service import list_patients_for_clinic, register_patient
@@ -15,7 +22,8 @@ router = APIRouter()
 
 # See app/modules/appointments/router.py for why this is a module-level
 # variable instead of an inline require_roles(...) call in the signature.
-_staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
+_patient_read = require_permission(ClinicalPermission.PATIENT_DIRECTORY_READ)
+_patient_update = require_permission(ClinicalPermission.PATIENT_UPDATE)
 
 
 @router.post("/register", response_model=PatientPublic, status_code=201)
@@ -48,9 +56,11 @@ def register(
 @router.get("", response_model=list[PatientPublic])
 def list_mine(
     request: Request,
+    limit: Limit = DEFAULT_PAGE_SIZE,
+    offset: Offset = 0,
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
-    staff_user: User = Depends(_staff_or_admin_only),
+    staff_user: User = Depends(_patient_read),
 ) -> list[PatientPublic]:
     """
     Patient directory for the caller's own clinic — needed so staff can
@@ -58,7 +68,7 @@ def list_mine(
     can show a name instead of a bare UUID. Never a cross-clinic listing:
     clinic_id always comes from the staff member's own session.
     """
-    patients = list_patients_for_clinic(db, clinic_id)
+    patients = list_patients_for_clinic(db, clinic_id, limit, offset)
     record_audit_event(
         action=AuditAction.STAFF_VIEWED_PATIENT,
         result=AuditResult.SUCCESS,
@@ -90,18 +100,46 @@ def _visible_patient(db: Session, patient_id: uuid.UUID, user: User) -> Patient:
 
 
 def _public(patient: Patient) -> PatientPublic:
-    return PatientPublic(id=patient.id, clinic_id=patient.clinic_id, full_name=patient.user.full_name, birth_date=patient.birth_date, phone=patient.phone)
+    return PatientPublic(
+        id=patient.id,
+        clinic_id=patient.clinic_id,
+        full_name=patient.user.full_name,
+        birth_date=patient.birth_date,
+        phone=patient.phone,
+    )
 
 
 @router.get("/{patient_id}", response_model=PatientPublic)
-def detail(patient_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> PatientPublic:
+def detail(
+    patient_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PatientPublic:
     patient = _visible_patient(db, patient_id, user)
-    record_audit_event(action=AuditAction.STAFF_VIEWED_PATIENT if user.role != UserRole.PATIENT else AuditAction.PATIENT_VIEWED_OWN_RECORD, result=AuditResult.SUCCESS, clinic_id=user.clinic_id, actor_user_id=user.id, actor_email=user.email, resource_type="patient", resource_id=patient.id, ip_address=client_ip(request))
+    record_audit_event(
+        action=AuditAction.STAFF_VIEWED_PATIENT
+        if user.role != UserRole.PATIENT
+        else AuditAction.PATIENT_VIEWED_OWN_RECORD,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="patient",
+        resource_id=patient.id,
+        ip_address=client_ip(request),
+    )
     return _public(patient)
 
 
 @router.patch("/{patient_id}", response_model=PatientPublic)
-def update(patient_id: uuid.UUID, payload: PatientUpdateRequest, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> PatientPublic:
+def update(
+    patient_id: uuid.UUID,
+    payload: PatientUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_patient_update),
+) -> PatientPublic:
     patient = _visible_patient(db, patient_id, user)
     values = payload.model_dump(exclude_unset=True)
     if "full_name" in values and values["full_name"] is None:
@@ -112,5 +150,14 @@ def update(patient_id: uuid.UUID, payload: PatientUpdateRequest, request: Reques
         setattr(patient, key, value)
     db.commit()
     db.refresh(patient)
-    record_audit_event(action=AuditAction.PATIENT_UPDATED, result=AuditResult.SUCCESS, clinic_id=user.clinic_id, actor_user_id=user.id, actor_email=user.email, resource_type="patient", resource_id=patient.id, ip_address=client_ip(request))
+    record_audit_event(
+        action=AuditAction.PATIENT_UPDATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="patient",
+        resource_id=patient.id,
+        ip_address=client_ip(request),
+    )
     return _public(patient)

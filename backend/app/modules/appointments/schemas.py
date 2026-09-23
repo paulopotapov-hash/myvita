@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.appointment import AppointmentStatus
 
@@ -13,6 +13,8 @@ class AppointmentCreateRequest(BaseModel):
     own session (see core/security.get_current_clinic_id), never trusted
     from the client, so a request can't be aimed at another clinic.
     """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
     patient_id: uuid.UUID
     staff_id: uuid.UUID
     scheduled_at: datetime
@@ -24,10 +26,12 @@ class AppointmentCreateRequest(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("A data deve incluir timezone.")
         return value
+
     reason: str | None = Field(default=None, max_length=500)
 
 
 class AppointmentUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     scheduled_at: datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=5, le=480)
     reason: str | None = Field(default=None, max_length=500)

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Appointment, AppointmentStatus, Patient, Staff, User, UserRole
 from app.modules.appointments.schemas import AppointmentCreateRequest
+from app.modules.clinical.service import create_notification
 
 
 def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRequest) -> Appointment:
@@ -29,6 +30,8 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Profissional não encontrado nesta clínica.",
         )
+    if not staff.user.is_active:
+        raise HTTPException(status_code=409, detail="Profissional inativo.")
 
     validate_slot(db, clinic_id, payload.staff_id, payload.scheduled_at, payload.duration_minutes)
     appointment = Appointment(
@@ -40,12 +43,21 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
         reason=payload.reason,
     )
     db.add(appointment)
+    db.flush()
+    create_notification(
+        db, patient.user, "Consulta marcada", "Foi marcada uma nova consulta.", "appointment_created"
+    )
+    create_notification(
+        db, staff.user, "Consulta marcada", "Foi marcada uma nova consulta.", "appointment_created"
+    )
     db.commit()
     db.refresh(appointment)
     return appointment
 
 
-def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
+def list_appointments_for_user(
+    db: Session, user: User, limit: int = 50, offset: int = 0
+) -> list[Appointment]:
     """
     Patients only ever see their own appointments. Staff/clinic_admin see
     every appointment within their own clinic — never another clinic's,
@@ -61,6 +73,8 @@ def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
             db.query(Appointment)
             .filter(Appointment.patient_id == patient.id)
             .order_by(Appointment.scheduled_at)
+            .offset(offset)
+            .limit(limit)
             .all()
         )
 
@@ -69,11 +83,20 @@ def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
         db.query(Appointment)
         .filter(Appointment.clinic_id == user.clinic_id)
         .order_by(Appointment.scheduled_at)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
 
-def validate_slot(db: Session, clinic_id: str, staff_id: uuid.UUID, start: datetime, duration: int, exclude_id: uuid.UUID | None = None) -> None:
+def validate_slot(
+    db: Session,
+    clinic_id: str,
+    staff_id: uuid.UUID,
+    start: datetime,
+    duration: int,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
     if start.tzinfo is None or start.utcoffset() is None:
         raise HTTPException(status_code=422, detail="A data deve incluir timezone.")
     if start <= datetime.now(UTC):
@@ -81,10 +104,18 @@ def validate_slot(db: Session, clinic_id: str, staff_id: uuid.UUID, start: datet
     end = start + timedelta(minutes=duration)
     # Serialize booking decisions for one staff member across concurrent requests.
     db.query(Staff).filter(Staff.id == staff_id, Staff.clinic_id == clinic_id).with_for_update().one()
-    existing = db.query(Appointment).filter(
-        Appointment.clinic_id == clinic_id, Appointment.staff_id == staff_id,
-        Appointment.status.notin_([AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW]),
-        Appointment.scheduled_at < end,
-    ).all()
-    if any(a.id != exclude_id and a.scheduled_at + timedelta(minutes=a.duration_minutes) > start for a in existing):
+    existing = (
+        db.query(Appointment)
+        .filter(
+            Appointment.clinic_id == clinic_id,
+            Appointment.staff_id == staff_id,
+            Appointment.status.notin_([AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW]),
+            Appointment.scheduled_at < end,
+        )
+        .all()
+    )
+    if any(
+        a.id != exclude_id and a.scheduled_at + timedelta(minutes=a.duration_minutes) > start
+        for a in existing
+    ):
         raise HTTPException(status_code=409, detail="O profissional já tem uma consulta nesse horário.")

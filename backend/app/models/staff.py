@@ -18,9 +18,11 @@ class StaffRole(str, enum.Enum):
 class Staff(Base):
     """Clinical/admin staff profile, scoped to exactly one clinic.
     Name lives on User.full_name — access via staff.user.full_name."""
+
     __tablename__ = "staff"
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_staff_user_id"),
+        UniqueConstraint("id", "clinic_id", name="uq_staff_id_clinic"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
