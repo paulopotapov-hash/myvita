@@ -29,3 +29,9 @@ class PatientPublic(BaseModel):
     phone: str | None
 
     model_config = {"from_attributes": True}
+
+
+class PatientUpdateRequest(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=255)
+    birth_date: date | None = None
+    phone: str | None = Field(default=None, max_length=30)

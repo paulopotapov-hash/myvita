@@ -1,7 +1,10 @@
+import uuid
+from datetime import UTC, datetime, timedelta
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import Appointment, Patient, Staff, User, UserRole
+from app.models import Appointment, AppointmentStatus, Patient, Staff, User, UserRole
 from app.modules.appointments.schemas import AppointmentCreateRequest
 
 
@@ -27,6 +30,7 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
             detail="Profissional não encontrado nesta clínica.",
         )
 
+    validate_slot(db, clinic_id, payload.staff_id, payload.scheduled_at, payload.duration_minutes)
     appointment = Appointment(
         clinic_id=clinic_id,
         patient_id=patient.id,
@@ -67,3 +71,20 @@ def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
         .order_by(Appointment.scheduled_at)
         .all()
     )
+
+
+def validate_slot(db: Session, clinic_id: str, staff_id: uuid.UUID, start: datetime, duration: int, exclude_id: uuid.UUID | None = None) -> None:
+    if start.tzinfo is None or start.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="A data deve incluir timezone.")
+    if start <= datetime.now(UTC):
+        raise HTTPException(status_code=422, detail="A consulta deve ser no futuro.")
+    end = start + timedelta(minutes=duration)
+    # Serialize booking decisions for one staff member across concurrent requests.
+    db.query(Staff).filter(Staff.id == staff_id, Staff.clinic_id == clinic_id).with_for_update().one()
+    existing = db.query(Appointment).filter(
+        Appointment.clinic_id == clinic_id, Appointment.staff_id == staff_id,
+        Appointment.status.notin_([AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW]),
+        Appointment.scheduled_at < end,
+    ).all()
+    if any(a.id != exclude_id and a.scheduled_at + timedelta(minutes=a.duration_minutes) > start for a in existing):
+        raise HTTPException(status_code=409, detail="O profissional já tem uma consulta nesse horário.")

@@ -64,6 +64,9 @@ def db_session(engine):
     """Each test runs inside an outer transaction + SAVEPOINT that's rolled
     back afterwards, so tests never see each other's data and a session.commit()
     inside the test code doesn't end the outer transaction early."""
+    # Other integration fixtures drop tables between tests; restore the schema
+    # before transactional tests regardless of test order.
+    Base.metadata.create_all(engine)
     connection = engine.connect()
     transaction = connection.begin()
     SessionLocal = sessionmaker(bind=connection, future=True, join_transaction_mode="create_savepoint")

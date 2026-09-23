@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, Request, Response
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.database import get_db
 from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
-from app.core.security import get_current_clinic_id, require_roles, set_session_cookie
-from app.models import AuditAction, AuditResult, User, UserRole
-from app.modules.patients.schemas import PatientPublic, PatientRegisterRequest
+from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
+from app.models import AuditAction, AuditResult, Patient, User, UserRole
+from app.modules.patients.schemas import PatientPublic, PatientRegisterRequest, PatientUpdateRequest
 from app.modules.patients.service import list_patients_for_clinic, register_patient
 
 router = APIRouter()
@@ -78,3 +80,37 @@ def list_mine(
         )
         for p in patients
     ]
+
+
+def _visible_patient(db: Session, patient_id: uuid.UUID, user: User) -> Patient:
+    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id).first()
+    if patient is None or (user.role == UserRole.PATIENT and patient.user_id != user.id):
+        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+    return patient
+
+
+def _public(patient: Patient) -> PatientPublic:
+    return PatientPublic(id=patient.id, clinic_id=patient.clinic_id, full_name=patient.user.full_name, birth_date=patient.birth_date, phone=patient.phone)
+
+
+@router.get("/{patient_id}", response_model=PatientPublic)
+def detail(patient_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> PatientPublic:
+    patient = _visible_patient(db, patient_id, user)
+    record_audit_event(action=AuditAction.STAFF_VIEWED_PATIENT if user.role != UserRole.PATIENT else AuditAction.PATIENT_VIEWED_OWN_RECORD, result=AuditResult.SUCCESS, clinic_id=user.clinic_id, actor_user_id=user.id, actor_email=user.email, resource_type="patient", resource_id=patient.id, ip_address=client_ip(request))
+    return _public(patient)
+
+
+@router.patch("/{patient_id}", response_model=PatientPublic)
+def update(patient_id: uuid.UUID, payload: PatientUpdateRequest, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> PatientPublic:
+    patient = _visible_patient(db, patient_id, user)
+    values = payload.model_dump(exclude_unset=True)
+    if "full_name" in values and values["full_name"] is None:
+        raise HTTPException(status_code=422, detail="Nome obrigatório.")
+    if "full_name" in values:
+        patient.user.full_name = values.pop("full_name")
+    for key, value in values.items():
+        setattr(patient, key, value)
+    db.commit()
+    db.refresh(patient)
+    record_audit_event(action=AuditAction.PATIENT_UPDATED, result=AuditResult.SUCCESS, clinic_id=user.clinic_id, actor_user_id=user.id, actor_email=user.email, resource_type="patient", resource_id=patient.id, ip_address=client_ip(request))
+    return _public(patient)

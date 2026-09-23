@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.appointment import AppointmentStatus
 
@@ -17,7 +17,21 @@ class AppointmentCreateRequest(BaseModel):
     staff_id: uuid.UUID
     scheduled_at: datetime
     duration_minutes: int = Field(default=30, ge=5, le=480)
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("A data deve incluir timezone.")
+        return value
     reason: str | None = Field(default=None, max_length=500)
+
+
+class AppointmentUpdateRequest(BaseModel):
+    scheduled_at: datetime | None = None
+    duration_minutes: int | None = Field(default=None, ge=5, le=480)
+    reason: str | None = Field(default=None, max_length=500)
+    status: AppointmentStatus | None = None
 
 
 class AppointmentPublic(BaseModel):

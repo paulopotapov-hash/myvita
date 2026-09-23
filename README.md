@@ -126,7 +126,7 @@ O token CSRF invalida-se automaticamente ao fazer logout (está ligado ao `token
 Tabela única `audit_logs` (ver `app/models/audit_log.py` para a justificação de não a separar em duas). Cobre:
 
 - Eventos de segurança: `LOGIN_SUCCESS`/`LOGIN_FAILURE`, `LOGOUT`, `PATIENT_CREATED`, `STAFF_CREATED`, `CLINIC_CREATED`, `PERMISSION_DENIED`, `CSRF_FAILURE`, `RATE_LIMITED`.
-- Acesso clínico: `STAFF_VIEWED_APPOINTMENT`, `PATIENT_VIEWED_OWN_RECORD` — atualmente instrumentado na listagem de consultas (`GET /api/v1/appointments`), que é o único endpoint de leitura de dados sensíveis que existe hoje no código. **Não há ainda endpoints de leitura/detalhe de ficha de paciente** — quando existirem, devem emitir `STAFF_VIEWED_PATIENT` da mesma forma.
+- Acesso clínico: `STAFF_VIEWED_APPOINTMENT`, `STAFF_VIEWED_PATIENT`, `PATIENT_VIEWED_OWN_RECORD`, bem como leitura de histórico clínico, medicação e consentimentos. As alterações desses três domínios também são auditadas sem guardar conteúdo clínico no log.
 
 Cada escrita usa a sua própria sessão de BD (`app/core/audit.py`), independente da transação do pedido que a originou — assim uma falha de login ou uma transação revertida não apagam o registo de auditoria. Nunca contém passwords, JWTs, cookies, tokens CSRF, ou dados clínicos — só identificadores mínimos. Ver testes em `tests/test_audit_logging.py`, incluindo um teste dedicado a confirmar que nenhuma password aparece na tabela.
 
@@ -243,3 +243,11 @@ O que está implementado no código não substitui isto — depende de decisões
 - Valores de RPO/RTO acordados operacionalmente, não os valores de referência acima
 - Monitorização/alerting sobre os logs e sobre falhas de `/ready` (a app expõe `/metrics`; ligar isso a um Prometheus/Grafana real, se algum dia fizer sentido, é infraestrutura, não código)
 - Armazenamento dos backups fora da máquina da própria base de dados (offsite)
+
+### Backend clínico (Fase B)
+
+A API `v1` inclui histórico clínico (`POST /medical-records`, `GET /patients/{id}/medical-records`, `PATCH /medical-records/{id}`), medicação (`POST /medications`, `GET /patients/{id}/medications`, `PATCH /medications/{id}`), consentimentos com eventos imutáveis (`POST /consents`, `GET /patients/{id}/consents`) e notificações internas (`GET /notifications`, `PATCH /notifications/{id}/read`). Pacientes podem consultar apenas os seus dados; profissionais e administradores atuam apenas na própria clínica. As escritas autenticadas exigem CSRF. Notificações são criadas internamente pelo backend, sem endpoint público de envio.
+
+Pacientes têm detalhe e atualização em `GET/PATCH /patients/{id}`. Consultas têm detalhe, atualização e cancelamento em `GET/PATCH /appointments/{id}` e `POST /appointments/{id}/cancel`; reservas sobrepostas do mesmo profissional recebem `409`, com bloqueio da linha de staff durante a verificação. Os horários de criação devem incluir timezone e ser futuros.
+
+Aplicar a migration com `cd backend && python -m alembic upgrade head`. Verificar com `ruff check .`, `mypy app` e `pytest`. A migration acrescenta tabelas clínicas e valores ao enum de auditoria; o downgrade preserva os valores do enum para manter íntegro o histórico de auditoria.
