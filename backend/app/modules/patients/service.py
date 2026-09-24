@@ -1,9 +1,11 @@
+import uuid
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import hash_password
 from app.models import Clinic, Patient, User, UserRole
-from app.modules.patients.schemas import PatientRegisterRequest
+from app.modules.patients.schemas import PatientRegisterRequest, PatientUpdateRequest
 
 
 def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Patient, User]:
@@ -43,17 +45,44 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
     return patient, user
 
 
-def list_patients_for_clinic(db: Session, clinic_id: str) -> list[Patient]:
+def list_patients_for_clinic(
+    db: Session, clinic_id: str, *, offset: int = 0, limit: int = 50
+) -> tuple[list[Patient], int]:
     """
     Staff/clinic_admin only (enforced in the router) — the patient directory
     for their own clinic. `clinic_id` always comes from the authenticated
     staff member's own session, never from a client-supplied filter.
     """
-    return (
+    query = (
         db.query(Patient)
         .options(selectinload(Patient.user))
         .filter(Patient.clinic_id == clinic_id)
         .join(User, Patient.user_id == User.id)
-        .order_by(User.full_name)
-        .all()
     )
+    total = query.count()
+    patients = query.order_by(User.full_name, Patient.id).offset(offset).limit(limit).all()
+    return patients, total
+
+
+def get_patient_for_user(db: Session, patient_id: uuid.UUID, user: User) -> Patient:
+    patient = (
+        db.query(Patient)
+        .options(selectinload(Patient.user))
+        .filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id)
+        .first()
+    )
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
+    if user.role == UserRole.PATIENT and patient.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
+    return patient
+
+
+def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateRequest, user: User) -> Patient:
+    patient = get_patient_for_user(db, patient_id, user)
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(patient, field, value)
+    db.commit()
+    db.refresh(patient)
+    return patient
