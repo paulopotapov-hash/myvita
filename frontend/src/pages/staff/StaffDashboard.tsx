@@ -53,6 +53,10 @@ export function StaffDashboard() {
         )}
       </section>
 
+      {patients.isError && (
+        <ErrorState message={toUserMessage(patients.error)} onRetry={() => patients.refetch()} />
+      )}
+
       <div className="flex flex-wrap gap-3">
         <Link
           to="/app/consultas"

@@ -11,8 +11,9 @@ Audit performed against commit `f5eb6c0` on 2026-09-24. The source of truth was 
 - Clinic onboarding, patient registration, staff creation/listing, patient directory listing and appointment listing/creation are wired to real endpoints.
 - Role-specific dashboards show only values derivable from the existing clinic, patient, staff and appointment APIs.
 - Vitest coverage exists for the API client, login, route guards and application layout.
-- F1 now adds deterministic operational-401 handling, redirect restoration, patient-detail navigation,
-  appointment detail/duration, and the complete B5 consent UI using the existing architecture.
+- F1 now adds deterministic operational-401 handling, redirect restoration, cache isolation across
+  identities, patient-detail navigation, appointment detail/duration, and the staff/admin B5 consent UI
+  using the existing architecture.
 
 ## BROKEN
 

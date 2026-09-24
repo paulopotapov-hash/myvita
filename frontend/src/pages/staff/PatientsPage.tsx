@@ -22,7 +22,8 @@ export function PatientsPage() {
           <EmptyState title="Sem pacientes" description="Ainda não há pacientes registados nesta clínica." />
         )}
         {patients.data && patients.data.length > 0 && (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-xl text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 font-medium">Nome</th>
@@ -44,6 +45,7 @@ export function PatientsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

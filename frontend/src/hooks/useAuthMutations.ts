@@ -10,6 +10,9 @@ export function useLogin() {
   return useMutation({
     mutationFn: (payload: LoginRequest) => authService.login(payload),
     onSuccess: (user) => {
+      // A successful login may replace an expired or different identity.
+      // Never let tenant-scoped data survive that identity boundary.
+      queryClient.clear()
       queryClient.setQueryData(SESSION_QUERY_KEY, user)
     },
   })
@@ -36,6 +39,7 @@ export function usePatientRegister() {
     onSuccess: () => {
       // The backend auto-logs-in the new patient (sets the session cookie
       // in the same response) — refetch /me to pick that up.
+      queryClient.clear()
       queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY })
     },
   })
@@ -47,6 +51,7 @@ export function useClinicOnboarding() {
     mutationFn: (payload: ClinicOnboardingRequest) => clinicsService.onboard(payload),
     onSuccess: () => {
       // Same as patient registration — onboarding auto-logs-in the new admin.
+      queryClient.clear()
       queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY })
     },
   })

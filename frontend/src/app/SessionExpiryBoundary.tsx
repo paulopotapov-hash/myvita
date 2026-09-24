@@ -12,7 +12,12 @@ export function SessionExpiryBoundary() {
 
   useEffect(() => {
     function onExpired(event: Event) {
-      const apiPath = (event as CustomEvent<{ path?: string }>).detail?.path
+      if (!(event instanceof CustomEvent)) return
+      const detail: unknown = event.detail
+      const apiPath =
+        typeof detail === 'object' && detail !== null && 'path' in detail && typeof detail.path === 'string'
+          ? detail.path
+          : undefined
       if (apiPath === '/api/v1/auth/login') return
       queryClient.clear()
       if (location.pathname !== '/login') {

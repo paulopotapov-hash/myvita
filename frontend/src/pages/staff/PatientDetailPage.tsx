@@ -53,8 +53,6 @@ export function PatientDetailPage() {
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Detail label="Data de nascimento" value={patient.birth_date ? formatDate(patient.birth_date) : '—'} />
           <Detail label="Telefone" value={patient.phone ?? '—'} />
-          <Detail label="Número de utente" value="Não disponível na API" />
-          <Detail label="Estado" value="Não disponível na API" />
         </dl>
       </section>
 
@@ -114,8 +112,12 @@ function ConsentSection({ patientId }: { patientId: string }) {
   function confirmRevoke(consentId: string) {
     if (!window.confirm('Revogar este consentimento? O registo continuará visível no histórico.')) return
     setSuccess('')
+    setErrors({})
     revoke.mutate(consentId, {
-      onSuccess: () => setSuccess('Consentimento revogado. O histórico foi preservado.'),
+      onSuccess: () => {
+        setErrors({})
+        setSuccess('Consentimento revogado. O histórico foi preservado.')
+      },
       onError: (error) => setErrors({ _root: toUserMessage(error) }),
     })
   }
@@ -133,7 +135,10 @@ function ConsentSection({ patientId }: { patientId: string }) {
           <select
             id="consent-type"
             value={form.consent_type}
-            onChange={(event) => setForm((current) => ({ ...current, consent_type: event.target.value as ConsentType }))}
+            onChange={(event) => {
+              const parsed = consentCreateSchema.shape.consent_type.safeParse(event.target.value)
+              if (parsed.success) setForm((current) => ({ ...current, consent_type: parsed.data }))
+            }}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
             {Object.entries(CONSENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
