@@ -11,6 +11,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { PatientProfilePage } from './pages/patient/PatientProfilePage'
 import { AppointmentsPage } from './pages/staff/AppointmentsPage'
 import { PatientsPage } from './pages/staff/PatientsPage'
+import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 
 export default function App() {
@@ -44,6 +45,14 @@ export default function App() {
           element={
             <RoleRoute allow={['staff', 'clinic_admin']}>
               <PatientsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="pacientes/:id"
+          element={
+            <RoleRoute allow={['staff', 'clinic_admin']}>
+              <PatientDetailPage />
             </RoleRoute>
           }
         />

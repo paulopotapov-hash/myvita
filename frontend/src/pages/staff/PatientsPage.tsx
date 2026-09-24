@@ -4,6 +4,7 @@ import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { usePatients } from '../../hooks/useClinicData'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDate } from '../../lib/formatDate'
+import { Link } from 'react-router-dom'
 
 export function PatientsPage() {
   const patients = usePatients()
@@ -32,7 +33,11 @@ export function PatientsPage() {
             <tbody className="divide-y divide-slate-100">
               {patients.data.map((patient) => (
                 <tr key={patient.id}>
-                  <td className="py-2 font-medium text-slate-900">{patient.full_name}</td>
+                  <td className="py-2 font-medium text-slate-900">
+                    <Link className="text-teal-700 hover:underline" to={`/app/pacientes/${patient.id}`}>
+                      {patient.full_name}
+                    </Link>
+                  </td>
                   <td className="py-2 text-slate-600">{patient.birth_date ? formatDate(patient.birth_date) : '—'}</td>
                   <td className="py-2 text-slate-600">{patient.phone ?? '—'}</td>
                 </tr>

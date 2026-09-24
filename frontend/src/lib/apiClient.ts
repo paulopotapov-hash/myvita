@@ -20,6 +20,7 @@ const CSRF_COOKIE_NAME = 'myvita_csrf'
 const CSRF_HEADER_NAME = 'X-CSRF-Token'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+export const SESSION_EXPIRED_EVENT = 'myvita:session-expired'
 
 /**
  * API base path. Empty string in both dev (Vite proxies /api, see
@@ -153,6 +154,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
           ? ((rawBody as { detail: string }).detail as string)
           : null
         : null
+    if (response.status === 401 && path !== '/api/v1/auth/me' && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { path } }))
+    }
     throw new ApiError(response.status, detail ?? `HTTP ${response.status}`, {
       requestId,
       detail,

@@ -89,3 +89,8 @@ export const appointmentCreateSchema = z.object({
   reason: z.string().max(500).optional().or(z.literal('')),
 })
 export type AppointmentCreateFormValues = z.infer<typeof appointmentCreateSchema>
+
+export const consentCreateSchema = z.object({
+  consent_type: z.enum(['treatment', 'data_processing', 'communications', 'research']),
+  purpose: z.string().trim().min(1, 'Indica a finalidade do consentimento.').max(500),
+})

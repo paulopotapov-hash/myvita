@@ -17,10 +17,11 @@ export function useClinics() {
 
 /** Own clinic's patient directory — the backend 403s this for the
  * `patient` role, so only call it from staff/admin pages. */
-export function usePatients() {
+export function usePatients(enabled = true) {
   return useQuery({
     queryKey: ['patients'],
     queryFn: ({ signal }) => patientsService.list(signal),
+    enabled,
   })
 }
 

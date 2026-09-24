@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppLayout } from './AppLayout'
@@ -7,8 +8,9 @@ import { authService } from '../services/auth'
 import type { UserPublic } from '../types/api'
 
 vi.mock('../services/auth')
+const { logoutMutate } = vi.hoisted(() => ({ logoutMutate: vi.fn() }))
 vi.mock('../hooks/useAuthMutations', () => ({
-  useLogout: () => ({ mutate: vi.fn(), isPending: false }),
+  useLogout: () => ({ mutate: logoutMutate, isPending: false }),
 }))
 
 function renderLayoutAsRole(role: UserPublic['role']) {
@@ -34,6 +36,13 @@ function renderLayoutAsRole(role: UserPublic['role']) {
 }
 
 describe('AppLayout navigation', () => {
+  it('starts the server-backed logout flow from the application shell', async () => {
+    const user = userEvent.setup()
+    renderLayoutAsRole('patient')
+    await user.click(await screen.findByRole('button', { name: 'Sair' }))
+    expect(logoutMutate).toHaveBeenCalledOnce()
+  })
+
   it('shows patient-only links for the patient role', async () => {
     renderLayoutAsRole('patient')
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())

@@ -11,15 +11,15 @@ import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
 import { appointmentCreateSchema, zodErrorsToRecord } from '../../lib/validation'
+import type { AppointmentPublic } from '../../types/api'
 
 export function AppointmentsPage() {
   const { user } = useSession()
+  const canCreate = user?.role === 'staff' || user?.role === 'clinic_admin'
   const appointments = useAppointments()
   const staff = useStaff()
-  // Only fetched for staff/admin — the backend 403s this for patients, and
-  // there's nothing useful to show a patient with their own patient record anyway.
-  const patients = usePatients()
-  const canCreate = user?.role === 'staff' || user?.role === 'clinic_admin'
+  const patients = usePatients(canCreate)
+  const [selected, setSelected] = useState<AppointmentPublic | null>(null)
 
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>()
@@ -62,12 +62,35 @@ export function AppointmentsPage() {
                   </p>
                   {appointment.reason && <p className="text-sm text-slate-400">{appointment.reason}</p>}
                 </div>
-                <AppointmentStatusBadge status={appointment.status} />
+                <div className="flex items-center gap-3">
+                  <AppointmentStatusBadge status={appointment.status} />
+                  <Button variant="secondary" onClick={() => setSelected(appointment)}>Detalhes</Button>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
+      {selected && (
+        <div role="dialog" aria-modal="true" aria-labelledby="appointment-detail-title" className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/40 p-4">
+          <section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="appointment-detail-title" className="text-lg font-semibold">Detalhe da consulta</h2>
+                <p className="text-sm text-slate-500">{formatDateTime(selected.scheduled_at)}</p>
+              </div>
+              <button type="button" aria-label="Fechar detalhes" onClick={() => setSelected(null)} className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100">×</button>
+            </div>
+            <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div><dt className="text-sm text-slate-500">Estado</dt><dd className="mt-1"><AppointmentStatusBadge status={selected.status} /></dd></div>
+              <div><dt className="text-sm text-slate-500">Duração</dt><dd className="font-medium">{selected.duration_minutes} minutos</dd></div>
+              <div><dt className="text-sm text-slate-500">Paciente</dt><dd className="font-medium">{patientNameById.get(selected.patient_id) ?? 'O próprio paciente'}</dd></div>
+              <div><dt className="text-sm text-slate-500">Profissional</dt><dd className="font-medium">{staffNameById.get(selected.staff_id) ?? 'Profissional'}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-sm text-slate-500">Motivo</dt><dd className="font-medium">{selected.reason ?? 'Não indicado'}</dd></div>
+            </dl>
+          </section>
+        </div>
+      )}
     </div>
   )
 }
@@ -77,7 +100,7 @@ function CreateAppointmentForm() {
   const patients = usePatients()
   const staff = useStaff()
 
-  const [form, setForm] = useState({ patient_id: '', staff_id: '', scheduled_at: '', reason: '' })
+  const [form, setForm] = useState({ patient_id: '', staff_id: '', scheduled_at: '', duration_minutes: '30', reason: '' })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [justCreated, setJustCreated] = useState(false)
 
@@ -102,7 +125,7 @@ function CreateAppointmentForm() {
       },
       {
         onSuccess: () => {
-          setForm({ patient_id: '', staff_id: '', scheduled_at: '', reason: '' })
+          setForm({ patient_id: '', staff_id: '', scheduled_at: '', duration_minutes: '30', reason: '' })
           setJustCreated(true)
         },
         onError: (error) => {
@@ -174,6 +197,15 @@ function CreateAppointmentForm() {
           value={form.scheduled_at}
           onChange={(e) => update('scheduled_at', e.target.value)}
           error={fieldErrors.scheduled_at}
+        />
+        <TextField
+          label="Duração (minutos)"
+          type="number"
+          min={5}
+          max={480}
+          value={form.duration_minutes}
+          onChange={(e) => update('duration_minutes', e.target.value)}
+          error={fieldErrors.duration_minutes}
         />
         <TextField
           label="Motivo (opcional)"

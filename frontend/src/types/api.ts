@@ -7,6 +7,8 @@
 export type UserRole = 'patient' | 'staff' | 'clinic_admin'
 export type StaffRole = 'doctor' | 'nurse' | 'admin'
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
+export type ConsentType = 'treatment' | 'data_processing' | 'communications' | 'research'
+export type ConsentStatus = 'granted' | 'revoked'
 
 export interface UserPublic {
   id: string
@@ -57,6 +59,20 @@ export interface AppointmentPublic {
   reason: string | null
 }
 
+export interface ConsentPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  consent_type: ConsentType
+  purpose: string
+  status: ConsentStatus
+  granted_at: string
+  revoked_at: string | null
+  recorded_by_user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 // --- Request payloads (mirrors backend *Request schemas) --------------------
 
 export interface LoginRequest {
@@ -98,4 +114,9 @@ export interface AppointmentCreateRequest {
   scheduled_at: string
   duration_minutes?: number
   reason?: string
+}
+
+export interface ConsentCreateRequest {
+  consent_type: ConsentType
+  purpose: string
 }
