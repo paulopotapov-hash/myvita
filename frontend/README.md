@@ -30,7 +30,7 @@ Ver `.env.example`. Só existe uma: `VITE_API_BASE_URL`, e só é preciso defini
 
 O `Dockerfile` multi-stage executa `npm ci` e `npm run build`, depois copia apenas o `dist/` para um Nginx não-root. O Nginx serve ficheiros estáticos em `8080` e faz fallback para `index.html`, portanto URLs do React Router podem ser abertas diretamente.
 
-Como P1.1 não introduz reverse proxy, a URL pública do backend é incorporada no bundle com o mecanismo existente `VITE_API_BASE_URL`:
+Na stack de produção, o reverse proxy P1.2 serve frontend e `/api` na mesma origem. Por isso o build usa `VITE_API_BASE_URL` vazio e o browser envia cookies/CSRF para caminhos relativos, sem CORS entre frontend e API. A variável continua disponível para deployments independentes do frontend:
 
 ```bash
 docker build --build-arg VITE_API_BASE_URL=https://api.example.pt -t myvita-frontend ./frontend
@@ -38,14 +38,14 @@ docker run --rm -p 8080:8080 myvita-frontend
 curl http://localhost:8080/healthz
 ```
 
-Para iniciar a stack de produção, define também os secrets backend e `CORS_ORIGINS` conforme o README principal:
+Para iniciar a stack HTTP local de validação, define os secrets backend e usa o overlay próprio:
 
 ```bash
-VITE_API_BASE_URL=https://api.example.pt \
-docker compose -f docker-compose.prod.yml up -d --build
+PUBLIC_DOMAIN=localhost \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-http.yml up -d --build
 ```
 
-Abre `http://localhost:8080` apenas para uma verificação local. Um deployment real deve usar HTTPS, porque o cookie de sessão backend é `Secure`. Variáveis `VITE_*` são públicas e nunca podem conter secrets.
+Abre `http://localhost` apenas para uma verificação local. Um deployment real deve usar o overlay TLS documentado no README principal, porque o cookie de sessão backend permanece `Secure`. Variáveis `VITE_*` são públicas e nunca podem conter secrets.
 
 ## Testes
 

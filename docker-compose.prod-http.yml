@@ -1,0 +1,8 @@
+# Local-only HTTP overlay for validating the production topology without a
+# certificate. Production must use docker-compose.prod.yml defaults instead.
+services:
+  backend:
+    environment:
+      ENVIRONMENT: development
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: '["${LOCAL_ORIGIN:-http://localhost}"]'

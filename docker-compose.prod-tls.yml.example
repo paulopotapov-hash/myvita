@@ -1,0 +1,10 @@
+# HTTPS overlay example. Copy it outside the repository, replace the example
+# certificate directory, and use real certificates supplied by the deployment
+# platform. Never commit private keys or certificate material.
+services:
+  proxy:
+    ports:
+      - "443:8443"
+    volumes:
+      - ./proxy/nginx.tls.conf.template.example:/etc/nginx/templates/default.conf.template:ro
+      - /absolute/path/to/certificates:/etc/nginx/tls:ro

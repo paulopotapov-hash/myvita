@@ -182,22 +182,43 @@ Verificar login/CRUD básico manualmente
 
 ## Production
 
-`docker-compose.prod.yml` é o ficheiro de produção — separado do `docker-compose.yml` de desenvolvimento, que monta o código como volume e expõe o Postgres no host (nenhum dos dois é aceitável em produção). O frontend é construído em multi-stage e servido como ficheiros estáticos por Nginx não-root, sem Vite no runtime.
+`docker-compose.prod.yml` usa um Nginx dedicado como único ingresso público. Frontend, backend e PostgreSQL não publicam portas; o proxy encaminha `/` para o frontend e `/api`, `/health` e `/ready` para o backend.
 
-```bash
-docker compose -f docker-compose.prod.yml up -d
+```text
+Internet → proxy → frontend
+                 → backend → PostgreSQL
 ```
 
-Além das variáveis backend abaixo, define `VITE_API_BASE_URL` com a URL pública da API. Esta variável é incorporada no bundle e não pode conter secrets. Por exemplo, para um teste local controlado: `VITE_API_BASE_URL=http://localhost:8000` e `CORS_ORIGINS='["http://localhost:8080"]'`. O frontend fica disponível na porta `8080` por omissão; `FRONTEND_PORT` e `BACKEND_PORT` podem alterar apenas as portas publicadas, sem mudar as portas internas dos serviços.
+Para validar localmente por HTTP, usa o overlay que desativa cookies `Secure` apenas nesse ambiente:
+
+```bash
+POSTGRES_USER=myvita POSTGRES_PASSWORD='valor-local' POSTGRES_DB=myvita \
+JWT_SECRET_KEY='gera-um-valor-com-pelo-menos-32-bytes' PUBLIC_DOMAIN=localhost \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-http.yml up -d --build
+```
+
+O proxy fica em `HTTP_PORT` (80 por omissão). Se mudares essa porta para um teste local, define também `LOCAL_ORIGIN` (por exemplo `http://localhost:18081`). `PUBLIC_DOMAIN` define o `server_name`; nenhum destes valores é secreto. O bundle usa `/api` na mesma origem e já não precisa de uma URL pública separada.
 
 Diferenças chave em relação ao dev:
-- `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`JWT_SECRET_KEY`/`CORS_ORIGINS`/`VITE_API_BASE_URL` são **obrigatórios, sem default** — o compose recusa arrancar se faltar algum.
+- `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`JWT_SECRET_KEY`/`PUBLIC_DOMAIN` são **obrigatórios, sem default** — o compose recusa arrancar se faltar algum.
 - Postgres não expõe a porta 5432 ao host — só é acessível a partir do container `backend`.
 - Sem volumes de código montados — corre exatamente o que está na imagem construída pelo `Dockerfile`.
 - `ENVIRONMENT=production`, `DEBUG=false`, `COOKIE_SECURE=true` fixos (a app recusa arrancar com `COOKIE_SECURE=false`, `CORS_ORIGINS` vazio/`*`, ou `JWT_SECRET_KEY` com menos de 32 bytes, quando `ENVIRONMENT=production` — ver `app/core/config.py`).
-- Se correr atrás de um reverse proxy, configura `TRUSTED_PROXIES` com o IP/CIDR desse proxy — sem isto, rate limiting e audit logging veem o IP do proxy em vez do cliente real.
+- O proxy tem IP fixo `172.30.0.10` na rede `edge`; só esse IP entra em `TRUSTED_PROXIES`. O proxy sobrescreve `X-Forwarded-For`, em vez de confiar num valor enviado pelo cliente.
 - Backend e frontend correm como utilizadores não-root; a imagem final do frontend contém apenas Nginx e os assets compilados.
-- Agnóstico de cloud — corre da mesma forma numa VPS, AWS/Azure/GCP, ou qualquer host Docker. Não inclui reverse proxy/TLS — coloca um (nginx, Caddy, Traefik, ou o LB da tua cloud) à frente dos serviços públicos.
+- A rede `data` é interna e liga apenas backend/PostgreSQL. A rede `edge` liga proxy/frontend/backend. Só o proxy publica uma porta.
+
+### Ativar HTTPS quando existirem domínio e certificados
+
+O ficheiro `docker-compose.prod-tls.yml.example` e `proxy/nginx.tls.conf.template.example` preparam porta 443, TLS 1.2/1.3, redirecionamento HTTP→HTTPS, HSTS e `X-Forwarded-Proto: https`. Copia o overlay para fora do repositório, substitui o caminho absoluto por um diretório que contenha `fullchain.pem` e `privkey.pem`, e inicia-o juntamente com `docker-compose.prod.yml`. Nunca guardes a chave privada no Git.
+
+No deployment real:
+
+- define `PUBLIC_DOMAIN=app.example.com`;
+- mantém `COOKIE_SECURE=true` e `ENVIRONMENT=production`;
+- usa `CORS_ORIGINS='["https://app.example.com"]'` se precisares de uma origem explícita (a navegação normal é same-origin);
+- publica 80 apenas para redirecionar e 443 para HTTPS;
+- obtém/renova certificados fora desta configuração (plataforma, ACME ou secret manager).
 
 ## Observability
 

@@ -1,0 +1,43 @@
+log_format myvita '$time_iso8601 client=$remote_addr method=$request_method '
+                  'path=$uri status=$status duration=$request_time '
+                  'upstream=$upstream_addr upstream_time=$upstream_response_time';
+
+server {
+    listen 8080;
+    server_name ${PUBLIC_DOMAIN};
+
+    access_log /dev/stdout myvita;
+    error_log /dev/stderr warn;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location = /health {
+        proxy_pass http://backend:8000/health;
+        include /etc/nginx/proxy_params;
+    }
+
+    location = /ready {
+        proxy_pass http://backend:8000/ready;
+        include /etc/nginx/proxy_params;
+    }
+
+    location /api/ {
+        proxy_pass http://backend:8000;
+        include /etc/nginx/proxy_params;
+    }
+
+    location / {
+        proxy_pass http://frontend:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options DENY always;
+        add_header Referrer-Policy no-referrer always;
+        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    }
+}
