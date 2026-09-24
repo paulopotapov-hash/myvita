@@ -10,9 +10,9 @@ from app.models.clinical import (  # noqa: F401
     Consent,
     MedicalRecord,
     MedicalRecordRevision,
-    Medication,
     Notification,
 )
+from app.models.medication import Medication  # noqa: F401
 from app.models.patient import Patient  # noqa: F401
 from app.models.staff import Staff, StaffRole  # noqa: F401
 from app.models.user import User, UserRole  # noqa: F401

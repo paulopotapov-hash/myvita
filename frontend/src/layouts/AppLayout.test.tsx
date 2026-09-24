@@ -1,14 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppLayout } from './AppLayout'
 import { authService } from '../services/auth'
 import type { UserPublic } from '../types/api'
 
 vi.mock('../services/auth')
+const logoutState = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  isError: false,
+  error: null as unknown,
+}))
 vi.mock('../hooks/useAuthMutations', () => ({
-  useLogout: () => ({ mutate: vi.fn(), isPending: false }),
+  useLogout: () => logoutState,
 }))
 
 function renderLayoutAsRole(role: UserPublic['role']) {
@@ -27,11 +34,19 @@ function renderLayoutAsRole(role: UserPublic['role']) {
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<div>Dashboard</div>} />
           </Route>
+          <Route path="/login" element={<div>Página de login</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )
 }
+
+beforeEach(() => {
+  logoutState.mutate.mockReset()
+  logoutState.isPending = false
+  logoutState.isError = false
+  logoutState.error = null
+})
 
 describe('AppLayout navigation', () => {
   it('shows patient-only links for the patient role', async () => {
@@ -53,5 +68,29 @@ describe('AppLayout navigation', () => {
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     expect(screen.queryAllByRole('link', { name: 'Equipa' })).toHaveLength(0)
     expect(screen.getAllByRole('link', { name: 'Pacientes' }).length).toBeGreaterThan(0)
+  })
+
+  it('navigates to login after the server confirms logout', async () => {
+    logoutState.mutate.mockImplementation((_variables, options) => {
+      ;(options as { onSuccess?: () => void } | undefined)?.onSuccess?.()
+    })
+    const user = userEvent.setup()
+    renderLayoutAsRole('patient')
+    await user.click(await screen.findByRole('button', { name: 'Sair' }))
+    expect(screen.getByText('Página de login')).toBeInTheDocument()
+  })
+
+  it('shows a logout failure and lets the user retry', async () => {
+    const { NetworkError } = await import('../lib/apiClient')
+    logoutState.isError = true
+    logoutState.error = new NetworkError()
+    const user = userEvent.setup()
+    renderLayoutAsRole('patient')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sem ligação ao servidor')
+    await user.click(screen.getByRole('button', { name: 'Sair' }))
+    await user.click(screen.getByRole('button', { name: 'Sair' }))
+    expect(logoutState.mutate).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
 })

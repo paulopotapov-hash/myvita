@@ -1,72 +1,51 @@
-import { Link } from 'react-router-dom'
-import { EmptyState } from '../../components/EmptyState'
-import { ErrorState } from '../../components/ErrorState'
-import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
-import { LoadingSpinner } from '../../components/LoadingSpinner'
-import { useAppointments, usePatients } from '../../hooks/useClinicData'
+import { useMemo } from 'react'
+import { DashboardAppointments } from '../../components/dashboard/DashboardAppointments'
+import { DashboardHeader, QuickActions } from '../../components/dashboard/DashboardChrome'
+import { useAppointments, usePatients, useUpcomingAppointments } from '../../hooks/useClinicData'
 import { useSession } from '../../hooks/useSession'
-import { formatDateTime } from '../../lib/formatDate'
-import { toUserMessage } from '../../lib/errorMessages'
-
-function isToday(iso: string): boolean {
-  const d = new Date(iso)
-  const now = new Date()
-  return d.toDateString() === now.toDateString()
-}
+import { endOfTodayIso, startOfTodayIso, startOfTomorrowIso } from '../../lib/dashboardDates'
 
 export function StaffDashboard() {
   const { user } = useSession()
-  const appointments = useAppointments()
+  const today = useAppointments({ start_date: startOfTodayIso(), end_date: endOfTodayIso(), limit: 50 })
+  const future = useUpcomingAppointments(startOfTomorrowIso())
   const patients = usePatients()
+  const patientNames = useMemo(
+    () => new Map((patients.data ?? []).map((patient) => [patient.id, patient.full_name])),
+    [patients.data],
+  )
 
-  const today = (appointments.data ?? [])
-    .filter((a) => isToday(a.scheduled_at))
-    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
+  if (!user) return null
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Olá, {user?.full_name}</h1>
-        <p className="text-slate-500">
-          {patients.data ? `${patients.data.length} paciente(s) nesta clínica.` : 'Resumo do dia.'}
-        </p>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-7">
+      <DashboardHeader
+        name={user.full_name}
+        context="Acompanha a agenda clínica de hoje e prepara as próximas consultas."
+      />
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <DashboardAppointments
+          title="Consultas de hoje"
+          appointments={today.data}
+          isLoading={today.isLoading}
+          error={today.error}
+          onRetry={() => today.refetch()}
+          emptyTitle="Sem consultas hoje"
+          emptyDescription="Não existem consultas na agenda de hoje."
+          counterpartName={(appointment) => patientNames.get(appointment.patient_id) ?? 'Paciente'}
+        />
+        <DashboardAppointments
+          title="Próximas consultas"
+          appointments={future.data}
+          isLoading={future.isLoading}
+          error={future.error}
+          onRetry={() => future.refetch()}
+          emptyTitle="Sem consultas futuras"
+          emptyDescription="Não existem consultas futuras agendadas."
+          counterpartName={(appointment) => patientNames.get(appointment.patient_id) ?? 'Paciente'}
+        />
       </div>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="mb-4 text-lg font-medium text-slate-900">Consultas de hoje</h2>
-        {appointments.isLoading && <LoadingSpinner />}
-        {appointments.isError && (
-          <ErrorState message={toUserMessage(appointments.error)} onRetry={() => appointments.refetch()} />
-        )}
-        {appointments.data && today.length === 0 && (
-          <EmptyState title="Sem consultas hoje" description="Não há consultas agendadas para hoje." />
-        )}
-        {today.length > 0 && (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {today.map((appointment) => (
-              <li key={appointment.id} className="flex items-center justify-between py-3">
-                <p className="font-medium text-slate-900">{formatDateTime(appointment.scheduled_at)}</p>
-                <AppointmentStatusBadge status={appointment.status} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <div className="flex flex-wrap gap-3">
-        <Link
-          to="/app/consultas"
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Ver todas as consultas
-        </Link>
-        <Link
-          to="/app/pacientes"
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Ver pacientes
-        </Link>
-      </div>
+      <QuickActions role="staff" />
     </div>
   )
 }

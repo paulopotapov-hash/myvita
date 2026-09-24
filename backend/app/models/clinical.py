@@ -1,11 +1,10 @@
 """Small, clinic-scoped clinical history tables."""
 
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
-    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -82,38 +81,6 @@ class MedicalRecordRevision(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class Medication(Base):
-    __tablename__ = "medications"
-    __table_args__ = (
-        Index("ix_medications_clinic_patient", "clinic_id", "patient_id"),
-        ForeignKeyConstraint(
-            ["patient_id", "clinic_id"],
-            ["patients.id", "patients.clinic_id"],
-            name="fk_medications_patient_clinic",
-            ondelete="RESTRICT",
-        ),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    clinic_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("clinics.id", ondelete="RESTRICT"), nullable=False
-    )
-    patient_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    dose: Mapped[str] = mapped_column(String(100), nullable=False)
-    frequency: Mapped[str] = mapped_column(String(100), nullable=False)
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

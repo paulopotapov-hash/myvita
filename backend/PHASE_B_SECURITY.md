@@ -36,7 +36,9 @@ rejected and deactivation increments `token_epoch`, invalidating existing sessio
 - Staff: update, role change, deactivate and reactivate. History remains linked;
   staff rows are never hard-deleted.
 - Patients: no hard-delete endpoint. Their clinical history is retained.
-- Appointments: terminal states remain in history; cancellation does not delete.
+- Appointments: completed, cancelled and no-show states are terminal and remain
+  in history. Physical deletion is unsupported; cancellation is the lifecycle
+  mechanism. Patient deletion is restricted while appointment history exists.
 - Medications: end or mark inactive; retain the record.
 - Consent and record revisions: append-only and protected by database triggers.
 - Notifications: private to the recipient; only read state is mutable.

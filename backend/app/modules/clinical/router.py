@@ -15,7 +15,6 @@ from app.models import (
     Consent,
     MedicalRecord,
     MedicalRecordRevision,
-    Medication,
     Notification,
     Patient,
     User,
@@ -23,9 +22,6 @@ from app.models import (
 from app.modules.clinical.schemas import (
     ConsentCreate,
     ConsentPublic,
-    MedicationCreate,
-    MedicationPublic,
-    MedicationUpdate,
     NotificationPublic,
     RecordCreate,
     RecordPublic,
@@ -36,8 +32,6 @@ from app.modules.clinical.schemas import (
 router = APIRouter()
 _record_read = require_permission(ClinicalPermission.MEDICAL_RECORD_READ)
 _record_write = require_permission(ClinicalPermission.MEDICAL_RECORD_WRITE)
-_medication_read = require_permission(ClinicalPermission.MEDICATION_READ)
-_medication_write = require_permission(ClinicalPermission.MEDICATION_WRITE)
 _consent_read = require_permission(ClinicalPermission.CONSENT_READ)
 _consent_record = require_permission(ClinicalPermission.CONSENT_RECORD)
 _notification_read = require_permission(ClinicalPermission.NOTIFICATION_READ)
@@ -50,7 +44,7 @@ def _patient(db: Session, patient_id: uuid.UUID, user: User, *, write: bool = Fa
     return patient
 
 
-def _item[T: MedicalRecord | Medication | Consent](
+def _item[T: MedicalRecord | Consent](
     db: Session, model: type[T], item_id: uuid.UUID, user: User
 ) -> T:
     item = db.query(model).filter(model.id == item_id, model.clinic_id == user.clinic_id).first()
@@ -161,66 +155,6 @@ def list_record_revisions(
         .limit(limit)
         .all()
     )
-
-
-@router.post("/medications", response_model=MedicationPublic, status_code=201)
-def create_medication(
-    payload: MedicationCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(_medication_write),
-) -> Medication:
-    _patient(db, payload.patient_id, user, write=True)
-    item = Medication(**payload.model_dump(), clinic_id=user.clinic_id)
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    _audit(request, user, AuditAction.MEDICATION_CREATED, "medication", item.id)
-    return item
-
-
-@router.get("/patients/{patient_id}/medications", response_model=list[MedicationPublic])
-def list_medications(
-    patient_id: uuid.UUID,
-    request: Request,
-    limit: Limit = DEFAULT_PAGE_SIZE,
-    offset: Offset = 0,
-    db: Session = Depends(get_db),
-    user: User = Depends(_medication_read),
-) -> list[Medication]:
-    _patient(db, patient_id, user)
-    items = (
-        db.query(Medication)
-        .filter(Medication.clinic_id == user.clinic_id, Medication.patient_id == patient_id)
-        .order_by(Medication.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-    _audit(request, user, AuditAction.MEDICATION_VIEWED, "patient", patient_id)
-    return items
-
-
-@router.patch("/medications/{item_id}", response_model=MedicationPublic)
-def update_medication(
-    item_id: uuid.UUID,
-    payload: MedicationUpdate,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(_medication_write),
-) -> Medication:
-    item = _item(db, Medication, item_id, user)
-    values = payload.model_dump(exclude_unset=True)
-    if "end_date" in values and values["end_date"] is not None and values["end_date"] < item.start_date:
-        raise HTTPException(status_code=422, detail="Data de fim anterior à data de início.")
-    if any(values.get(key) is None for key in ("name", "dose", "frequency", "is_active") if key in values):
-        raise HTTPException(status_code=422, detail="Campo obrigatório não pode ser nulo.")
-    for key, value in values.items():
-        setattr(item, key, value)
-    db.commit()
-    db.refresh(item)
-    _audit(request, user, AuditAction.MEDICATION_UPDATED, "medication", item.id)
-    return item
 
 
 @router.post("/consents", response_model=ConsentPublic, status_code=201)

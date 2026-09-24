@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, ForeignKeyConstraint, Index, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +41,10 @@ class Appointment(Base):
     __tablename__ = "appointments"
     __table_args__ = (
         Index("ix_appointments_clinic_scheduled_at", "clinic_id", "scheduled_at"),
+        CheckConstraint(
+            "duration_minutes >= 5 AND duration_minutes <= 480",
+            name="ck_appointments_duration_minutes",
+        ),
         ForeignKeyConstraint(
             ["patient_id", "clinic_id"],
             ["patients.id", "patients.clinic_id"],

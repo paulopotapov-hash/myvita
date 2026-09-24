@@ -37,6 +37,13 @@ class AppointmentUpdateRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
     status: AppointmentStatus | None = None
 
+    @field_validator("scheduled_at")
+    @classmethod
+    def require_timezone_when_present(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("A data deve incluir timezone.")
+        return value
+
 
 class AppointmentPublic(BaseModel):
     id: uuid.UUID

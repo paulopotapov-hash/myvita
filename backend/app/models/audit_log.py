@@ -64,6 +64,7 @@ class AuditAction(str, enum.Enum):
     MEDICATION_CREATED = "medication_created"
     MEDICATION_UPDATED = "medication_updated"
     MEDICATION_VIEWED = "medication_viewed"
+    MEDICATION_DEACTIVATED = "medication_deactivated"
     CONSENT_RECORDED = "consent_recorded"
     CONSENT_VIEWED = "consent_viewed"
 

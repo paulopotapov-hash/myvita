@@ -9,8 +9,9 @@ import { PatientRegisterPage } from './pages/auth/PatientRegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PatientProfilePage } from './pages/patient/PatientProfilePage'
-import { AppointmentsPage } from './pages/staff/AppointmentsPage'
+import { AppointmentDetailPage, AppointmentsPage } from './pages/staff/AppointmentsPage'
 import { PatientsPage } from './pages/staff/PatientsPage'
+import { PatientRecordPage } from './pages/staff/PatientRecordPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
+        <Route path="consultas/:appointmentId" element={<AppointmentDetailPage />} />
         <Route
           path="perfil"
           element={
@@ -44,6 +46,14 @@ export default function App() {
           element={
             <RoleRoute allow={['staff', 'clinic_admin']}>
               <PatientsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="pacientes/:patientId"
+          element={
+            <RoleRoute allow={['staff', 'clinic_admin']}>
+              <PatientRecordPage />
             </RoleRoute>
           }
         />

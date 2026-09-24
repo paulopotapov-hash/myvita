@@ -5,11 +5,13 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 import { queryClient } from './lib/queryClient'
+import { AuthCoordinator } from './app/AuthCoordinator'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <AuthCoordinator />
         <App />
       </BrowserRouter>
     </QueryClientProvider>

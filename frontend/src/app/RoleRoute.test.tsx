@@ -42,14 +42,15 @@ describe('RoleRoute', () => {
     await waitFor(() => expect(screen.getByText('Gestão de equipa')).toBeInTheDocument())
   })
 
-  it('redirects away when the role is not allowed (patient hitting an admin-only page)', async () => {
+  it('shows an access-denied experience when the role is not allowed', async () => {
     renderAsRole('patient')
-    await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Acesso não autorizado')).toBeInTheDocument())
     expect(screen.queryByText('Gestão de equipa')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Voltar ao início' })).toHaveAttribute('href', '/app')
   })
 
-  it('redirects away for staff too (only clinic_admin is allowed here)', async () => {
+  it('denies staff too when only clinic_admin is allowed', async () => {
     renderAsRole('staff')
-    await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Acesso não autorizado')).toBeInTheDocument())
   })
 })

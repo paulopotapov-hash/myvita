@@ -1,11 +1,38 @@
 import { api } from '../lib/apiClient'
-import type { AppointmentCreateRequest, AppointmentPublic } from '../types/api'
+import type {
+  AppointmentCreateRequest,
+  AppointmentPublic,
+  AppointmentStatus,
+  AppointmentUpdateRequest,
+} from '../types/api'
+
+export interface AppointmentListFilters {
+  limit?: number
+  offset?: number
+  patient_id?: string
+  staff_id?: string
+  status?: AppointmentStatus
+  start_date?: string
+  end_date?: string
+}
+
+function listPath(filters: AppointmentListFilters): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined) params.set(key, String(value))
+  }
+  const query = params.toString()
+  return `/api/v1/appointments${query ? `?${query}` : ''}`
+}
 
 export const appointmentsService = {
   create: (payload: AppointmentCreateRequest) => api.post<AppointmentPublic>('/api/v1/appointments', payload),
-  /** No client-side filtering by clinic/patient — the backend scopes this
-   * entirely server-side based on the session (patients see only their
-   * own; staff/admin see their clinic's). Passing a filter here would be
-   * meaningless: the backend doesn't accept one, by design. */
-  list: (signal?: AbortSignal) => api.get<AppointmentPublic[]>('/api/v1/appointments', signal),
+  detail: (id: string, signal?: AbortSignal) => api.get<AppointmentPublic>(`/api/v1/appointments/${id}`, signal),
+  update: (id: string, payload: AppointmentUpdateRequest) =>
+    api.patch<AppointmentPublic>(`/api/v1/appointments/${id}`, payload),
+  cancel: (id: string) => api.post<AppointmentPublic>(`/api/v1/appointments/${id}/cancel`),
+  /** Every filter only narrows the server-authorized result set. Tenant and
+   * patient scoping remain entirely enforced by the backend session. */
+  list: (filters: AppointmentListFilters = {}, signal?: AbortSignal) =>
+    api.get<AppointmentPublic[]>(listPath(filters), signal),
 }

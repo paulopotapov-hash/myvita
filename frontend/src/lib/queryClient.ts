@@ -11,7 +11,7 @@ export const queryClient = new QueryClient({
         if (error instanceof ApiError && error.status < 500 && error.status !== 429) return false
         return failureCount < 2
       },
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
     },
     mutations: {
       retry: false, // never silently retry a POST/PATCH/DELETE — could double-submit

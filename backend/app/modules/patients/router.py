@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from app.core.security import (
     ClinicalPermission,
     get_current_clinic_id,
     get_current_user,
+    has_permission,
     require_permission,
     set_session_cookie,
 )
@@ -50,6 +52,10 @@ def register(
         full_name=user.full_name,
         birth_date=patient.birth_date,
         phone=patient.phone,
+        national_health_number=patient.national_health_number,
+        is_active=user.is_active,
+        created_at=patient.created_at,
+        updated_at=patient.updated_at,
     )
 
 
@@ -87,6 +93,10 @@ def list_mine(
             full_name=p.user.full_name,
             birth_date=p.birth_date,
             phone=p.phone,
+            national_health_number=p.national_health_number,
+            is_active=p.user.is_active,
+            created_at=p.created_at,
+            updated_at=p.updated_at,
         )
         for p in patients
     ]
@@ -106,6 +116,10 @@ def _public(patient: Patient) -> PatientPublic:
         full_name=patient.user.full_name,
         birth_date=patient.birth_date,
         phone=patient.phone,
+        national_health_number=patient.national_health_number,
+        is_active=patient.user.is_active,
+        created_at=patient.created_at,
+        updated_at=patient.updated_at,
     )
 
 
@@ -117,6 +131,20 @@ def detail(
     user: User = Depends(get_current_user),
 ) -> PatientPublic:
     patient = _visible_patient(db, patient_id, user)
+    if user.role != UserRole.PATIENT and not has_permission(
+        user, ClinicalPermission.PATIENT_DIRECTORY_READ
+    ):
+        record_audit_event(
+            action=AuditAction.PERMISSION_DENIED,
+            result=AuditResult.DENIED,
+            clinic_id=user.clinic_id,
+            actor_user_id=user.id,
+            actor_email=user.email,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            metadata={"path": request.url.path, "required_permission": "patient_directory.read"},
+        )
+        raise HTTPException(status_code=403, detail="Sem permissões para aceder a este recurso.")
     record_audit_event(
         action=AuditAction.STAFF_VIEWED_PATIENT
         if user.role != UserRole.PATIENT
@@ -128,6 +156,7 @@ def detail(
         resource_type="patient",
         resource_id=patient.id,
         ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
     )
     return _public(patient)
 
@@ -142,12 +171,20 @@ def update(
 ) -> PatientPublic:
     patient = _visible_patient(db, patient_id, user)
     values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(status_code=422, detail="Indique pelo menos um campo para alterar.")
     if "full_name" in values and values["full_name"] is None:
         raise HTTPException(status_code=422, detail="Nome obrigatório.")
-    if "full_name" in values:
-        patient.user.full_name = values.pop("full_name")
-    for key, value in values.items():
+    full_name = values.pop("full_name", patient.user.full_name)
+    changed_values = {key: value for key, value in values.items() if getattr(patient, key) != value}
+    name_changed = full_name != patient.user.full_name
+    if not name_changed and not changed_values:
+        return _public(patient)
+    if name_changed:
+        patient.user.full_name = full_name
+    for key, value in changed_values.items():
         setattr(patient, key, value)
+    patient.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(patient)
     record_audit_event(
@@ -159,5 +196,6 @@ def update(
         resource_type="patient",
         resource_id=patient.id,
         ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
     )
     return _public(patient)

@@ -7,6 +7,7 @@ import { useSession } from '../../hooks/useSession'
 import { toUserMessage } from '../../lib/errorMessages'
 import { loginSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
+import { safeReturnTo } from '../../lib/authSession'
 
 export function LoginPage() {
   const { isAuthenticated } = useSession()
@@ -19,7 +20,7 @@ export function LoginPage() {
 
   // Already logged in (e.g. opened /login in a second tab) — go straight in.
   if (isAuthenticated) {
-    const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
+    const redirectTo = safeReturnTo((location.state as { from?: unknown } | null)?.from)
     return <Navigate to={redirectTo} replace />
   }
 

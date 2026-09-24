@@ -23,6 +23,8 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Paciente não encontrado nesta clínica.",
         )
+    if not patient.user.is_active:
+        raise HTTPException(status_code=409, detail="Paciente inativo.")
 
     staff = db.get(Staff, payload.staff_id)
     if staff is None or str(staff.clinic_id) != str(clinic_id):
@@ -55,38 +57,62 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
     return appointment
 
 
+ALLOWED_STATUS_TRANSITIONS: dict[AppointmentStatus, frozenset[AppointmentStatus]] = {
+    AppointmentStatus.SCHEDULED: frozenset(
+        {AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW}
+    ),
+    AppointmentStatus.CONFIRMED: frozenset(
+        {AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW}
+    ),
+    AppointmentStatus.COMPLETED: frozenset(),
+    AppointmentStatus.CANCELLED: frozenset(),
+    AppointmentStatus.NO_SHOW: frozenset(),
+}
+
+
+def validate_status_transition(current: AppointmentStatus, target: AppointmentStatus) -> None:
+    if target not in ALLOWED_STATUS_TRANSITIONS[current]:
+        raise HTTPException(status_code=409, detail="Transição de estado inválida.")
+
+
 def list_appointments_for_user(
-    db: Session, user: User, limit: int = 50, offset: int = 0
+    db: Session,
+    user: User,
+    limit: int = 50,
+    offset: int = 0,
+    *,
+    patient_id: uuid.UUID | None = None,
+    staff_id: uuid.UUID | None = None,
+    appointment_status: AppointmentStatus | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> list[Appointment]:
     """
     Patients only ever see their own appointments. Staff/clinic_admin see
     every appointment within their own clinic — never another clinic's,
-    regardless of what they might try to pass in query params (there are
-    deliberately no clinic_id/patient_id filters accepted from the client
-    on this endpoint).
+    even when optional filters are supplied. Every filter narrows the
+    server-side authorization scope; none can broaden it.
     """
+    query = db.query(Appointment)
     if user.role == UserRole.PATIENT:
         patient = db.query(Patient).filter(Patient.user_id == user.id).first()
         if patient is None:
             return []
-        return (
-            db.query(Appointment)
-            .filter(Appointment.patient_id == patient.id)
-            .order_by(Appointment.scheduled_at)
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
+        query = query.filter(Appointment.patient_id == patient.id)
+    else:
+        query = query.filter(Appointment.clinic_id == user.clinic_id)
 
-    # STAFF / CLINIC_ADMIN
-    return (
-        db.query(Appointment)
-        .filter(Appointment.clinic_id == user.clinic_id)
-        .order_by(Appointment.scheduled_at)
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    if patient_id is not None:
+        query = query.filter(Appointment.patient_id == patient_id)
+    if staff_id is not None:
+        query = query.filter(Appointment.staff_id == staff_id)
+    if appointment_status is not None:
+        query = query.filter(Appointment.status == appointment_status)
+    if start_date is not None:
+        query = query.filter(Appointment.scheduled_at >= start_date)
+    if end_date is not None:
+        query = query.filter(Appointment.scheduled_at <= end_date)
+    return query.order_by(Appointment.scheduled_at).offset(offset).limit(limit).all()
 
 
 def validate_slot(

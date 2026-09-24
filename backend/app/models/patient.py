@@ -44,4 +44,6 @@ class Patient(Base):
 
     user = relationship("User", back_populates="patient_profile")
     clinic = relationship("Clinic", back_populates="patients")
-    appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
+    # Appointment history is retained. Deleting a patient with appointments
+    # is rejected by the database's composite ON DELETE RESTRICT foreign key.
+    appointments = relationship("Appointment", back_populates="patient", passive_deletes=True)

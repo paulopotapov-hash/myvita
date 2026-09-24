@@ -1,8 +1,8 @@
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ClinicalPayload(BaseModel):
@@ -26,39 +26,6 @@ class RecordPublic(RecordCreate):
     created_at: datetime
     updated_at: datetime
     version: int
-    model_config = {"from_attributes": True}
-
-
-class MedicationCreate(ClinicalPayload):
-    patient_id: uuid.UUID
-    name: str = Field(min_length=1, max_length=255)
-    dose: str = Field(min_length=1, max_length=100)
-    frequency: str = Field(min_length=1, max_length=100)
-    start_date: date
-    end_date: date | None = None
-    notes: str | None = Field(default=None, max_length=5_000)
-
-    @model_validator(mode="after")
-    def dates_ordered(self) -> "MedicationCreate":
-        if self.end_date is not None and self.end_date < self.start_date:
-            raise ValueError("Data de fim anterior à data de início.")
-        return self
-
-
-class MedicationUpdate(ClinicalPayload):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    dose: str | None = Field(default=None, min_length=1, max_length=100)
-    frequency: str | None = Field(default=None, min_length=1, max_length=100)
-    end_date: date | None = None
-    notes: str | None = Field(default=None, max_length=5_000)
-    is_active: bool | None = None
-
-
-class MedicationPublic(MedicationCreate):
-    id: uuid.UUID
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
     model_config = {"from_attributes": True}
 
 

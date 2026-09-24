@@ -1,57 +1,53 @@
-import { Link } from 'react-router-dom'
-import { useAppointments, usePatients, useStaff } from '../../hooks/useClinicData'
+import { useMemo } from 'react'
+import { DashboardAppointments } from '../../components/dashboard/DashboardAppointments'
+import { DashboardHeader, QuickActions } from '../../components/dashboard/DashboardChrome'
+import { useAppointments, usePatients, useUpcomingAppointments } from '../../hooks/useClinicData'
 import { useOwnClinicName } from '../../hooks/useOwnClinicName'
 import { useSession } from '../../hooks/useSession'
+import { endOfTodayIso, startOfTodayIso, startOfTomorrowIso } from '../../lib/dashboardDates'
 
 export function AdminDashboard() {
   const { user } = useSession()
   const clinicName = useOwnClinicName()
+  const today = useAppointments({ start_date: startOfTodayIso(), end_date: endOfTodayIso(), limit: 50 })
+  const future = useUpcomingAppointments(startOfTomorrowIso())
   const patients = usePatients()
-  const staff = useStaff()
-  const appointments = useAppointments()
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Olá, {user?.full_name}</h1>
-        <p className="text-slate-500">{clinicName ?? 'A tua clínica'}</p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Pacientes" value={patients.data?.length} />
-        <StatCard label="Equipa" value={staff.data?.length} />
-        <StatCard label="Consultas" value={appointments.data?.length} />
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Link
-          to="/app/equipa"
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Gerir equipa
-        </Link>
-        <Link
-          to="/app/pacientes"
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Ver pacientes
-        </Link>
-        <Link
-          to="/app/consultas"
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Ver consultas
-        </Link>
-      </div>
-    </div>
+  const patientNames = useMemo(
+    () => new Map((patients.data ?? []).map((patient) => [patient.id, patient.full_name])),
+    [patients.data],
   )
-}
 
-function StatCard({ label, value }: { label: string; value: number | undefined }) {
+  if (!user) return null
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-3xl font-semibold text-slate-900">{value ?? '—'}</p>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-7">
+      <DashboardHeader
+        name={user.full_name}
+        context={`Visão operacional de ${clinicName ?? 'a tua clínica'} para hoje e próximos dias.`}
+      />
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <DashboardAppointments
+          title="Atividade de hoje"
+          appointments={today.data}
+          isLoading={today.isLoading}
+          error={today.error}
+          onRetry={() => today.refetch()}
+          emptyTitle="Sem consultas hoje"
+          emptyDescription="Não existem consultas na agenda de hoje."
+          counterpartName={(appointment) => patientNames.get(appointment.patient_id) ?? 'Paciente'}
+        />
+        <DashboardAppointments
+          title="Próximas consultas"
+          appointments={future.data}
+          isLoading={future.isLoading}
+          error={future.error}
+          onRetry={() => future.refetch()}
+          emptyTitle="Sem consultas futuras"
+          emptyDescription="Não existem consultas futuras agendadas."
+          counterpartName={(appointment) => patientNames.get(appointment.patient_id) ?? 'Paciente'}
+        />
+      </div>
+      <QuickActions role="clinic_admin" />
     </div>
   )
 }

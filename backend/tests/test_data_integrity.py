@@ -60,14 +60,12 @@ def test_staff_with_appointment_history_cannot_be_deleted(db_session):
     db_session.rollback()
 
 
-def test_deleting_patient_cascades_to_their_appointments(db_session):
-    _, _, patient, appt = _make_clinic_with_full_graph(db_session)
-    appt_id = appt.id
-
+def test_patient_with_appointment_history_cannot_be_deleted(db_session):
+    _, _, patient, _ = _make_clinic_with_full_graph(db_session)
     db_session.delete(patient)
-    db_session.commit()
-
-    assert db_session.get(Appointment, appt_id) is None
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
 
 
 def test_duplicate_email_rejected(db_session):
