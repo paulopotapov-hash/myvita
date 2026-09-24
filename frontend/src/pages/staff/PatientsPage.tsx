@@ -1,13 +1,20 @@
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
-import { usePatients } from '../../hooks/useClinicData'
+import { useState } from 'react'
+import { Button } from '../../components/Button'
+import { usePatientsPage } from '../../hooks/useClinicData'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDate } from '../../lib/formatDate'
 import { Link } from 'react-router-dom'
 
 export function PatientsPage() {
-  const patients = usePatients()
+  const [page, setPage] = useState(1)
+  const pageSize = 20
+  const patients = usePatientsPage(page, pageSize)
+  const rows = patients.data?.items
+  const total = patients.data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
 
   return (
     <div className="flex flex-col gap-6">
@@ -18,10 +25,10 @@ export function PatientsPage() {
         {patients.isError && (
           <ErrorState message={toUserMessage(patients.error)} onRetry={() => patients.refetch()} />
         )}
-        {patients.data && patients.data.length === 0 && (
+        {rows && rows.length === 0 && (
           <EmptyState title="Sem pacientes" description="Ainda não há pacientes registados nesta clínica." />
         )}
-        {patients.data && patients.data.length > 0 && (
+        {rows && rows.length > 0 && (
           <div className="overflow-x-auto">
           <table className="w-full min-w-xl text-left text-sm">
             <thead>
@@ -32,7 +39,7 @@ export function PatientsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {patients.data.map((patient) => (
+              {rows.map((patient) => (
                 <tr key={patient.id}>
                   <td className="py-2 font-medium text-slate-900">
                     <Link className="text-teal-700 hover:underline" to={`/app/pacientes/${patient.id}`}>
@@ -45,6 +52,13 @@ export function PatientsPage() {
               ))}
             </tbody>
           </table>
+          </div>
+        )}
+        {rows && total > pageSize && (
+          <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
+            <Button variant="secondary" disabled={page === 1 || patients.isFetching} onClick={() => setPage((value) => value - 1)}>Anterior</Button>
+            <p className="text-sm text-slate-500">Página {page} de {pageCount} · {total} pacientes</p>
+            <Button variant="secondary" disabled={page >= pageCount || patients.isFetching} onClick={() => setPage((value) => value + 1)}>Seguinte</Button>
           </div>
         )}
       </section>

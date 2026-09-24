@@ -3,7 +3,7 @@ import { appointmentsService } from '../services/appointments'
 import { clinicsService } from '../services/clinics'
 import { patientsService } from '../services/patients'
 import { staffService } from '../services/staff'
-import type { AppointmentCreateRequest, StaffCreateRequest } from '../types/api'
+import type { AppointmentCreateRequest, AppointmentUpdateRequest, PatientUpdateRequest, StaffCreateRequest } from '../types/api'
 
 /** Public clinic directory — used by the patient sign-up clinic picker.
  * No auth required, matches GET /api/v1/clinics being an open endpoint. */
@@ -22,6 +22,32 @@ export function usePatients(enabled = true) {
     queryKey: ['patients'],
     queryFn: ({ signal }) => patientsService.list(signal),
     enabled,
+  })
+}
+
+export function usePatientsPage(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['patients', 'page', page, pageSize],
+    queryFn: ({ signal }) => patientsService.listPage(page, pageSize, signal),
+  })
+}
+
+export function usePatient(patientId: string) {
+  return useQuery({
+    queryKey: ['patients', patientId],
+    queryFn: ({ signal }) => patientsService.detail(patientId, signal),
+    enabled: Boolean(patientId),
+  })
+}
+
+export function useUpdatePatient(patientId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: PatientUpdateRequest) => patientsService.update(patientId, payload),
+    onSuccess: (patient) => {
+      queryClient.setQueryData(['patients', patientId], patient)
+      queryClient.invalidateQueries({ queryKey: ['patients'] })
+    },
   })
 }
 
@@ -59,5 +85,22 @@ export function useCreateAppointment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
     },
+  })
+}
+
+export function useUpdateAppointment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: AppointmentUpdateRequest }) =>
+      appointmentsService.update(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+  })
+}
+
+export function useCancelAppointment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => appointmentsService.cancel(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
   })
 }

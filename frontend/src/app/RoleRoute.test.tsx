@@ -15,6 +15,8 @@ function renderAsRole(role: UserPublic['role']) {
     full_name: 'Ana',
     role,
     clinic_id: 'c1',
+    staff_role: role === 'staff' ? 'doctor' : null,
+    patient_id: role === 'patient' ? 'p1' : null,
   })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(

@@ -1,5 +1,5 @@
 import { api } from '../lib/apiClient'
-import type { AppointmentCreateRequest, AppointmentPublic } from '../types/api'
+import type { AppointmentCreateRequest, AppointmentPublic, AppointmentUpdateRequest } from '../types/api'
 
 export const appointmentsService = {
   create: (payload: AppointmentCreateRequest) => api.post<AppointmentPublic>('/api/v1/appointments', payload),
@@ -8,4 +8,10 @@ export const appointmentsService = {
    * own; staff/admin see their clinic's). Passing a filter here would be
    * meaningless: the backend doesn't accept one, by design. */
   list: (signal?: AbortSignal) => api.get<AppointmentPublic[]>('/api/v1/appointments', signal),
+  detail: (appointmentId: string, signal?: AbortSignal) =>
+    api.get<AppointmentPublic>(`/api/v1/appointments/${appointmentId}`, signal),
+  update: (appointmentId: string, payload: AppointmentUpdateRequest) =>
+    api.patch<AppointmentPublic>(`/api/v1/appointments/${appointmentId}`, payload),
+  cancel: (appointmentId: string) =>
+    api.post<AppointmentPublic>(`/api/v1/appointments/${appointmentId}/cancel`),
 }

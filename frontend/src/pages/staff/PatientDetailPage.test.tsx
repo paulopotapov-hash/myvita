@@ -4,17 +4,41 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientDetailPage } from './PatientDetailPage'
 
-const grantMutate = vi.fn()
-const revokeMutate = vi.fn()
+const { grantMutate, revokeMutate, sessionState, usePatient } = vi.hoisted(() => ({
+  grantMutate: vi.fn(),
+  revokeMutate: vi.fn(),
+  sessionState: { role: 'clinic_admin', staff_role: null as 'doctor' | 'nurse' | 'admin' | null, patient_id: null as string | null },
+  usePatient: vi.fn(),
+}))
 
 vi.mock('../../hooks/useClinicData', () => ({
-  usePatients: () => ({
-    data: [{ id: 'patient-1', clinic_id: 'clinic-1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678' }],
+  usePatient: (id: string) => {
+    usePatient(id)
+    return {
+    data: { id: 'patient-1', clinic_id: 'clinic-1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', national_health_number: '123456789', is_active: true },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
-  }),
+    }
+  },
+  useUpdatePatient: () => ({ mutate: vi.fn(), isPending: false }),
   useAppointments: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+}))
+
+vi.mock('../../hooks/useSession', () => ({
+  useSession: () => ({
+    user: { id: 'user-1', email: 'admin@example.com', full_name: 'Admin', clinic_id: 'clinic-1', ...sessionState },
+  }),
+}))
+
+vi.mock('../../hooks/useClinicalData', () => ({
+  useMedicalRecords: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useMedicalRecordRevisions: () => ({ data: [], isLoading: false }),
+  useCreateMedicalRecord: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateMedicalRecord: () => ({ mutate: vi.fn(), isPending: false }),
+  useMedications: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useCreateMedication: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('../../hooks/useConsents', () => ({
@@ -41,10 +65,22 @@ function renderPage() {
   )
 }
 
+function renderOwnPage() {
+  return render(
+    <MemoryRouter initialEntries={['/app/saude']}>
+      <Routes><Route path="/app/saude" element={<PatientDetailPage own />} /></Routes>
+    </MemoryRouter>,
+  )
+}
+
 describe('PatientDetailPage consent workflow', () => {
   beforeEach(() => {
     grantMutate.mockReset()
     revokeMutate.mockReset()
+    usePatient.mockReset()
+    sessionState.role = 'clinic_admin'
+    sessionState.staff_role = null
+    sessionState.patient_id = null
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
@@ -71,5 +107,13 @@ describe('PatientDetailPage consent workflow', () => {
       'consent-1',
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     )
+  })
+
+  it('uses patient_id from the restored session for patient self-service', () => {
+    sessionState.role = 'patient'
+    sessionState.patient_id = 'patient-1'
+    renderOwnPage()
+    expect(usePatient).toHaveBeenCalledWith('patient-1')
+    expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
   })
 })

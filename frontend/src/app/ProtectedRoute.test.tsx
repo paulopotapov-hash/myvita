@@ -49,6 +49,8 @@ describe('ProtectedRoute', () => {
       full_name: 'Ana',
       role: 'patient',
       clinic_id: 'c1',
+      staff_role: null,
+      patient_id: 'p1',
     })
     renderProtected()
     await waitFor(() => expect(screen.getByText('Conteúdo protegido')).toBeInTheDocument())

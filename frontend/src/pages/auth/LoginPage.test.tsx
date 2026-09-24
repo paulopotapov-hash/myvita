@@ -59,6 +59,8 @@ describe('LoginPage', () => {
       full_name: 'Ana',
       role: 'patient',
       clinic_id: 'c1',
+      staff_role: null,
+      patient_id: 'p1',
     })
     const user = userEvent.setup()
     const { queryClient } = renderLoginPage()

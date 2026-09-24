@@ -105,6 +105,7 @@ export interface RequestOptions {
   method?: string
   body?: unknown
   signal?: AbortSignal
+  onResponse?: (response: Response) => void
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -141,6 +142,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const requestId = response.headers.get(REQUEST_ID_HEADER)
 
   if (response.status === 204) {
+    options.onResponse?.(response)
     return undefined as T
   }
 
@@ -164,7 +166,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     })
   }
 
+  options.onResponse?.(response)
   return rawBody as T
+}
+
+export interface PageResult<T> {
+  items: T[]
+  total: number
 }
 
 export const api = {
@@ -174,4 +182,15 @@ export const api = {
   patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     apiRequest<T>(path, { method: 'PATCH', body, signal }),
   delete: <T>(path: string, signal?: AbortSignal) => apiRequest<T>(path, { method: 'DELETE', signal }),
+  getPage: async <T>(path: string, signal?: AbortSignal): Promise<PageResult<T>> => {
+    let total = 0
+    const items = await apiRequest<T[]>(path, {
+      method: 'GET',
+      signal,
+      onResponse: (response) => {
+        total = Number(response.headers.get('X-Total-Count') ?? 0)
+      },
+    })
+    return { items, total }
+  },
 }
