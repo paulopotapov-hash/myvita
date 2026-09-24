@@ -182,20 +182,22 @@ Verificar login/CRUD básico manualmente
 
 ## Production
 
-`docker-compose.prod.yml` é o ficheiro de produção — separado do `docker-compose.yml` de desenvolvimento, que monta o código como volume e expõe o Postgres no host (nenhum dos dois é aceitável em produção).
+`docker-compose.prod.yml` é o ficheiro de produção — separado do `docker-compose.yml` de desenvolvimento, que monta o código como volume e expõe o Postgres no host (nenhum dos dois é aceitável em produção). O frontend é construído em multi-stage e servido como ficheiros estáticos por Nginx não-root, sem Vite no runtime.
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+Além das variáveis backend abaixo, define `VITE_API_BASE_URL` com a URL pública da API. Esta variável é incorporada no bundle e não pode conter secrets. Por exemplo, para um teste local controlado: `VITE_API_BASE_URL=http://localhost:8000` e `CORS_ORIGINS='["http://localhost:8080"]'`. O frontend fica disponível na porta `8080` por omissão; `FRONTEND_PORT` e `BACKEND_PORT` podem alterar apenas as portas publicadas, sem mudar as portas internas dos serviços.
+
 Diferenças chave em relação ao dev:
-- `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`JWT_SECRET_KEY`/`CORS_ORIGINS` são **obrigatórios, sem default** — o compose recusa arrancar se faltar algum.
+- `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`JWT_SECRET_KEY`/`CORS_ORIGINS`/`VITE_API_BASE_URL` são **obrigatórios, sem default** — o compose recusa arrancar se faltar algum.
 - Postgres não expõe a porta 5432 ao host — só é acessível a partir do container `backend`.
 - Sem volumes de código montados — corre exatamente o que está na imagem construída pelo `Dockerfile`.
 - `ENVIRONMENT=production`, `DEBUG=false`, `COOKIE_SECURE=true` fixos (a app recusa arrancar com `COOKIE_SECURE=false`, `CORS_ORIGINS` vazio/`*`, ou `JWT_SECRET_KEY` com menos de 32 bytes, quando `ENVIRONMENT=production` — ver `app/core/config.py`).
 - Se correr atrás de um reverse proxy, configura `TRUSTED_PROXIES` com o IP/CIDR desse proxy — sem isto, rate limiting e audit logging veem o IP do proxy em vez do cliente real.
-- Backend continua a correr como utilizador não-root (herdado do `Dockerfile`, igual em dev e produção).
-- Agnóstico de cloud — corre da mesma forma numa VPS, AWS/Azure/GCP, ou qualquer host Docker. Não inclui reverse proxy/TLS — coloca um (nginx, Caddy, Traefik, ou o LB da tua cloud) à frente do serviço `backend`.
+- Backend e frontend correm como utilizadores não-root; a imagem final do frontend contém apenas Nginx e os assets compilados.
+- Agnóstico de cloud — corre da mesma forma numa VPS, AWS/Azure/GCP, ou qualquer host Docker. Não inclui reverse proxy/TLS — coloca um (nginx, Caddy, Traefik, ou o LB da tua cloud) à frente dos serviços públicos.
 
 ## Observability
 
