@@ -17,16 +17,19 @@ export function useSession() {
     queryFn: ({ signal }) => authService.me(signal),
     retry: false, // a 401 will never succeed on retry — don't hammer the backend
     staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (currentQuery) => (currentQuery.state.data ? 5 * 60_000 : false),
   })
 
   const isUnauthenticated = query.isError && query.error instanceof ApiError && query.error.status === 401
   const isServerError = query.isError && !isUnauthenticated
+  const user = query.data ?? null
 
   return {
-    user: query.data ?? null,
+    user,
     isLoading: query.isLoading,
-    isAuthenticated: query.isSuccess,
-    isUnauthenticated,
+    isAuthenticated: query.isSuccess && user !== null,
+    isUnauthenticated: isUnauthenticated || (query.isSuccess && user === null),
     isServerError,
     refetch: query.refetch,
   }

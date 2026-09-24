@@ -71,6 +71,27 @@ export const patientRegisterSchema = z.object({
 })
 export type PatientRegisterFormValues = z.infer<typeof patientRegisterSchema>
 
+const optionalPhoneSchema = z
+  .string()
+  .max(30, 'O telefone não pode exceder 30 caracteres.')
+  .refine((value) => {
+    if (!value) return true
+    if ([...value].some((character) => !(/[0-9]/.test(character) || '+ -().'.includes(character)))) return false
+    const digitCount = [...value].filter((character) => /[0-9]/.test(character)).length
+    return digitCount >= 7 && digitCount <= 15
+  }, 'Introduz um telefone válido com 7 a 15 dígitos.')
+
+export const patientUpdateSchema = z.object({
+  full_name: z.string().trim().min(2, 'O nome deve ter pelo menos 2 caracteres.').max(255),
+  birth_date: z
+    .string()
+    .refine((value) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value), 'Introduz uma data válida.')
+    .refine((value) => !value || value <= new Date().toISOString().slice(0, 10), 'A data de nascimento não pode estar no futuro.'),
+  phone: optionalPhoneSchema,
+  national_health_number: z.string().max(30, 'O número de utente não pode exceder 30 caracteres.'),
+})
+export type PatientUpdateFormValues = z.infer<typeof patientUpdateSchema>
+
 export const staffCreateSchema = z.object({
   full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
   email: z.email('Introduz um email válido.'),
@@ -89,3 +110,9 @@ export const appointmentCreateSchema = z.object({
   reason: z.string().max(500).optional().or(z.literal('')),
 })
 export type AppointmentCreateFormValues = z.infer<typeof appointmentCreateSchema>
+
+export const appointmentUpdateSchema = z.object({
+  scheduled_at: z.string().min(1, 'Escolhe data e hora.'),
+  duration_minutes: z.coerce.number().int().min(5, 'A duração mínima é 5 minutos.').max(480),
+  reason: z.string().max(500, 'O motivo é demasiado longo.').optional().or(z.literal('')),
+})

@@ -13,6 +13,8 @@ Design decisions (do not change without discussion):
 - CSRF: double-submit cookie, HMAC-signed and bound to (user_id, token_epoch).
   See the "CSRF protection" section below for the full rationale.
 """
+
+import enum
 import hashlib
 import hmac
 import secrets
@@ -26,7 +28,94 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.staff import StaffRole
 from app.models.user import User, UserRole
+
+
+class ClinicalPermission(str, enum.Enum):
+    """Central policy for Phase B resources; routers must not infer privileges."""
+
+    PATIENT_DIRECTORY_READ = "patient_directory.read"
+    PATIENT_UPDATE = "patient.update"
+    APPOINTMENT_READ = "appointment.read"
+    APPOINTMENT_MANAGE = "appointment.manage"
+    MEDICAL_RECORD_READ = "medical_record.read"
+    MEDICAL_RECORD_WRITE = "medical_record.write"
+    MEDICATION_READ = "medication.read"
+    MEDICATION_WRITE = "medication.write"
+    CONSENT_READ = "consent.read"
+    CONSENT_RECORD = "consent.record"
+    STAFF_DIRECTORY_READ = "staff_directory.read"
+    STAFF_MANAGE = "staff.manage"
+    NOTIFICATION_READ = "notification.read"
+
+
+_PATIENT_PERMISSIONS = frozenset(
+    {
+        ClinicalPermission.PATIENT_UPDATE,
+        ClinicalPermission.APPOINTMENT_READ,
+        ClinicalPermission.MEDICAL_RECORD_READ,
+        ClinicalPermission.MEDICATION_READ,
+        ClinicalPermission.CONSENT_READ,
+        ClinicalPermission.CONSENT_RECORD,
+        ClinicalPermission.STAFF_DIRECTORY_READ,
+        ClinicalPermission.NOTIFICATION_READ,
+    }
+)
+_CLINIC_ADMIN_PERMISSIONS = frozenset(
+    {
+        ClinicalPermission.PATIENT_DIRECTORY_READ,
+        ClinicalPermission.PATIENT_UPDATE,
+        ClinicalPermission.APPOINTMENT_READ,
+        ClinicalPermission.APPOINTMENT_MANAGE,
+        ClinicalPermission.STAFF_DIRECTORY_READ,
+        ClinicalPermission.STAFF_MANAGE,
+        ClinicalPermission.NOTIFICATION_READ,
+    }
+)
+_STAFF_PERMISSIONS = {
+    StaffRole.DOCTOR: frozenset(
+        {
+            ClinicalPermission.PATIENT_DIRECTORY_READ,
+            ClinicalPermission.PATIENT_UPDATE,
+            ClinicalPermission.APPOINTMENT_READ,
+            ClinicalPermission.APPOINTMENT_MANAGE,
+            ClinicalPermission.MEDICAL_RECORD_READ,
+            ClinicalPermission.MEDICAL_RECORD_WRITE,
+            ClinicalPermission.MEDICATION_READ,
+            ClinicalPermission.MEDICATION_WRITE,
+            ClinicalPermission.CONSENT_READ,
+            ClinicalPermission.CONSENT_RECORD,
+            ClinicalPermission.STAFF_DIRECTORY_READ,
+            ClinicalPermission.NOTIFICATION_READ,
+        }
+    ),
+    StaffRole.NURSE: frozenset(
+        {
+            ClinicalPermission.PATIENT_DIRECTORY_READ,
+            ClinicalPermission.PATIENT_UPDATE,
+            ClinicalPermission.APPOINTMENT_READ,
+            ClinicalPermission.APPOINTMENT_MANAGE,
+            ClinicalPermission.MEDICAL_RECORD_READ,
+            ClinicalPermission.MEDICAL_RECORD_WRITE,
+            ClinicalPermission.MEDICATION_READ,
+            ClinicalPermission.CONSENT_READ,
+            ClinicalPermission.CONSENT_RECORD,
+            ClinicalPermission.STAFF_DIRECTORY_READ,
+            ClinicalPermission.NOTIFICATION_READ,
+        }
+    ),
+    StaffRole.ADMIN: frozenset(
+        {
+            ClinicalPermission.PATIENT_DIRECTORY_READ,
+            ClinicalPermission.PATIENT_UPDATE,
+            ClinicalPermission.APPOINTMENT_READ,
+            ClinicalPermission.APPOINTMENT_MANAGE,
+            ClinicalPermission.STAFF_DIRECTORY_READ,
+            ClinicalPermission.NOTIFICATION_READ,
+        }
+    ),
+}
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -299,6 +388,40 @@ def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Sem permissões para aceder a este recurso.",
             )
+        return user
+
+    return _checker
+
+
+def has_permission(user: User, permission: ClinicalPermission) -> bool:
+    if user.role == UserRole.PATIENT:
+        return permission in _PATIENT_PERMISSIONS
+    if user.role == UserRole.CLINIC_ADMIN:
+        return permission in _CLINIC_ADMIN_PERMISSIONS
+    if user.role == UserRole.STAFF and user.staff_profile is not None:
+        return permission in _STAFF_PERMISSIONS[user.staff_profile.staff_role]
+    return False
+
+
+def require_permission(permission: ClinicalPermission) -> Callable[..., User]:
+    """Authorize one named capability and audit every denial."""
+
+    def _checker(request: Request, user: User = Depends(get_current_user)) -> User:
+        if not has_permission(user, permission):
+            from app.core.audit import client_ip, record_audit_event
+            from app.models import AuditAction, AuditResult
+
+            record_audit_event(
+                action=AuditAction.PERMISSION_DENIED,
+                result=AuditResult.DENIED,
+                clinic_id=user.clinic_id,
+                actor_user_id=user.id,
+                actor_email=user.email,
+                ip_address=client_ip(request),
+                user_agent=request.headers.get("user-agent"),
+                metadata={"path": request.url.path, "required_permission": permission.value},
+            )
+            raise HTTPException(status_code=403, detail="Sem permissões para aceder a este recurso.")
         return user
 
     return _checker

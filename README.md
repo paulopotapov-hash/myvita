@@ -77,7 +77,7 @@ pip-audit -r requirements.txt   # dependências vulneráveis/desatualizadas (ver
 
 Configuração em `backend/pyproject.toml`. O CI (`.github/workflows/ci.yml`) corre exatamente estes comandos, mais as migrations, em cada push/PR, contra um Postgres real (serviço do GitHub Actions, não SQLite).
 
-**Política de dependency scanning:** o `pip-audit` do CI **bloqueia o build**, não é meramente informativo. Uma vulnerabilidade nova e sem exceção documentada falha o CI. Exceções só existem com justificação escrita, uma a uma, em `backend/SECURITY-EXCEPTIONS.md` — atualmente cobre CVEs do `starlette` (transitivo via `fastapi`) sem fix compatível com a versão atual do FastAPI sem um upgrade major; confirmámos por grep que o código não usa nenhuma das superfícies afetadas.
+**Política de dependency scanning:** o `pip-audit` do CI **bloqueia o build**. Não existem exceções ativas; qualquer vulnerabilidade nova falha o CI.
 
 ## Segurança: CSRF
 
@@ -115,7 +115,7 @@ O token CSRF invalida-se automaticamente ao fazer logout (está ligado ao `token
 - **Security headers:** `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, e `Strict-Transport-Security` quando `ENVIRONMENT=production`.
 - **CORS:** origins, métodos (`GET`/`POST`/`PATCH`/`DELETE`) e headers (`Content-Type`, `X-CSRF-Token`, `X-Request-ID`) explícitos — nunca `*`. Produção recusa arrancar com `CORS_ORIGINS` vazio ou contendo `*` (incompatível com `allow_credentials=True`, que a app usa para os cookies).
 - **Trusted proxy / IP do cliente:** `X-Forwarded-For` só é aceite quando o peer TCP direto está em `TRUSTED_PROXIES` (vazio por padrão — nada é confiado até se configurar explicitamente). Sem isto, qualquer cliente podia falsificar o próprio IP e contornar rate limiting ou poluir o audit log — ver `app/core/client_ip.py`.
-- **Multi-tenancy:** isolamento por `clinic_id` reforçado a nível de serviço (nunca confia em `clinic_id` vindo do payload do cliente); testado explicitamente contra IDOR entre clínicas.
+- **Multi-tenancy:** isolamento por `clinic_id` no serviço e em chaves estrangeiras compostas da base de dados; testado explicitamente contra IDOR entre clínicas.
 - **Audit logging:** ver secção própria abaixo.
 - **Timing side-channel:** `authenticate()` executa sempre uma verificação Argon2 completa, mesmo para emails inexistentes, para não revelar por timing quais emails têm conta.
 - **Tratamento de erros:** exceções não tratadas e erros de base de dados nunca devolvem stack traces, SQL, ou credenciais ao cliente — apenas uma mensagem genérica; o detalhe fica nos logs internos, associado ao `request_id` (ver Observability abaixo). Ver `app/main.py`.
@@ -126,7 +126,7 @@ O token CSRF invalida-se automaticamente ao fazer logout (está ligado ao `token
 Tabela única `audit_logs` (ver `app/models/audit_log.py` para a justificação de não a separar em duas). Cobre:
 
 - Eventos de segurança: `LOGIN_SUCCESS`/`LOGIN_FAILURE`, `LOGOUT`, `PATIENT_CREATED`, `STAFF_CREATED`, `CLINIC_CREATED`, `PERMISSION_DENIED`, `CSRF_FAILURE`, `RATE_LIMITED`.
-- Acesso clínico: `STAFF_VIEWED_APPOINTMENT`, `PATIENT_VIEWED_OWN_RECORD` — atualmente instrumentado na listagem de consultas (`GET /api/v1/appointments`), que é o único endpoint de leitura de dados sensíveis que existe hoje no código. **Não há ainda endpoints de leitura/detalhe de ficha de paciente** — quando existirem, devem emitir `STAFF_VIEWED_PATIENT` da mesma forma.
+- Acesso clínico: `STAFF_VIEWED_APPOINTMENT`, `STAFF_VIEWED_PATIENT`, `PATIENT_VIEWED_OWN_RECORD`, bem como leitura de histórico clínico, medicação e consentimentos. As alterações desses três domínios também são auditadas sem guardar conteúdo clínico no log.
 
 Cada escrita usa a sua própria sessão de BD (`app/core/audit.py`), independente da transação do pedido que a originou — assim uma falha de login ou uma transação revertida não apagam o registo de auditoria. Nunca contém passwords, JWTs, cookies, tokens CSRF, ou dados clínicos — só identificadores mínimos. Ver testes em `tests/test_audit_logging.py`, incluindo um teste dedicado a confirmar que nenhuma password aparece na tabela.
 
@@ -226,13 +226,9 @@ Implementado:
 - `docker-compose.prod.yml` separado do dev, sem defaults inseguros, sem exposição desnecessária da BD
 - 73 testes automatizados, 95% de cobertura de linhas em `app/`
 
-Por fazer:
-- Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`) — e, quando existirem, os eventos `APPOINTMENT_UPDATED`/`APPOINTMENT_CANCELLED` já definidos em `AuditAction`
-- Endpoints de leitura/detalhe de ficha de paciente — e o evento `STAFF_VIEWED_PATIENT` já definido, à espera de ter onde ligar
-- Modelos adiados: `Medication`, `Notification`, `Consent`
-- Bloqueio de conta após N tentativas falhadas (hoje mitigado só pelo rate limiting por IP)
-- Backup automatizado agendado (os scripts existem e estão verificados; falta o cron/scheduler real em produção — ver exemplo na secção Backups)
-- Upgrade major do FastAPI/Starlette (necessário para fechar os últimos CVEs do `starlette` — ver `SECURITY-EXCEPTIONS.md`; deliberadamente não feito nesta fase por ser um upgrade de framework, não hardening)
+Por fazer fora da Phase B:
+- Bloqueio de conta após N tentativas falhadas (hoje mitigado pelo rate limiting por IP)
+- Backup automatizado agendado e monitorizado no ambiente de produção
 
 ## Notas para produção que dependem do ambiente de deployment
 
@@ -243,3 +239,11 @@ O que está implementado no código não substitui isto — depende de decisões
 - Valores de RPO/RTO acordados operacionalmente, não os valores de referência acima
 - Monitorização/alerting sobre os logs e sobre falhas de `/ready` (a app expõe `/metrics`; ligar isso a um Prometheus/Grafana real, se algum dia fizer sentido, é infraestrutura, não código)
 - Armazenamento dos backups fora da máquina da própria base de dados (offsite)
+
+### Backend clínico (Fase B)
+
+A API `v1` inclui histórico clínico versionado (`GET /medical-records/{id}/revisions`), medicação, consentimentos imutáveis e notificações internas. A matriz detalhada de doctor/nurse/staff administrativo/clinic admin, os limites de paginação e o ciclo de vida dos dados estão em `backend/PHASE_B_SECURITY.md`.
+
+Pacientes têm detalhe e atualização em `GET/PATCH /patients/{id}`. Consultas têm detalhe, atualização e cancelamento em `GET/PATCH /appointments/{id}` e `POST /appointments/{id}/cancel`; reservas sobrepostas do mesmo profissional recebem `409`, com bloqueio da linha de staff durante a verificação. Os horários de criação devem incluir timezone e ser futuros.
+
+Aplicar a migration com `cd backend && python -m alembic upgrade head`. Verificar com `ruff check .`, `mypy app` e `pytest`. A migration acrescenta tabelas clínicas e valores ao enum de auditoria; o downgrade preserva os valores do enum para manter íntegro o histórico de auditoria.

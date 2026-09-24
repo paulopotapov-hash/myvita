@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ProtectedRoute } from './ProtectedRoute'
 import { ApiError } from '../lib/apiClient'
@@ -29,6 +29,11 @@ function renderProtected() {
   )
 }
 
+function LoginWithOrigin() {
+  const location = useLocation()
+  return <div>Origem: {(location.state as { from?: string } | null)?.from}</div>
+}
+
 describe('ProtectedRoute', () => {
   it('shows a loading state while checking the session', () => {
     vi.mocked(authService.me).mockReturnValue(new Promise(() => {})) // never resolves
@@ -40,6 +45,30 @@ describe('ProtectedRoute', () => {
     vi.mocked(authService.me).mockRejectedValue(new ApiError(401, 'unauthorized'))
     renderProtected()
     await waitFor(() => expect(screen.getByText('Página de login')).toBeInTheDocument())
+  })
+
+  it('preserves the complete protected destination for login', async () => {
+    vi.mocked(authService.me).mockRejectedValue(new ApiError(401, 'unauthorized'))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/app/consultas?dia=hoje#lista']}>
+          <Routes>
+            <Route path="/login" element={<LoginWithOrigin />} />
+            <Route
+              path="/app/consultas"
+              element={
+                <ProtectedRoute>
+                  <div>Conteúdo protegido</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Origem: /app/consultas?dia=hoje#lista')).toBeInTheDocument())
   })
 
   it('renders the protected content once authenticated', async () => {

@@ -11,6 +11,8 @@ SAME TestClient instance, so we must save/restore BOTH the session cookie
 AND the matching CSRF cookie for each identity — the CSRF token is bound
 to a specific user's session, not shared across identities.
 """
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -62,6 +64,10 @@ def _use_identity(client, identity: dict) -> dict:
     return {settings.CSRF_HEADER_NAME: identity["csrf"]}
 
 
+def _future_iso(*, days: int = 30, hours: int = 0) -> str:
+    return (datetime.now(UTC) + timedelta(days=days, hours=hours)).replace(microsecond=0).isoformat()
+
+
 def _new_clinic_with_staff_and_patient(client, suffix: str):
     r = client.post(
         "/api/v1/clinics",
@@ -87,6 +93,11 @@ def _new_clinic_with_staff_and_patient(client, suffix: str):
         headers=admin_headers,
     )
     staff_id = r.json()["id"]
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": f"doctor{suffix}@x.pt", "password": "SenhaForte123!"},
+    )
+    staff = _capture_identity(r)
 
     r = client.post(
         "/api/v1/patients/register",
@@ -104,6 +115,7 @@ def _new_clinic_with_staff_and_patient(client, suffix: str):
         "clinic_id": clinic_id,
         "admin": admin,
         "staff_id": staff_id,
+        "staff": staff,
         "patient_id": patient_id,
         "patient": patient,
     }
@@ -118,7 +130,7 @@ def test_staff_can_book_appointment_for_their_clinic(client):
         json={
             "patient_id": a["patient_id"],
             "staff_id": a["staff_id"],
-            "scheduled_at": "2026-10-01T10:00:00Z",
+            "scheduled_at": _future_iso(),
             "reason": "Consulta geral",
         },
         headers=headers,
@@ -132,7 +144,7 @@ def test_patient_sees_only_their_own_appointment(client):
     headers = _use_identity(client, a["admin"])
     client.post(
         "/api/v1/appointments",
-        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": "2026-10-01T10:00:00Z"},
+        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": _future_iso()},
         headers=headers,
     )
 
@@ -149,7 +161,7 @@ def test_patient_cannot_create_appointments_directly(client):
 
     r = client.post(
         "/api/v1/appointments",
-        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": "2026-10-01T10:00:00Z"},
+        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": _future_iso()},
         headers=headers,
     )
     assert r.status_code == 403
@@ -170,7 +182,7 @@ def test_cross_clinic_idor_using_another_clinics_patient_is_blocked(client):
         json={
             "patient_id": a["patient_id"],  # clinic A's patient
             "staff_id": b["staff_id"],  # clinic B's own staff
-            "scheduled_at": "2026-10-02T10:00:00Z",
+            "scheduled_at": _future_iso(days=31),
         },
         headers=headers,
     )
@@ -187,7 +199,7 @@ def test_cross_clinic_idor_using_another_clinics_staff_is_blocked(client):
         json={
             "patient_id": b["patient_id"],  # clinic B's own patient
             "staff_id": a["staff_id"],  # clinic A's staff — not theirs to use
-            "scheduled_at": "2026-10-02T10:00:00Z",
+            "scheduled_at": _future_iso(days=31),
         },
         headers=headers,
     )
@@ -201,14 +213,14 @@ def test_staff_list_only_shows_own_clinic_appointments(client):
     headers = _use_identity(client, a["admin"])
     client.post(
         "/api/v1/appointments",
-        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": "2026-10-01T10:00:00Z"},
+        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": _future_iso()},
         headers=headers,
     )
 
     headers = _use_identity(client, b["admin"])
     client.post(
         "/api/v1/appointments",
-        json={"patient_id": b["patient_id"], "staff_id": b["staff_id"], "scheduled_at": "2026-10-01T11:00:00Z"},
+        json={"patient_id": b["patient_id"], "staff_id": b["staff_id"], "scheduled_at": _future_iso(hours=1)},
         headers=headers,
     )
 

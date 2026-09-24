@@ -4,13 +4,21 @@ import { clinicsService } from '../services/clinics'
 import { patientsService } from '../services/patients'
 import { SESSION_QUERY_KEY } from './useSession'
 import type { ClinicOnboardingRequest, LoginRequest, PatientRegisterRequest } from '../types/api'
+import { clearAuthenticatedState, publishAuthEvent } from '../lib/authSession'
 
 export function useLogin() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: LoginRequest) => authService.login(payload),
-    onSuccess: (user) => {
-      queryClient.setQueryData(SESSION_QUERY_KEY, user)
+    onSuccess: async () => {
+      // The login response sets the cookie. Confirm the authoritative session
+      // through /me instead of trusting a second, parallel identity source.
+      await queryClient.fetchQuery({
+        queryKey: SESSION_QUERY_KEY,
+        queryFn: ({ signal }) => authService.me(signal),
+        staleTime: 0,
+      })
+      publishAuthEvent('login')
     },
   })
 }
@@ -20,11 +28,8 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => authService.logout(),
     onSuccess: () => {
-      queryClient.setQueryData(SESSION_QUERY_KEY, null)
-      // Every other cached query may contain data scoped to the session
-      // that just ended (another clinic's patients after the next login,
-      // for instance) — clear everything, not just the session itself.
-      queryClient.clear()
+      clearAuthenticatedState(queryClient)
+      publishAuthEvent('logout')
     },
   })
 }

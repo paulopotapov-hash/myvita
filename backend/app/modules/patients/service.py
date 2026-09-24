@@ -43,7 +43,7 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
     return patient, user
 
 
-def list_patients_for_clinic(db: Session, clinic_id: str) -> list[Patient]:
+def list_patients_for_clinic(db: Session, clinic_id: str, limit: int = 50, offset: int = 0) -> list[Patient]:
     """
     Staff/clinic_admin only (enforced in the router) — the patient directory
     for their own clinic. `clinic_id` always comes from the authenticated
@@ -55,5 +55,7 @@ def list_patients_for_clinic(db: Session, clinic_id: str) -> list[Patient]:
         .filter(Patient.clinic_id == clinic_id)
         .join(User, Patient.user_id == User.id)
         .order_by(User.full_name)
+        .offset(offset)
+        .limit(limit)
         .all()
     )

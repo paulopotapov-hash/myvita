@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useLogout } from '../hooks/useAuthMutations'
 import { useSession } from '../hooks/useSession'
 import type { UserRole } from '../types/api'
+import { toUserMessage } from '../lib/errorMessages'
 
 interface NavItem {
   to: string
@@ -37,6 +38,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
 export function AppLayout() {
   const { user } = useSession()
   const logout = useLogout()
+  const navigate = useNavigate()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   if (!user) return null // ProtectedRoute guarantees this never renders without a user
@@ -85,7 +87,7 @@ export function AppLayout() {
             </div>
             <button
               type="button"
-              onClick={() => logout.mutate()}
+              onClick={() => logout.mutate(undefined, { onSuccess: () => navigate('/login', { replace: true }) })}
               disabled={logout.isPending}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
@@ -93,6 +95,12 @@ export function AppLayout() {
             </button>
           </div>
         </header>
+
+        {logout.isError && (
+          <div role="alert" className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {toUserMessage(logout.error)} A sessão continua ativa; tenta sair novamente.
+          </div>
+        )}
 
         {/* Mobile nav drawer */}
         {mobileNavOpen && (

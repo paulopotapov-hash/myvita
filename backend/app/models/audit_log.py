@@ -20,6 +20,7 @@ This table is written to by app.core.audit.record_audit_event — write
 through that helper, not directly, so the "no full session available"
 requirement in its docstring is respected everywhere.
 """
+
 import enum
 import uuid
 from datetime import datetime
@@ -44,6 +45,8 @@ class AuditAction(str, enum.Enum):
     PATIENT_DELETED = "patient_deleted"
     STAFF_CREATED = "staff_created"
     STAFF_UPDATED = "staff_updated"
+    STAFF_DEACTIVATED = "staff_deactivated"
+    STAFF_REACTIVATED = "staff_reactivated"
     APPOINTMENT_CREATED = "appointment_created"
     APPOINTMENT_UPDATED = "appointment_updated"
     APPOINTMENT_CANCELLED = "appointment_cancelled"
@@ -55,6 +58,15 @@ class AuditAction(str, enum.Enum):
     STAFF_VIEWED_PATIENT = "staff_viewed_patient"
     STAFF_VIEWED_APPOINTMENT = "staff_viewed_appointment"
     PATIENT_VIEWED_OWN_RECORD = "patient_viewed_own_record"
+    MEDICAL_RECORD_CREATED = "medical_record_created"
+    MEDICAL_RECORD_UPDATED = "medical_record_updated"
+    MEDICAL_RECORD_VIEWED = "medical_record_viewed"
+    MEDICATION_CREATED = "medication_created"
+    MEDICATION_UPDATED = "medication_updated"
+    MEDICATION_VIEWED = "medication_viewed"
+    MEDICATION_DEACTIVATED = "medication_deactivated"
+    CONSENT_RECORDED = "consent_recorded"
+    CONSENT_VIEWED = "consent_viewed"
 
 
 class AuditResult(str, enum.Enum):

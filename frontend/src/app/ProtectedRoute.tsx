@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useSession } from '../hooks/useSession'
@@ -13,6 +13,7 @@ import { useSession } from '../hooks/useSession'
  * checking" as its own state instead of guessing.
  */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
+  const location = useLocation()
   const { isLoading, isAuthenticated, isUnauthenticated, isServerError, refetch } = useSession()
 
   if (isLoading) {
@@ -31,7 +32,13 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (isUnauthenticated) {
-    return <Navigate to="/login" replace />
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+      />
+    )
   }
 
   if (isAuthenticated) {

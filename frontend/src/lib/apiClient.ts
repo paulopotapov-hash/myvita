@@ -21,6 +21,16 @@ const CSRF_HEADER_NAME = 'X-CSRF-Token'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
+type UnauthorizedHandler = (requestPath: string) => void
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler): () => void {
+  unauthorizedHandler = handler
+  return () => {
+    if (unauthorizedHandler === handler) unauthorizedHandler = null
+  }
+}
+
 /**
  * API base path. Empty string in both dev (Vite proxies /api, see
  * vite.config.ts) and production (the SPA is served from the same origin
@@ -153,11 +163,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
           ? ((rawBody as { detail: string }).detail as string)
           : null
         : null
-    throw new ApiError(response.status, detail ?? `HTTP ${response.status}`, {
+    const error = new ApiError(response.status, detail ?? `HTTP ${response.status}`, {
       requestId,
       detail,
       fieldErrors: parseFieldErrors(rawBody),
     })
+    if (response.status === 401) unauthorizedHandler?.(path)
+    throw error
   }
 
   return rawBody as T

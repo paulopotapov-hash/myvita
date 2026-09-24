@@ -36,6 +36,10 @@ export interface PatientPublic {
   full_name: string
   birth_date: string | null // ISO date (YYYY-MM-DD), as sent by the backend
   phone: string | null
+  national_health_number?: string | null
+  is_active?: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface StaffPublic {
@@ -44,6 +48,8 @@ export interface StaffPublic {
   full_name: string
   staff_role: StaffRole
   specialty: string | null
+  license_number?: string | null
+  is_active?: boolean
 }
 
 export interface AppointmentPublic {
@@ -98,4 +104,18 @@ export interface AppointmentCreateRequest {
   scheduled_at: string
   duration_minutes?: number
   reason?: string
+}
+
+export interface AppointmentUpdateRequest {
+  scheduled_at?: string
+  duration_minutes?: number
+  reason?: string | null
+  status?: AppointmentStatus
+}
+
+export interface PatientUpdateRequest {
+  full_name?: string
+  birth_date?: string | null
+  phone?: string | null
+  national_health_number?: string | null
 }
