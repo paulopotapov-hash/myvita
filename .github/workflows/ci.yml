@@ -67,6 +67,9 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Backup script safety tests
+        run: bash ../scripts/test_backup_scripts.sh
+
       - name: Type check (mypy)
         run: mypy app
 

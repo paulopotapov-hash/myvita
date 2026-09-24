@@ -8,7 +8,7 @@
 # pass --yes only from an already-reviewed, non-interactive DR runbook/script.
 #
 # Required environment variables:
-#   DB_HOST, DB_PORT, DB_NAME, DB_USER, PGPASSWORD
+#   DB_HOST, DB_PORT, DB_NAME, DB_USER, and either PGPASSWORD or PGPASSFILE
 #
 # Usage:
 #   DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita \
@@ -32,7 +32,24 @@ fi
 : "${DB_PORT:?DB_PORT is required}"
 : "${DB_NAME:?DB_NAME is required}"
 : "${DB_USER:?DB_USER is required}"
-: "${PGPASSWORD:?PGPASSWORD is required (never pass the password as an argument)}"
+if [ -z "${PGPASSWORD:-}" ] && [ -z "${PGPASSFILE:-}" ]; then
+    echo "ERROR: PGPASSWORD or PGPASSFILE is required." >&2
+    exit 1
+fi
+
+checksum_file="${dump_file}.sha256"
+if [ -f "$checksum_file" ]; then
+    echo "Verifying backup checksum..."
+    if ! (cd "$(dirname "$dump_file")" && sha256sum -c "$(basename "$checksum_file")"); then
+        echo "ERROR: backup checksum verification failed; restore was not started." >&2
+        exit 1
+    fi
+fi
+
+if ! pg_restore --list "$dump_file" > /dev/null; then
+    echo "ERROR: backup archive is not readable; restore was not started." >&2
+    exit 1
+fi
 
 if [ "$confirm_flag" != "--yes" ]; then
     echo "This will DROP and REPLACE every object in database '${DB_NAME}' on ${DB_HOST}:${DB_PORT}."

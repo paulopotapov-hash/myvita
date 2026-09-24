@@ -36,6 +36,29 @@ services:
     networks:
       - data
 
+  backup:
+    build:
+      context: .
+      dockerfile: backup/Dockerfile
+    restart: always
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?Set POSTGRES_DB — no insecure default in production}
+      DB_USER: ${POSTGRES_USER:?Set POSTGRES_USER — no insecure default in production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD — no insecure default in production}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 3 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-true}
+      TZ: ${BACKUP_TIMEZONE:-UTC}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - myvita_backups:/backups
+    networks:
+      - data
+
   backend:
     build: ./backend
     restart: always
@@ -111,6 +134,7 @@ services:
 
 volumes:
   myvita_pg_data:
+  myvita_backups:
 
 networks:
   edge:

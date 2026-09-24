@@ -12,16 +12,16 @@
 #
 # Required environment variables (no defaults — this script refuses to
 # guess a database to dump):
-#   DB_HOST, DB_PORT, DB_NAME, DB_USER, PGPASSWORD
-# (PGPASSWORD is pg_dump's own standard variable name — libpq reads it
-# directly, so we don't have to pass the password on the command line
-# where it would show up in `ps` output or shell history.)
+#   DB_HOST, DB_PORT, DB_NAME, DB_USER, and either PGPASSWORD or PGPASSFILE.
+# Both credential mechanisms are native to libpq, so the password never has
+# to be passed as a command-line argument where it would show up in `ps`.
 #
 # Usage:
 #   DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita \
 #     PGPASSWORD=... ./scripts/backup_db.sh [output_dir]
 #
 set -euo pipefail
+umask 077
 
 output_dir="${1:-./backups}"
 
@@ -29,22 +29,36 @@ output_dir="${1:-./backups}"
 : "${DB_PORT:?DB_PORT is required}"
 : "${DB_NAME:?DB_NAME is required}"
 : "${DB_USER:?DB_USER is required}"
-: "${PGPASSWORD:?PGPASSWORD is required (never pass the password as an argument)}"
+if [ -z "${PGPASSWORD:-}" ] && [ -z "${PGPASSFILE:-}" ]; then
+    echo "ERROR: PGPASSWORD or PGPASSFILE is required." >&2
+    exit 1
+fi
 
 mkdir -p "$output_dir"
+chmod 700 "$output_dir"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 dump_file="${output_dir}/myvita_${timestamp}.dump"
+tmp_file="$(mktemp "${output_dir}/.myvita_${timestamp}.dump.tmp.XXXXXX")"
+checksum_file="${dump_file}.sha256"
+tmp_checksum="${checksum_file}.tmp"
+started_at="$(date +%s)"
 
-echo "Backing up '${DB_NAME}' from ${DB_HOST}:${DB_PORT} -> ${dump_file}"
+cleanup() {
+    rm -f "$tmp_file" "$tmp_checksum"
+}
+trap cleanup EXIT INT TERM
+
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backup started: database=${DB_NAME} file=$(basename "$dump_file")"
 
 # -Fc: custom format (compressed, restorable with pg_restore, supports -j
 # for parallel restore on a large database later).
-if pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Fc -f "$dump_file"; then
-    size="$(du -h "$dump_file" | cut -f1)"
-    echo "Backup completed: ${dump_file} (${size})"
-else
+if ! pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Fc -f "$tmp_file"; then
     echo "ERROR: pg_dump failed — no valid backup was produced." >&2
-    rm -f "$dump_file"
+    exit 1
+fi
+
+if [ ! -s "$tmp_file" ]; then
+    echo "ERROR: pg_dump produced an empty backup." >&2
     exit 1
 fi
 
@@ -55,9 +69,32 @@ fi
 # common failure mode (disk full mid-dump, killed process) right here
 # instead of at restore time, when it's too late.
 echo "Verifying archive integrity (pg_restore --list)..."
-if pg_restore --list "$dump_file" > /dev/null; then
+if pg_restore --list "$tmp_file" > /dev/null; then
     echo "Verification OK: archive is readable."
 else
     echo "ERROR: backup file failed integrity verification." >&2
     exit 1
 fi
+
+# Calculate the digest while the archive still has its temporary name, but
+# record the final basename expected by `sha256sum -c`. Publishing the
+# checksum first is safe (checks ignore orphan checksums); publishing the dump
+# last means a completed .dump is never visible without its checksum.
+if ! digest="$(sha256sum "$tmp_file" | awk '{print $1}')" || [ -z "$digest" ]; then
+    echo "ERROR: checksum generation failed; removing the unverified new backup." >&2
+    exit 1
+fi
+printf '%s  %s\n' "$digest" "$(basename "$dump_file")" > "$tmp_checksum"
+mv "$tmp_checksum" "$checksum_file"
+
+# Rename on the same filesystem is atomic: retention/check scripts never see
+# a partially-written final .dump file.
+if ! mv "$tmp_file" "$dump_file"; then
+    rm -f "$checksum_file"
+    echo "ERROR: could not publish the completed backup." >&2
+    exit 1
+fi
+
+size="$(du -h "$dump_file" | cut -f1)"
+duration="$(( $(date +%s) - started_at ))"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backup completed successfully: file=$(basename "$dump_file") size=${size} duration_seconds=${duration}"
