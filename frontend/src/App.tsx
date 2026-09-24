@@ -11,6 +11,8 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { PatientProfilePage } from './pages/patient/PatientProfilePage'
 import { AppointmentsPage } from './pages/staff/AppointmentsPage'
 import { PatientsPage } from './pages/staff/PatientsPage'
+import { PatientDetailPage } from './pages/staff/PatientDetailPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 
 export default function App() {
@@ -31,6 +33,15 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
+        <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route
+          path="saude"
+          element={
+            <RoleRoute allow={['patient']}>
+              <PatientDetailPage own />
+            </RoleRoute>
+          }
+        />
         <Route
           path="perfil"
           element={
@@ -44,6 +55,14 @@ export default function App() {
           element={
             <RoleRoute allow={['staff', 'clinic_admin']}>
               <PatientsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="pacientes/:id"
+          element={
+            <RoleRoute allow={['staff', 'clinic_admin']}>
+              <PatientDetailPage />
             </RoleRoute>
           }
         />

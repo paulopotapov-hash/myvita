@@ -20,6 +20,7 @@ const CSRF_COOKIE_NAME = 'myvita_csrf'
 const CSRF_HEADER_NAME = 'X-CSRF-Token'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+export const SESSION_EXPIRED_EVENT = 'myvita:session-expired'
 
 /**
  * API base path. Empty string in both dev (Vite proxies /api, see
@@ -104,6 +105,7 @@ export interface RequestOptions {
   method?: string
   body?: unknown
   signal?: AbortSignal
+  onResponse?: (response: Response) => void
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -140,6 +142,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const requestId = response.headers.get(REQUEST_ID_HEADER)
 
   if (response.status === 204) {
+    options.onResponse?.(response)
     return undefined as T
   }
 
@@ -153,6 +156,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
           ? ((rawBody as { detail: string }).detail as string)
           : null
         : null
+    if (response.status === 401 && path !== '/api/v1/auth/me' && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { path } }))
+    }
     throw new ApiError(response.status, detail ?? `HTTP ${response.status}`, {
       requestId,
       detail,
@@ -160,7 +166,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     })
   }
 
+  options.onResponse?.(response)
   return rawBody as T
+}
+
+export interface PageResult<T> {
+  items: T[]
+  total: number
 }
 
 export const api = {
@@ -170,4 +182,15 @@ export const api = {
   patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     apiRequest<T>(path, { method: 'PATCH', body, signal }),
   delete: <T>(path: string, signal?: AbortSignal) => apiRequest<T>(path, { method: 'DELETE', signal }),
+  getPage: async <T>(path: string, signal?: AbortSignal): Promise<PageResult<T>> => {
+    let total = 0
+    const items = await apiRequest<T[]>(path, {
+      method: 'GET',
+      signal,
+      onResponse: (response) => {
+        total = Number(response.headers.get('X-Total-Count') ?? 0)
+      },
+    })
+    return { items, total }
+  },
 }

@@ -12,7 +12,7 @@ vi.mock('../../services/auth')
 function renderLoginPage() {
   vi.mocked(authService.me).mockRejectedValue(new ApiError(401, 'unauthorized'))
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/login']}>
         <Routes>
@@ -22,6 +22,7 @@ function renderLoginPage() {
       </MemoryRouter>
     </QueryClientProvider>,
   )
+  return { ...rendered, queryClient }
 }
 
 describe('LoginPage', () => {
@@ -58,14 +59,18 @@ describe('LoginPage', () => {
       full_name: 'Ana',
       role: 'patient',
       clinic_id: 'c1',
+      staff_role: null,
+      patient_id: 'p1',
     })
     const user = userEvent.setup()
-    renderLoginPage()
+    const { queryClient } = renderLoginPage()
+    queryClient.setQueryData(['patients'], [{ id: 'previous-tenant-patient' }])
 
     await user.type(screen.getByLabelText('Email'), 'ana@example.com')
     await user.type(screen.getByLabelText('Palavra-passe'), 'senha-correta')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
 
     await waitFor(() => expect(screen.getByText('Área autenticada')).toBeInTheDocument())
+    expect(queryClient.getQueryData(['patients'])).toBeUndefined()
   })
 })

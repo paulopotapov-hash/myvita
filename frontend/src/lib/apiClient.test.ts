@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, NetworkError, apiRequest } from '../lib/apiClient'
+import { ApiError, NetworkError, api, apiRequest } from '../lib/apiClient'
 
 function mockFetchOnce(response: Partial<Response> & { jsonBody?: unknown }) {
   const { jsonBody, ...rest } = response
@@ -101,5 +101,17 @@ describe('apiClient', () => {
     } catch (error) {
       expect((error as ApiError).fieldErrors).toEqual({ email: 'value is not a valid email address' })
     }
+  })
+
+  it('reads the B6 pagination total from X-Total-Count', async () => {
+    mockFetchOnce({
+      jsonBody: [{ id: 'patient-1' }],
+      headers: new Headers({ 'content-type': 'application/json', 'X-Total-Count': '27' }),
+    })
+
+    await expect(api.getPage('/api/v1/patients?page=2&page_size=20')).resolves.toEqual({
+      items: [{ id: 'patient-1' }],
+      total: 27,
+    })
   })
 })

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useLogout } from '../hooks/useAuthMutations'
 import { useSession } from '../hooks/useSession'
 import type { UserRole } from '../types/api'
+import { toUserMessage } from '../lib/errorMessages'
 
 interface NavItem {
   to: string
@@ -14,17 +15,21 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app', label: 'Início' },
     { to: '/app/consultas', label: 'As minhas consultas' },
     { to: '/app/perfil', label: 'Perfil' },
+    { to: '/app/saude', label: 'Dados clínicos' },
+    { to: '/app/notificacoes', label: 'Notificações' },
   ],
   staff: [
     { to: '/app', label: 'Início' },
     { to: '/app/consultas', label: 'Consultas' },
     { to: '/app/pacientes', label: 'Pacientes' },
+    { to: '/app/notificacoes', label: 'Notificações' },
   ],
   clinic_admin: [
     { to: '/app', label: 'Início' },
     { to: '/app/consultas', label: 'Consultas' },
     { to: '/app/pacientes', label: 'Pacientes' },
     { to: '/app/equipa', label: 'Equipa' },
+    { to: '/app/notificacoes', label: 'Notificações' },
   ],
 }
 
@@ -93,6 +98,11 @@ export function AppLayout() {
             </button>
           </div>
         </header>
+        {logout.isError && (
+          <p role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-right text-sm text-red-700">
+            {toUserMessage(logout.error)}
+          </p>
+        )}
 
         {/* Mobile nav drawer */}
         {mobileNavOpen && (

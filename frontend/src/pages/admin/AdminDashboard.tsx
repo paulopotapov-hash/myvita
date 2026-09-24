@@ -2,6 +2,9 @@ import { Link } from 'react-router-dom'
 import { useAppointments, usePatients, useStaff } from '../../hooks/useClinicData'
 import { useOwnClinicName } from '../../hooks/useOwnClinicName'
 import { useSession } from '../../hooks/useSession'
+import { ErrorState } from '../../components/ErrorState'
+import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { toUserMessage } from '../../lib/errorMessages'
 
 export function AdminDashboard() {
   const { user } = useSession()
@@ -9,6 +12,8 @@ export function AdminDashboard() {
   const patients = usePatients()
   const staff = useStaff()
   const appointments = useAppointments()
+  const firstError = patients.error ?? staff.error ?? appointments.error
+  const isLoading = patients.isLoading || staff.isLoading || appointments.isLoading
 
   return (
     <div className="flex flex-col gap-6">
@@ -17,11 +22,24 @@ export function AdminDashboard() {
         <p className="text-slate-500">{clinicName ?? 'A tua clínica'}</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Pacientes" value={patients.data?.length} />
-        <StatCard label="Equipa" value={staff.data?.length} />
-        <StatCard label="Consultas" value={appointments.data?.length} />
-      </div>
+      {isLoading && <LoadingSpinner label="A carregar resumo da clínica…" />}
+      {firstError && (
+        <ErrorState
+          message={toUserMessage(firstError)}
+          onRetry={() => {
+            patients.refetch()
+            staff.refetch()
+            appointments.refetch()
+          }}
+        />
+      )}
+      {!isLoading && !firstError && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Pacientes" value={patients.data?.length} />
+          <StatCard label="Equipa" value={staff.data?.length} />
+          <StatCard label="Consultas" value={appointments.data?.length} />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Link
