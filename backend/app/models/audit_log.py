@@ -48,6 +48,8 @@ class AuditAction(str, enum.Enum):
     APPOINTMENT_UPDATED = "appointment_updated"
     APPOINTMENT_CANCELLED = "appointment_cancelled"
     CLINIC_CREATED = "clinic_created"
+    CONSENT_GRANTED = "consent_granted"
+    CONSENT_REVOKED = "consent_revoked"
     PERMISSION_DENIED = "permission_denied"
     CSRF_FAILURE = "csrf_failure"
     RATE_LIMITED = "rate_limited"
@@ -55,6 +57,7 @@ class AuditAction(str, enum.Enum):
     STAFF_VIEWED_PATIENT = "staff_viewed_patient"
     STAFF_VIEWED_APPOINTMENT = "staff_viewed_appointment"
     PATIENT_VIEWED_OWN_RECORD = "patient_viewed_own_record"
+    CONSENT_VIEWED = "consent_viewed"
 
 
 class AuditResult(str, enum.Enum):

@@ -43,3 +43,5 @@ class Patient(Base):
     user = relationship("User", back_populates="patient_profile")
     clinic = relationship("Clinic", back_populates="patients")
     appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
+    # Consent history is intentionally not delete-orphan: DB RESTRICT keeps it durable.
+    consents = relationship("Consent", back_populates="patient")

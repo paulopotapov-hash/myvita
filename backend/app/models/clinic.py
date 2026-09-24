@@ -33,3 +33,4 @@ class Clinic(Base):
     patients = relationship("Patient", back_populates="clinic")
     staff = relationship("Staff", back_populates="clinic")
     appointments = relationship("Appointment", back_populates="clinic")
+    consents = relationship("Consent", back_populates="clinic")

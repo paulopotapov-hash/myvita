@@ -36,6 +36,7 @@ from app.models import AuditAction, AuditResult
 from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
 from app.modules.clinics.router import router as clinics_router
+from app.modules.consents.router import router as consents_router
 from app.modules.patients.router import router as patients_router
 from app.modules.staff.router import router as staff_router
 
@@ -216,3 +217,4 @@ app.include_router(clinics_router, prefix="/api/v1/clinics", tags=["clinics"])
 app.include_router(patients_router, prefix="/api/v1/patients", tags=["patients"])
 app.include_router(staff_router, prefix="/api/v1/staff", tags=["staff"])
 app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["appointments"])
+app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
