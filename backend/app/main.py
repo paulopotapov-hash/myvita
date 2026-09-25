@@ -94,7 +94,8 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> Resp
     # raise HTTPException, which FastAPI already handles separately and
     # never reaches this handler). The client gets nothing but a generic
     # message — no stack trace, no exception message, no internals.
-    logger.exception(
+    log = logger.exception if settings.DEBUG else logger.error
+    log(
         "unhandled_exception path=%s method=%s exception_type=%s",
         request.url.path,
         request.method,
@@ -117,22 +118,20 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-    """
-    Baseline defense-in-depth headers. None of these replace the app-level
-    controls already in place (CSRF tokens, httpOnly cookies) — they narrow
-    what a browser will do if something else ever goes wrong (a stray XSS,
-    a clickjacking attempt, a MIME-sniffing quirk).
-    """
-    response = await call_next(request)
+def _apply_security_headers(request: Request, response: Response) -> None:
+    """Apply browser and cache controls to every response, including 413s."""
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    )
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
-    return response
 
 
 @app.middleware("http")
@@ -154,9 +153,29 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
     request.state.request_id = request_id
     start = time.monotonic()
     try:
-        response = await call_next(request)
+        response: Response | None = None
+        origin = request.headers.get("origin")
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and origin is not None and origin not in settings.CORS_ORIGINS:
+            response = JSONResponse(status_code=403, content={"detail": "Origem do pedido não permitida."})
+
+        content_length = request.headers.get("content-length")
+        if response is None and content_length is not None:
+            try:
+                declared_size = int(content_length)
+            except ValueError:
+                declared_size = -1
+            if declared_size < 0:
+                response = JSONResponse(status_code=400, content={"detail": "Content-Length inválido."})
+            elif declared_size > settings.MAX_REQUEST_BODY_BYTES:
+                response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
+            else:
+                response = await call_next(request)
+        elif response is None:
+            response = await call_next(request)
+        assert response is not None
         duration_ms = (time.monotonic() - start) * 1000
 
+        _apply_security_headers(request, response)
         response.headers[REQUEST_ID_HEADER] = request_id
 
         method = request.method

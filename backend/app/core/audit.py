@@ -16,6 +16,11 @@ __all__ = ["record_audit_event", "client_ip"]
 logger = logging.getLogger("myvita.audit")
 
 
+def _bounded(value: str | None, max_length: int) -> str | None:
+    """Keep attacker-controlled audit fields within their database columns."""
+    return value[:max_length] if value is not None else None
+
+
 def record_audit_event(
     *,
     action: AuditAction,
@@ -49,13 +54,13 @@ def record_audit_event(
             AuditLog(
                 clinic_id=clinic_id,
                 actor_user_id=actor_user_id,
-                actor_email=actor_email,
+                actor_email=_bounded(actor_email, 255),
                 action=action,
-                resource_type=resource_type,
+                resource_type=_bounded(resource_type, 50),
                 resource_id=resource_id,
                 result=result,
-                ip_address=ip_address,
-                user_agent=user_agent,
+                ip_address=_bounded(ip_address, 45),
+                user_agent=_bounded(user_agent, 255),
                 event_metadata=metadata,
             )
         )

@@ -1,0 +1,14 @@
+server {
+    listen 8080;
+    server_name _;
+
+    location = /metrics {
+        proxy_pass http://backend:8000/metrics;
+        proxy_set_header X-Metrics-Token "${METRICS_TOKEN}";
+        proxy_set_header Host backend;
+    }
+
+    location / {
+        return 404;
+    }
+}

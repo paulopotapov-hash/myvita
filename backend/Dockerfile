@@ -1,19 +1,19 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq-dev gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-runtime.txt .
+RUN pip install --no-cache-dir --no-compile -r requirements-runtime.txt
 
 COPY . .
 
 # Never run the app as root.
 RUN groupadd -r myvita && useradd -r -g myvita myvita \
-    && chown -R myvita:myvita /app
+    && chown -R myvita:myvita /app \
+    && find /app -type d -exec chmod 0555 {} + \
+    && find /app -type f -exec chmod 0444 {} +
 USER myvita
 
 EXPOSE 8000

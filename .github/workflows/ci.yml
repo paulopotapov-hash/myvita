@@ -67,6 +67,11 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Backup script safety tests
+        run: |
+          bash ../scripts/test_backup_scripts.sh
+          bash ../scripts/test_offsite_backup_scripts.sh
+
       - name: Type check (mypy)
         run: mypy app
 
@@ -123,6 +128,29 @@ jobs:
             --ignore-vuln PYSEC-2026-248 \
             --ignore-vuln PYSEC-2026-249
 
+  security-scan:
+    name: Static security and secret history scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bandit (medium/high confidence Python findings)
+        run: |
+          pip install bandit==1.9.4
+          bandit -r backend/app --severity-level medium --confidence-level medium
+
+      - name: Gitleaks (complete Git history)
+        run: >-
+          docker run --rm -v "$PWD:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.29.1@sha256:aa036a2f4bdfe3cc3c55fa4326308efabb4a6be498c883c864fd1d0d5585438a
+          detect --source=/repo --config=/repo/.gitleaks.toml --no-banner --redact
+
   docker-build:
     name: Docker image builds
     runs-on: ubuntu-latest
@@ -132,6 +160,21 @@ jobs:
         run: docker build -t myvita-backend:ci backend
       - name: Build frontend image
         run: docker build -t myvita-frontend:ci frontend
+      - name: Build backup image
+        run: docker build -f backup/Dockerfile -t myvita-backup:ci .
+      - name: Validate monitoring configuration and alert behavior
+        run: |
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v3.5.0 \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v3.5.0 \
+            test rules /etc/prometheus/alerts.test.yml
+          python -m json.tool monitoring/grafana/dashboards/myvita-operations.json >/dev/null
+          POSTGRES_USER=ci POSTGRES_PASSWORD=ci POSTGRES_DB=ci \
+          JWT_SECRET_KEY=ci-only-not-a-real-secret-do-not-reuse PUBLIC_DOMAIN=localhost \
+          METRICS_TOKEN=ci-metrics-only GRAFANA_ADMIN_PASSWORD=ci-grafana-only \
+          docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml config --quiet
 
   frontend:
     name: Frontend (typecheck, lint, tests, build)
@@ -150,6 +193,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Dependency vulnerability gate
+        run: npm audit --audit-level=high
 
       - name: Type check
         run: npm run typecheck

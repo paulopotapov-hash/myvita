@@ -5,6 +5,7 @@ import { TextField } from '../../components/TextField'
 import { useLogin } from '../../hooks/useAuthMutations'
 import { useSession } from '../../hooks/useSession'
 import { toUserMessage } from '../../lib/errorMessages'
+import { safePostLoginPath } from '../../lib/navigation'
 import { loginSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 
@@ -19,7 +20,7 @@ export function LoginPage() {
 
   // Already logged in (e.g. opened /login in a second tab) — go straight in.
   if (isAuthenticated) {
-    const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
+    const redirectTo = safePostLoginPath(location.state)
     return <Navigate to={redirectTo} replace />
   }
 

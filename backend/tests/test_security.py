@@ -61,3 +61,28 @@ def test_bumping_token_epoch_invalidates_old_tokens_conceptually(db_session):
     db_session.commit()
 
     assert old_payload["epoch"] != user.token_epoch
+
+
+def test_token_missing_required_expiration_claim_is_rejected(db_session):
+    import jwt
+    import pytest
+    from fastapi import HTTPException
+
+    from app.core.config import settings
+
+    user = _make_user(db_session)
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "clinic_id": str(user.clinic_id),
+            "role": user.role.value,
+            "epoch": user.token_epoch,
+            "iat": 1,
+        },
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        decode_access_token(token)
+    assert exc_info.value.status_code == 401

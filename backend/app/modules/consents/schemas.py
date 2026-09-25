@@ -3,10 +3,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.schemas import RequestModel
 from app.models.consent import ConsentStatus, ConsentType
 
 
-class ConsentCreateRequest(BaseModel):
+class ConsentCreateRequest(RequestModel):
     """Consent status, clinic and actor are derived by the server."""
 
     consent_type: ConsentType

@@ -12,9 +12,8 @@
 #
 # This file is intentionally cloud-agnostic — it runs the same way on a
 # bare VPS, an AWS/Azure/GCP VM, or any other Docker host. It does not
-# assume a specific reverse proxy; put one (nginx, Caddy, Traefik, your
-# cloud LB) in front of the `backend` service for TLS termination — see
-# README.md#production for the full checklist.
+# include certificate material. See README.md#production for the documented
+# HTTP validation overlay and future TLS overlay.
 services:
   db:
     image: postgres:16-alpine
@@ -34,22 +33,64 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - data
+
+  backup:
+    build:
+      context: .
+      dockerfile: backup/Dockerfile
+    restart: always
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?Set POSTGRES_DB — no insecure default in production}
+      DB_USER: ${POSTGRES_USER:?Set POSTGRES_USER — no insecure default in production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD — no insecure default in production}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 3 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-true}
+      TZ: ${BACKUP_TIMEZONE:-UTC}
+      OFFSITE_BACKUP_ENABLED: ${OFFSITE_BACKUP_ENABLED:-false}
+      OFFSITE_S3_BUCKET: ${OFFSITE_S3_BUCKET:-}
+      OFFSITE_S3_PREFIX: ${OFFSITE_S3_PREFIX:-myvita}
+      OFFSITE_S3_ENDPOINT: ${OFFSITE_S3_ENDPOINT:-}
+      OFFSITE_S3_REGION: ${OFFSITE_S3_REGION:-us-east-1}
+      OFFSITE_S3_SSE: ${OFFSITE_S3_SSE:-AES256}
+      OFFSITE_RETENTION_DAYS: ${OFFSITE_RETENTION_DAYS:-30}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - myvita_backups:/backups
+      - myvita_backup_metrics:/metrics
+    networks:
+      - data
 
   backend:
     build: ./backend
     restart: always
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.30.0.10"]
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
       COOKIE_SECURE: "true"
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
-      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS explicitly — e.g. '["https://app.myvita.pt"]'}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
+      TRUSTED_PROXIES: '["172.30.0.10"]'
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     # No source volumes: the image built by backend/Dockerfile already
     # contains the code. Mounting source over it here would silently make
     # "production" run whatever happens to be on the host filesystem.
@@ -59,6 +100,72 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - edge
+      - data
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Browser and API share the proxy origin; relative /api paths keep
+        # cookies and CSRF same-origin and avoid unnecessary browser CORS.
+        VITE_API_BASE_URL: ""
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Static production image only: no source mounts, Node process, Vite
+    # dev server, or API reverse proxy.
+    networks:
+      - edge
+
+  proxy:
+    build: ./proxy
+    restart: always
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}
+      NGINX_ENVSUBST_FILTER: ^PUBLIC_DOMAIN$
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      edge:
+        ipv4_address: 172.30.0.10
 
 volumes:
   myvita_pg_data:
+  myvita_backups:
+  myvita_backup_metrics:
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  data:
+    internal: true

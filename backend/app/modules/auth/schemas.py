@@ -2,12 +2,13 @@ import uuid
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.core.schemas import RequestModel
 from app.models.staff import StaffRole
 from app.models.user import UserRole
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
+class LoginRequest(RequestModel):
+    email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=1, max_length=128)
 
 

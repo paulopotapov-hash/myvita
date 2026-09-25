@@ -3,15 +3,16 @@ from datetime import date
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from app.core.schemas import RequestModel
 from app.core.validators import validate_password_strength
 
 
-class PatientRegisterRequest(BaseModel):
+class PatientRegisterRequest(RequestModel):
     """Public self-registration payload: a patient joins an existing clinic."""
 
     clinic_id: uuid.UUID
     full_name: str = Field(min_length=2, max_length=255)
-    email: EmailStr
+    email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=128)
     birth_date: date | None = None
     phone: str | None = Field(default=None, max_length=30)
@@ -34,7 +35,7 @@ class PatientPublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PatientUpdateRequest(BaseModel):
+class PatientUpdateRequest(RequestModel):
     birth_date: date | None = None
     phone: str | None = Field(default=None, max_length=30)
     national_health_number: str | None = Field(default=None, max_length=30)

@@ -3,12 +3,12 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.schemas import RequestModel
 from app.models.medication import MedicationStatus
 
 
-class MedicationCreateRequest(BaseModel):
+class MedicationCreateRequest(RequestModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
     name: str = Field(min_length=1, max_length=200)
     dosage: str = Field(min_length=1, max_length=200)
     route: str | None = Field(default=None, min_length=1, max_length=100)
@@ -32,7 +32,7 @@ class MedicationCreateRequest(BaseModel):
         return self
 
 
-class MedicationUpdateRequest(BaseModel):
+class MedicationUpdateRequest(RequestModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -61,7 +61,7 @@ class MedicationUpdateRequest(BaseModel):
         return self
 
 
-class MedicationDeactivateRequest(BaseModel):
+class MedicationDeactivateRequest(RequestModel):
     model_config = ConfigDict(extra="forbid")
 
     end_date: date | None = None

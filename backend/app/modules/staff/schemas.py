@@ -2,15 +2,16 @@ import uuid
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.core.schemas import RequestModel
 from app.core.validators import validate_password_strength
 from app.models.staff import StaffRole
 
 
-class StaffCreateRequest(BaseModel):
+class StaffCreateRequest(RequestModel):
     """Created by a clinic_admin for their own clinic — clinic_id is never
     taken from this payload, only from the admin's own session."""
     full_name: str = Field(min_length=2, max_length=255)
-    email: EmailStr
+    email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=128)
     staff_role: StaffRole
     specialty: str | None = Field(default=None, max_length=255)

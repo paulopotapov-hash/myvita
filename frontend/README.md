@@ -26,16 +26,26 @@ Ver `.env.example`. Só existe uma: `VITE_API_BASE_URL`, e só é preciso defini
 - **Proteção de rotas é UX, não autorização.** `ProtectedRoute`/`RoleRoute` evitam mostrar UI errada a quem não devia vê-la, mas o backend é sempre a fonte de verdade — todas as chamadas continuam sujeitas ao RBAC/multi-tenancy do backend, nenhuma proteção do frontend substitui isso.
 - **Erros nunca expõem internals.** `src/lib/errorMessages.ts` só mostra o `detail` que o próprio backend já garante ser seguro (ver `backend/app/main.py`); nunca stack traces, SQL, ou o corpo bruto da resposta.
 
-## Produção — recomendação (não implementado neste momento)
+## Imagem de produção
 
-Este repo não inclui ainda um Dockerfile/pipeline de produção para o frontend, de propósito — evita construir uma segunda pipeline não testada (build multi-stage, config de nginx) antes de a aplicação ter tido um primeiro deployment real. Quando isso for necessário, o caminho recomendado é:
+O `Dockerfile` multi-stage executa `npm ci` e `npm run build`, depois copia apenas o `dist/` para um Nginx não-root. O Nginx serve ficheiros estáticos em `8080` e faz fallback para `index.html`, portanto URLs do React Router podem ser abertas diretamente.
 
-1. `npm run build` → gera `dist/` (estático, sem servidor Node necessário).
-2. Servir `dist/` através de um servidor de ficheiros estáticos simples (nginx, Caddy) ou de um serviço de hosting estático (Cloudflare Pages, Netlify, S3+CloudFront, etc.).
-3. Configurar esse servidor/CDN para:
-   - servir `index.html` para qualquer rota desconhecida (SPA fallback) — necessário porque isto usa React Router em modo `BrowserRouter`;
-   - fazer proxy de `/api` para o backend, OU definir `VITE_API_BASE_URL` no build para apontar diretamente para a API (nesse caso, o backend precisa de ter essa origem em `CORS_ORIGINS` — ver `backend/README.md#production`).
-4. Servir sempre por HTTPS — o cookie de sessão do backend é `Secure` em produção (`COOKIE_SECURE=true`), por isso só funciona em HTTPS.
+Na stack de produção, o reverse proxy P1.2 serve frontend e `/api` na mesma origem. Por isso o build usa `VITE_API_BASE_URL` vazio e o browser envia cookies/CSRF para caminhos relativos, sem CORS entre frontend e API. A variável continua disponível para deployments independentes do frontend:
+
+```bash
+docker build --build-arg VITE_API_BASE_URL=https://api.example.pt -t myvita-frontend ./frontend
+docker run --rm -p 8080:8080 myvita-frontend
+curl http://localhost:8080/healthz
+```
+
+Para iniciar a stack HTTP local de validação, define os secrets backend e usa o overlay próprio:
+
+```bash
+PUBLIC_DOMAIN=localhost \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-http.yml up -d --build
+```
+
+Abre `http://localhost` apenas para uma verificação local. Um deployment real deve usar o overlay TLS documentado no README principal, porque o cookie de sessão backend permanece `Secure`. Variáveis `VITE_*` são públicas e nunca podem conter secrets.
 
 ## Testes
 

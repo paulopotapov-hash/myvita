@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { LoginPage } from './LoginPage'
 import { ApiError } from '../../lib/apiClient'
+import { safePostLoginPath } from '../../lib/navigation'
 import { authService } from '../../services/auth'
 
 vi.mock('../../services/auth')
@@ -26,6 +27,14 @@ function renderLoginPage() {
 }
 
 describe('LoginPage', () => {
+  it('only accepts internal protected routes as post-login destinations', () => {
+    expect(safePostLoginPath({ from: '/app/pacientes?tab=ativos' })).toBe('/app/pacientes?tab=ativos')
+    expect(safePostLoginPath({ from: '//evil.example/phishing' })).toBe('/app')
+    expect(safePostLoginPath({ from: 'https://evil.example/phishing' })).toBe('/app')
+    expect(safePostLoginPath({ from: '/login' })).toBe('/app')
+    expect(safePostLoginPath({ from: '/app\\evil.example' })).toBe('/app')
+  })
+
   it('shows validation errors for an empty/invalid form without calling the API', async () => {
     const user = userEvent.setup()
     renderLoginPage()
