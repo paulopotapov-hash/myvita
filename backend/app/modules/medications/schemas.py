@@ -1,15 +1,19 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.medication import MedicationStatus
 
 
 class MedicationCreateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
     name: str = Field(min_length=1, max_length=200)
     dosage: str = Field(min_length=1, max_length=200)
-    instructions: str | None = Field(default=None, max_length=2000)
+    route: str | None = Field(default=None, min_length=1, max_length=100)
+    frequency: str | None = Field(default=None, min_length=1, max_length=100)
+    instructions: str | None = Field(default=None, min_length=1, max_length=2000)
     start_date: date
     end_date: date | None = None
 
@@ -29,12 +33,18 @@ class MedicationCreateRequest(BaseModel):
 
 
 class MedicationUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
     dosage: str | None = Field(default=None, min_length=1, max_length=200)
-    instructions: str | None = Field(default=None, max_length=2000)
+    route: str | None = Field(default=None, min_length=1, max_length=100)
+    frequency: str | None = Field(default=None, min_length=1, max_length=100)
+    instructions: str | None = Field(default=None, min_length=1, max_length=2000)
     status: MedicationStatus | None = None
+    start_date: date | None = None
     end_date: date | None = None
 
-    @field_validator("dosage")
+    @field_validator("name", "dosage", "route", "frequency")
     @classmethod
     def dosage_not_blank(cls, value: str | None) -> str | None:
         if value is None:
@@ -51,6 +61,12 @@ class MedicationUpdateRequest(BaseModel):
         return self
 
 
+class MedicationDeactivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    end_date: date | None = None
+
+
 class MedicationPublic(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID
@@ -58,6 +74,8 @@ class MedicationPublic(BaseModel):
     prescribed_by_staff_id: uuid.UUID
     name: str
     dosage: str
+    route: str | None
+    frequency: str | None
     instructions: str | None
     status: MedicationStatus
     start_date: date

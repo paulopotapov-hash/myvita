@@ -20,6 +20,7 @@ class Patient(Base):
     __tablename__ = "patients"
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_patients_user_id"),
+        UniqueConstraint("id", "clinic_id", name="uq_patients_id_clinic"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
