@@ -77,6 +77,8 @@ services:
       ENVIRONMENT: production
       DEBUG: "false"
       COOKIE_SECURE: "true"
+      ALLOW_PUBLIC_CLINIC_ONBOARDING: ${ALLOW_PUBLIC_CLINIC_ONBOARDING:-false}
+      ALLOW_PUBLIC_PATIENT_REGISTRATION: ${ALLOW_PUBLIC_PATIENT_REGISTRATION:-false}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
@@ -84,6 +86,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -102,6 +106,30 @@ services:
       start_period: 10s
     networks:
       - edge
+      - data
+
+  migrate:
+    build: ./backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      COOKIE_SECURE: "true"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
       - data
 
   frontend:

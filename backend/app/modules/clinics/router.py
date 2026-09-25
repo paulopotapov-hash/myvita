@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import set_session_cookie
@@ -17,6 +18,11 @@ router = APIRouter()
 def create_clinic(
     request: Request, payload: ClinicOnboardingRequest, response: Response, db: Session = Depends(get_db)
 ) -> Clinic:
+    if not settings.ALLOW_PUBLIC_CLINIC_ONBOARDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registo público de clínicas desativado.",
+        )
     clinic, admin_user = onboard_clinic(db, payload)
     set_session_cookie(response, admin_user)  # auto-login the new admin
     record_audit_event(

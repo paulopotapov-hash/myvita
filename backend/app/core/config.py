@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
     MAX_REQUEST_BODY_BYTES: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
 
+    # Public account creation is useful during local development, but must
+    # be an explicit operational decision for a controlled clinic rollout.
+    # Production Compose defaults both switches to false; operators may
+    # temporarily enable clinic onboarding during a supervised bootstrap.
+    ALLOW_PUBLIC_CLINIC_ONBOARDING: bool = False
+    ALLOW_PUBLIC_PATIENT_REGISTRATION: bool = False
+
     # CSRF (double-submit cookie, HMAC-bound to the session)
     CSRF_COOKIE_NAME: str = "myvita_csrf"
     CSRF_HEADER_NAME: str = "X-CSRF-Token"

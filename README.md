@@ -77,7 +77,7 @@ pip-audit -r requirements.txt   # dependências vulneráveis/desatualizadas (ver
 
 Configuração em `backend/pyproject.toml`. O CI (`.github/workflows/ci.yml`) corre exatamente estes comandos, mais as migrations, em cada push/PR, contra um Postgres real (serviço do GitHub Actions, não SQLite).
 
-**Política de dependency scanning:** o `pip-audit` do CI **bloqueia o build**, não é meramente informativo. Uma vulnerabilidade nova e sem exceção documentada falha o CI. Exceções só existem com justificação escrita, uma a uma, em `backend/SECURITY-EXCEPTIONS.md` — atualmente cobre CVEs do `starlette` (transitivo via `fastapi`) sem fix compatível com a versão atual do FastAPI sem um upgrade major; confirmámos por grep que o código não usa nenhuma das superfícies afetadas.
+**Política de dependency scanning:** o `pip-audit` do CI **bloqueia o build**, não é meramente informativo. Uma vulnerabilidade nova falha o CI. Neste momento não existem exceções aceites; qualquer exceção futura exige justificação e prazo de revisão em `backend/SECURITY-EXCEPTIONS.md`.
 
 ## Segurança: CSRF
 
@@ -227,6 +227,8 @@ Diferenças chave em relação ao dev:
 - O proxy tem IP fixo `172.30.0.10` na rede `edge`; só esse IP entra em `TRUSTED_PROXIES`. O proxy sobrescreve `X-Forwarded-For`, em vez de confiar num valor enviado pelo cliente.
 - Backend e frontend correm como utilizadores não-root; a imagem final do frontend contém apenas Nginx e os assets compilados.
 - A rede `data` é interna e liga apenas backend/PostgreSQL. A rede `edge` liga proxy/frontend/backend. Só o proxy publica uma porta.
+- O serviço one-shot `migrate` executa `alembic upgrade head` depois de o PostgreSQL ficar saudável; o backend só arranca se as migrations terminarem com sucesso.
+- `ALLOW_PUBLIC_CLINIC_ONBOARDING` e `ALLOW_PUBLIC_PATIENT_REGISTRATION` são `false` por omissão. Para o bootstrap inicial, ativa apenas o onboarding de clínica durante uma janela supervisionada e volta a desativá-lo imediatamente. Um piloto controlado não deve aceitar autoinscrição pública de pacientes sem um processo de convite/verificação aprovado.
 
 ### Ativar HTTPS quando existirem domínio e certificados
 
@@ -265,7 +267,7 @@ Implementado:
 - Endpoints: onboarding de clínica, registo de paciente, gestão de staff, marcação de consultas, login/logout/me, diretório de pacientes (`GET /patients`, staff/admin) e de staff (`GET /staff`, qualquer autenticado) — os dois últimos adicionados para o frontend conseguir mostrar nomes em vez de UUIDs e escolher paciente/profissional ao marcar consulta
 - Frontend (`frontend/`): React + Vite + TypeScript + Tailwind + React Router + TanStack Query + Zod — ver `frontend/README.md`
 - Proteção anti-IDOR: uma clínica nunca consegue marcar consultas usando pacientes/staff de outra clínica (testado e bloqueado)
-- CI (GitHub Actions): lint (ruff), type checking (mypy), testes com Postgres real, migrations (upgrade + downgrade + upgrade), coverage, dependency scanning **bloqueante** (pip-audit com exceções documentadas em `SECURITY-EXCEPTIONS.md`), build da imagem Docker
+- CI (GitHub Actions): lint (ruff), type checking (mypy), testes com Postgres real, migrations (upgrade + downgrade + upgrade), coverage, dependency scanning **bloqueante** (pip-audit sem exceções ativas), build da imagem Docker
 - Dependabot (pip, GitHub Actions, Docker base image)
 - Backup/restore automático diário, atómico, com checksum, retenção configurável, volume persistente separado e verificação end-to-end (`scripts/backup_db.sh`, `scripts/restore_db.sh`)
 - `docker-compose.prod.yml` separado do dev, sem defaults inseguros, sem exposição desnecessária da BD
@@ -277,7 +279,6 @@ Por fazer:
 - Modelos adiados: `Medication`, `Notification`, `Consent`
 - Bloqueio de conta após N tentativas falhadas (hoje mitigado só pelo rate limiting por IP)
 - Cópias off-site dos backups locais (P2.2)
-- Upgrade major do FastAPI/Starlette (necessário para fechar os últimos CVEs do `starlette` — ver `SECURITY-EXCEPTIONS.md`; deliberadamente não feito nesta fase por ser um upgrade de framework, não hardening)
 
 ## Notas para produção que dependem do ambiente de deployment
 

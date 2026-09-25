@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
@@ -40,6 +41,11 @@ def _public(patient: Patient) -> PatientPublic:
 def register(
     request: Request, payload: PatientRegisterRequest, response: Response, db: Session = Depends(get_db)
 ) -> PatientPublic:
+    if not settings.ALLOW_PUBLIC_PATIENT_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registo público de pacientes desativado.",
+        )
     patient, user = register_patient(db, payload)
     set_session_cookie(response, user)  # auto-login after successful registration
     record_audit_event(
