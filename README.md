@@ -247,6 +247,8 @@ No deployment real:
 - `/health` — o processo está vivo; nunca toca na base de dados (uma BD lenta ou em baixo não deve fazer o processo parecer morto).
 - `/ready` — confirma a ligação à base de dados com um `SELECT 1`; usa isto nos healthchecks do orquestrador, não como endpoint de alta frequência.
 
+A stack operacional opcional e isolada está em `docker-compose.monitoring.yml`: Prometheus, Grafana, Alertmanager, exporters de host/containers/PostgreSQL, probes HTTP e dashboard provisionado. O runbook completo de backups off-site, disaster recovery, monitoring, alerting e incident response está em [`docs/operations.md`](docs/operations.md). Credenciais reais de object storage e um destino humano de alertas continuam a ser dependências do deployment e nunca pertencem ao Git.
+
 ## Estado atual
 
 Implementado:
@@ -266,7 +268,7 @@ Implementado:
 - Dependabot (pip, GitHub Actions, Docker base image)
 - Backup/restore automático diário, atómico, com checksum, retenção configurável, volume persistente separado e verificação end-to-end (`scripts/backup_db.sh`, `scripts/restore_db.sh`)
 - `docker-compose.prod.yml` separado do dev, sem defaults inseguros, sem exposição desnecessária da BD
-- 73 testes automatizados, 95% de cobertura de linhas em `app/`
+- 88 testes automatizados no backend e 33 no frontend
 
 Por fazer:
 - Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`) — e, quando existirem, os eventos `APPOINTMENT_UPDATED`/`APPOINTMENT_CANCELLED` já definidos em `AuditAction`
@@ -283,5 +285,5 @@ O que está implementado no código não substitui isto — depende de decisões
 - Reverse proxy / TLS em frente ao backend — e configurar `TRUSTED_PROXIES` corretamente para esse proxy
 - Gestão real de secrets (GitHub Secrets para CI; um vault/secret manager para produção — nunca um `.env` commitado)
 - Valores de RPO/RTO acordados operacionalmente, não os valores de referência acima
-- Monitorização/alerting sobre os logs e sobre falhas de `/ready` (a app expõe `/metrics`; ligar isso a um Prometheus/Grafana real, se algum dia fizer sentido, é infraestrutura, não código)
+- Credenciais reais para validar backups off-site e um destino humano real para notificações do Alertmanager (ver `docs/operations.md`)
 - Armazenamento dos backups fora da máquina da própria base de dados (offsite)

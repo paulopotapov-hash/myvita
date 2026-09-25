@@ -1,0 +1,98 @@
+groups:
+  - name: myvita-availability
+    rules:
+      - alert: MyVitaProxyDown
+        expr: probe_success{instance="http://proxy:8080/healthz"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: myVita proxy is unavailable
+      - alert: MyVitaBackendDown
+        expr: probe_success{instance="http://backend:8000/health"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: myVita backend is unavailable
+      - alert: MyVitaBackendNotReady
+        expr: probe_success{instance="http://backend:8000/ready"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: myVita backend cannot serve database-dependent requests
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: PostgreSQL exporter cannot reach the database
+
+  - name: myvita-errors-resources
+    rules:
+      - alert: MyVitaHighHTTP5xxRate
+        expr: sum(rate(myvita_http_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(myvita_http_requests_total[5m])), 0.001) > 0.05 and sum(rate(myvita_http_requests_total[5m])) > 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 5% of backend requests are returning 5xx
+      - alert: HostDiskUsageHigh
+        expr: 100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 85
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Host disk usage is above 85%
+      - alert: HostDiskUsageCritical
+        expr: 100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 95
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Host disk usage is above 95%
+      - alert: HostMemoryUsageHigh
+        expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 90
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Host memory usage is above 90%
+      - alert: HostCPUUsageHigh
+        expr: 100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 85
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: Host CPU usage is above 85%
+      - alert: PostgreSQLConnectionsHigh
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.8
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: PostgreSQL connections exceed 80% of the configured maximum
+      - alert: ContainerRestarting
+        expr: changes(container_start_time_seconds{name!=""}[15m]) > 2
+        labels: {severity: warning}
+        annotations:
+          summary: A container restarted repeatedly in 15 minutes
+
+  - name: myvita-backups
+    rules:
+      - alert: MyVitaBackupMissingOrStale
+        expr: myvita_backup_last_success_timestamp_seconds == 0 or time() - myvita_backup_last_success_timestamp_seconds > 129600
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: No verified local backup exists within the last 36 hours
+      - alert: MyVitaBackupLastRunFailed
+        expr: myvita_backup_last_run_success == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: The last local backup run failed
+      - alert: MyVitaOffsiteBackupFailed
+        expr: myvita_offsite_backup_enabled == 1 and myvita_offsite_backup_last_run_success == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: The last off-site backup upload failed
+      - alert: MyVitaOffsiteBackupStale
+        expr: myvita_offsite_backup_enabled == 1 and (myvita_offsite_backup_last_success_timestamp_seconds == 0 or time() - myvita_offsite_backup_last_success_timestamp_seconds > 129600)
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: No verified off-site backup exists within the last 36 hours

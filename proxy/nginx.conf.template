@@ -25,6 +25,13 @@ server {
         include /etc/nginx/proxy_params;
     }
 
+    # Metrics are collected through the internal-only metrics proxy. Never
+    # let the SPA fallback make this path appear publicly available.
+    location = /metrics {
+        access_log off;
+        return 404;
+    }
+
     location /api/ {
         proxy_pass http://backend:8000;
         include /etc/nginx/proxy_params;

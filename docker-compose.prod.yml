@@ -51,11 +51,21 @@ services:
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-true}
       TZ: ${BACKUP_TIMEZONE:-UTC}
+      OFFSITE_BACKUP_ENABLED: ${OFFSITE_BACKUP_ENABLED:-false}
+      OFFSITE_S3_BUCKET: ${OFFSITE_S3_BUCKET:-}
+      OFFSITE_S3_PREFIX: ${OFFSITE_S3_PREFIX:-myvita}
+      OFFSITE_S3_ENDPOINT: ${OFFSITE_S3_ENDPOINT:-}
+      OFFSITE_S3_REGION: ${OFFSITE_S3_REGION:-us-east-1}
+      OFFSITE_S3_SSE: ${OFFSITE_S3_SSE:-AES256}
+      OFFSITE_RETENTION_DAYS: ${OFFSITE_RETENTION_DAYS:-30}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - myvita_backups:/backups
+      - myvita_backup_metrics:/metrics
     networks:
       - data
 
@@ -135,6 +145,7 @@ services:
 volumes:
   myvita_pg_data:
   myvita_backups:
+  myvita_backup_metrics:
 
 networks:
   edge:
