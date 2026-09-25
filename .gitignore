@@ -18,6 +18,8 @@ htmlcov/
 # backup script is run from.
 *.dump
 *.sql
+*.sql.gz
+*.sha256
 backups/
 
 .DS_Store

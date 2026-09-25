@@ -132,6 +132,36 @@ Cada escrita usa a sua própria sessão de BD (`app/core/audit.py`), independent
 
 ## Backups & Recovery
 
+O Compose de produção inclui um serviço `backup` dedicado. Ele espera pela base de dados, faz um backup inicial ao arrancar e depois executa `pg_dump -Fc` diariamente às 03:00 UTC. Os dumps e respetivos checksums SHA-256 ficam no volume persistente separado `myvita_backups`; o serviço só pertence à rede interna `data` e não publica portas.
+
+Configuração opcional:
+
+```env
+BACKUP_SCHEDULE=0 3 * * *
+BACKUP_RETENTION_DAYS=14
+BACKUP_TIMEZONE=UTC
+BACKUP_RUN_ON_START=true
+```
+
+`BACKUP_SCHEDULE` usa cinco campos cron. A retenção corre apenas depois de um backup bem-sucedido e elimina somente pares `myvita_*.dump`/`.sha256` expirados; ficheiros temporários nunca são considerados backups. Cada dump é escrito num ficheiro temporário com permissões restritas, validado com `pg_restore --list`, renomeado atomicamente e só depois recebe o checksum.
+
+Verificar o backup mais recente (por omissão deve ter menos de 36 horas):
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T backup \
+  su-exec postgres /opt/myvita/check_backup.sh /backups
+```
+
+Para um restore, identifica primeiro o dump dentro do serviço e executa o script com confirmação explícita. O script valida o checksum e o arquivo antes de tocar na base de dados:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backup sh -lc 'ls -lh /backups/myvita_*.dump'
+docker compose -f docker-compose.prod.yml exec -T backup \
+  su-exec postgres /opt/myvita/restore_db.sh /backups/myvita_YYYYMMDDTHHMMSSZ.dump --yes
+```
+
+O segundo comando é destrutivo para `POSTGRES_DB`; revê o alvo e o ficheiro antes de usar `--yes`. Para operações manuais fora do container continuam disponíveis os scripts:
+
 ```bash
 # Backup (produz um .dump em ./backups, ou no diretório indicado)
 DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita PGPASSWORD=... \
@@ -142,27 +172,16 @@ DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita PGPASSWORD=... \
   ./scripts/restore_db.sh ./backups/myvita_20260101T000000Z.dump
 ```
 
-Um volume Docker (`myvita_pg_data`) **não é um backup** — protege contra o container ser removido, não contra uma migration má, um `DELETE` errado, ou o disco corromper. Os scripts acima é que são o backup real; ambos falham alto (`set -euo pipefail`) e nunca aceitam a password como argumento de linha de comandos.
+O volume PostgreSQL (`myvita_pg_data`) **não é um backup**. O volume separado `myvita_backups` permite recuperar de uma migration ou `DELETE` acidental, mas continua no mesmo host. Não protege contra perda, corrupção ou comprometimento do host; cópias off-site ficam deliberadamente para P2.2. Os backups também não são cifrados pela aplicação, portanto o acesso ao host e ao volume deve ser restrito.
 
 **Verificado operacionalmente** (não é só "os scripts existem"):
 - `backup_db.sh` falha com código de saída 1 e sem ficheiro parcial quando o Postgres está inacessível (testado apontando para uma porta fechada).
-- Nenhuma password aparece no terminal ou nos logs em nenhum dos dois scripts — só via `PGPASSWORD`.
+- Nenhuma password aparece no terminal ou nos logs — o scheduler cria um `PGPASSFILE` com modo `0600`, fora do volume e do Git.
 - `restore_db.sh` recusa avançar sem o nome exato da BD escrito na confirmação (ou `--yes` explícito).
-- Ciclo completo backup → restore para uma BD nova testado manualmente, schema idêntico confirmado (7 tabelas, incluindo `audit_logs`).
-
-**Backup capability vs. automated off-site backup — isto não é a mesma coisa.** Os scripts são a *capacidade* de fazer backup e restore; não correm sozinhos. Agendar isto depende do teu ambiente de deployment, por isso não está no código — mas eis um exemplo seguro de automação via cron, guardando fora da própria máquina da BD (offsite é o que protege contra a máquina inteira desaparecer):
-
-```bash
-# /etc/cron.d/myvita-backup — corre às 03:00 UTC todos os dias
-0 3 * * * myvita DB_HOST=db DB_PORT=5432 DB_NAME=myvita DB_USER=myvita \
-  PGPASSWORD_FILE=/run/secrets/db_password \
-  /opt/myvita/scripts/backup_db.sh /mnt/offsite-backups/myvita >> /var/log/myvita-backup.log 2>&1
-```
-
-(Nota: `PGPASSWORD_FILE` não é lido pelo script atual — troca por `PGPASSWORD=$(cat /run/secrets/db_password)` ou equivalente do teu secret manager; o exemplo acima é ilustrativo do padrão, não copy-paste direto.)
+- Ciclo completo backup → restore para uma BD nova testado com PostgreSQL real, incluindo dados sentinela.
 
 **RPO/RTO — valores de referência, não requisitos definidos.** Isto precisa de decisão operacional (com que frequência corre o backup, onde fica guardado, quem o monitoriza):
-- RPO proposto: 24h (backup diário) — reduz para o intervalo real escolhido.
+- RPO proposto: 24h com o agendamento diário por omissão — reduz para o intervalo real escolhido.
 - RTO proposto: poucas horas, dependendo do tamanho da BD e de onde o backup está guardado.
 
 Procedimento de disaster recovery:
@@ -182,20 +201,43 @@ Verificar login/CRUD básico manualmente
 
 ## Production
 
-`docker-compose.prod.yml` é o ficheiro de produção — separado do `docker-compose.yml` de desenvolvimento, que monta o código como volume e expõe o Postgres no host (nenhum dos dois é aceitável em produção).
+`docker-compose.prod.yml` usa um Nginx dedicado como único ingresso público. Frontend, backend e PostgreSQL não publicam portas; o proxy encaminha `/` para o frontend e `/api`, `/health` e `/ready` para o backend.
 
-```bash
-docker compose -f docker-compose.prod.yml up -d
+```text
+Internet → proxy → frontend
+                 → backend → PostgreSQL
 ```
 
+Para validar localmente por HTTP, usa o overlay que desativa cookies `Secure` apenas nesse ambiente:
+
+```bash
+POSTGRES_USER=myvita POSTGRES_PASSWORD='valor-local' POSTGRES_DB=myvita \
+JWT_SECRET_KEY='gera-um-valor-com-pelo-menos-32-bytes' PUBLIC_DOMAIN=localhost \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-http.yml up -d --build
+```
+
+O proxy fica em `HTTP_PORT` (80 por omissão). Se mudares essa porta para um teste local, define também `LOCAL_ORIGIN` (por exemplo `http://localhost:18081`). `PUBLIC_DOMAIN` define o `server_name`; nenhum destes valores é secreto. O bundle usa `/api` na mesma origem e já não precisa de uma URL pública separada.
+
 Diferenças chave em relação ao dev:
-- `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`JWT_SECRET_KEY`/`CORS_ORIGINS` são **obrigatórios, sem default** — o compose recusa arrancar se faltar algum.
+- `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`JWT_SECRET_KEY`/`PUBLIC_DOMAIN` são **obrigatórios, sem default** — o compose recusa arrancar se faltar algum.
 - Postgres não expõe a porta 5432 ao host — só é acessível a partir do container `backend`.
 - Sem volumes de código montados — corre exatamente o que está na imagem construída pelo `Dockerfile`.
 - `ENVIRONMENT=production`, `DEBUG=false`, `COOKIE_SECURE=true` fixos (a app recusa arrancar com `COOKIE_SECURE=false`, `CORS_ORIGINS` vazio/`*`, ou `JWT_SECRET_KEY` com menos de 32 bytes, quando `ENVIRONMENT=production` — ver `app/core/config.py`).
-- Se correr atrás de um reverse proxy, configura `TRUSTED_PROXIES` com o IP/CIDR desse proxy — sem isto, rate limiting e audit logging veem o IP do proxy em vez do cliente real.
-- Backend continua a correr como utilizador não-root (herdado do `Dockerfile`, igual em dev e produção).
-- Agnóstico de cloud — corre da mesma forma numa VPS, AWS/Azure/GCP, ou qualquer host Docker. Não inclui reverse proxy/TLS — coloca um (nginx, Caddy, Traefik, ou o LB da tua cloud) à frente do serviço `backend`.
+- O proxy tem IP fixo `172.30.0.10` na rede `edge`; só esse IP entra em `TRUSTED_PROXIES`. O proxy sobrescreve `X-Forwarded-For`, em vez de confiar num valor enviado pelo cliente.
+- Backend e frontend correm como utilizadores não-root; a imagem final do frontend contém apenas Nginx e os assets compilados.
+- A rede `data` é interna e liga apenas backend/PostgreSQL. A rede `edge` liga proxy/frontend/backend. Só o proxy publica uma porta.
+
+### Ativar HTTPS quando existirem domínio e certificados
+
+O ficheiro `docker-compose.prod-tls.yml.example` e `proxy/nginx.tls.conf.template.example` preparam porta 443, TLS 1.2/1.3, redirecionamento HTTP→HTTPS, HSTS e `X-Forwarded-Proto: https`. Copia o overlay para fora do repositório, substitui o caminho absoluto por um diretório que contenha `fullchain.pem` e `privkey.pem`, e inicia-o juntamente com `docker-compose.prod.yml`. Nunca guardes a chave privada no Git.
+
+No deployment real:
+
+- define `PUBLIC_DOMAIN=app.example.com`;
+- mantém `COOKIE_SECURE=true` e `ENVIRONMENT=production`;
+- usa `CORS_ORIGINS='["https://app.example.com"]'` se precisares de uma origem explícita (a navegação normal é same-origin);
+- publica 80 apenas para redirecionar e 443 para HTTPS;
+- obtém/renova certificados fora desta configuração (plataforma, ACME ou secret manager).
 
 ## Observability
 
@@ -204,6 +246,8 @@ Diferenças chave em relação ao dev:
 - **Métricas:** `GET /metrics` (formato texto Prometheus) — contagem de pedidos por método/classe de status, duração, falhas de autenticação, eventos de rate limiting, erros de base de dados. Sem dependência nova, sem labels de alta cardinalidade (nunca `user_id`, `patient_id`, `email`, nome da clínica). **Desativado (404) por omissão** — só responde se `METRICS_TOKEN` estiver configurado, e exige esse valor no header `X-Metrics-Token`.
 - `/health` — o processo está vivo; nunca toca na base de dados (uma BD lenta ou em baixo não deve fazer o processo parecer morto).
 - `/ready` — confirma a ligação à base de dados com um `SELECT 1`; usa isto nos healthchecks do orquestrador, não como endpoint de alta frequência.
+
+A stack operacional opcional e isolada está em `docker-compose.monitoring.yml`: Prometheus, Grafana, Alertmanager, exporters de host/containers/PostgreSQL, probes HTTP e dashboard provisionado. O runbook completo de backups off-site, disaster recovery, monitoring, alerting e incident response está em [`docs/operations.md`](docs/operations.md). Credenciais reais de object storage e um destino humano de alertas continuam a ser dependências do deployment e nunca pertencem ao Git.
 
 ## Estado atual
 
@@ -222,24 +266,24 @@ Implementado:
 - Proteção anti-IDOR: uma clínica nunca consegue marcar consultas usando pacientes/staff de outra clínica (testado e bloqueado)
 - CI (GitHub Actions): lint (ruff), type checking (mypy), testes com Postgres real, migrations (upgrade + downgrade + upgrade), coverage, dependency scanning **bloqueante** (pip-audit com exceções documentadas em `SECURITY-EXCEPTIONS.md`), build da imagem Docker
 - Dependabot (pip, GitHub Actions, Docker base image)
-- Backup/restore com verificação de integridade, testado end-to-end e testado a falhar corretamente (`scripts/backup_db.sh`, `scripts/restore_db.sh`)
+- Backup/restore automático diário, atómico, com checksum, retenção configurável, volume persistente separado e verificação end-to-end (`scripts/backup_db.sh`, `scripts/restore_db.sh`)
 - `docker-compose.prod.yml` separado do dev, sem defaults inseguros, sem exposição desnecessária da BD
-- 73 testes automatizados, 95% de cobertura de linhas em `app/`
+- 88 testes automatizados no backend e 33 no frontend
 
 Por fazer:
 - Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`) — e, quando existirem, os eventos `APPOINTMENT_UPDATED`/`APPOINTMENT_CANCELLED` já definidos em `AuditAction`
 - Endpoints de leitura/detalhe de ficha de paciente — e o evento `STAFF_VIEWED_PATIENT` já definido, à espera de ter onde ligar
 - Modelos adiados: `Medication`, `Notification`, `Consent`
 - Bloqueio de conta após N tentativas falhadas (hoje mitigado só pelo rate limiting por IP)
-- Backup automatizado agendado (os scripts existem e estão verificados; falta o cron/scheduler real em produção — ver exemplo na secção Backups)
+- Cópias off-site dos backups locais (P2.2)
 - Upgrade major do FastAPI/Starlette (necessário para fechar os últimos CVEs do `starlette` — ver `SECURITY-EXCEPTIONS.md`; deliberadamente não feito nesta fase por ser um upgrade de framework, não hardening)
 
 ## Notas para produção que dependem do ambiente de deployment
 
 O que está implementado no código não substitui isto — depende de decisões e infraestrutura fora do repositório:
-- Onde e com que frequência o backup corre de facto (o script existe e está verificado; o agendamento não está no código)
+- Confirmar operacionalmente que o horário e retenção configurados correspondem ao RPO/RTO acordado
 - Reverse proxy / TLS em frente ao backend — e configurar `TRUSTED_PROXIES` corretamente para esse proxy
 - Gestão real de secrets (GitHub Secrets para CI; um vault/secret manager para produção — nunca um `.env` commitado)
 - Valores de RPO/RTO acordados operacionalmente, não os valores de referência acima
-- Monitorização/alerting sobre os logs e sobre falhas de `/ready` (a app expõe `/metrics`; ligar isso a um Prometheus/Grafana real, se algum dia fizer sentido, é infraestrutura, não código)
+- Credenciais reais para validar backups off-site e um destino humano real para notificações do Alertmanager (ver `docs/operations.md`)
 - Armazenamento dos backups fora da máquina da própria base de dados (offsite)

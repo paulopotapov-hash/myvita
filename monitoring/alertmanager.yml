@@ -1,0 +1,11 @@
+route:
+  receiver: pending-human-destination
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  # Deliberately has no external integration. Configure a real email/webhook
+  # receiver in the deployment secret store before declaring P2.4 complete.
+  - name: pending-human-destination

@@ -1,0 +1,41 @@
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{instance="http://backend:8000/health",job="blackbox"}'
+        values: '1 0 0 0 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: MyVitaBackendDown
+        exp_alerts:
+          - exp_labels:
+              instance: http://backend:8000/health
+              job: blackbox
+              severity: critical
+            exp_annotations:
+              summary: myVita backend is unavailable
+      - eval_time: 4m
+        alertname: MyVitaBackendDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'myvita_backup_last_run_success{instance="node-exporter:9100",job="host"}'
+        values: '1 0 0 0 0 0 0 1'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: MyVitaBackupLastRunFailed
+        exp_alerts:
+          - exp_labels:
+              instance: node-exporter:9100
+              job: host
+              severity: critical
+            exp_annotations:
+              summary: The last local backup run failed
+      - eval_time: 7m
+        alertname: MyVitaBackupLastRunFailed
+        exp_alerts: []

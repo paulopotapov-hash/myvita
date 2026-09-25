@@ -1,0 +1,29 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {"type":"stat","title":"Proxy availability","id":1,"gridPos":{"h":5,"w":4,"x":0,"y":0},"targets":[{"expr":"probe_success{instance=\"http://proxy:8080/healthz\"}","legendFormat":"proxy"}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}],"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}}}},
+    {"type":"stat","title":"Backend readiness","id":2,"gridPos":{"h":5,"w":4,"x":4,"y":0},"targets":[{"expr":"probe_success{instance=\"http://backend:8000/ready\"}","legendFormat":"ready"}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}]}}},
+    {"type":"stat","title":"PostgreSQL","id":3,"gridPos":{"h":5,"w":4,"x":8,"y":0},"targets":[{"expr":"pg_up","legendFormat":"database"}]},
+    {"type":"stat","title":"Backup age (hours)","id":4,"gridPos":{"h":5,"w":6,"x":12,"y":0},"targets":[{"expr":"(time() - myvita_backup_last_success_timestamp_seconds) / 3600","legendFormat":"local"},{"expr":"(time() - myvita_offsite_backup_last_success_timestamp_seconds) / 3600","legendFormat":"off-site"}],"fieldConfig":{"defaults":{"unit":"h","thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"yellow","value":24},{"color":"red","value":36}]}}}},
+    {"type":"timeseries","title":"HTTP request rate","id":5,"gridPos":{"h":8,"w":8,"x":0,"y":5},"targets":[{"expr":"sum by (status_class) (rate(myvita_http_requests_total[5m]))","legendFormat":"{{status_class}}"}]},
+    {"type":"timeseries","title":"Average backend latency","id":6,"gridPos":{"h":8,"w":8,"x":8,"y":5},"targets":[{"expr":"sum(rate(myvita_http_request_duration_seconds_sum[5m])) / clamp_min(sum(rate(myvita_http_request_duration_seconds_count[5m])), 0.001)","legendFormat":"seconds"}],"fieldConfig":{"defaults":{"unit":"s"}}},
+    {"type":"timeseries","title":"Probe latency","id":7,"gridPos":{"h":8,"w":8,"x":16,"y":5},"targets":[{"expr":"probe_duration_seconds","legendFormat":"{{instance}}"}],"fieldConfig":{"defaults":{"unit":"s"}}},
+    {"type":"timeseries","title":"Host CPU and memory","id":8,"gridPos":{"h":8,"w":8,"x":0,"y":13},"targets":[{"expr":"100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))","legendFormat":"CPU %"},{"expr":"100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)","legendFormat":"Memory %"}],"fieldConfig":{"defaults":{"unit":"percent","max":100,"min":0}}},
+    {"type":"timeseries","title":"Host disk usage","id":9,"gridPos":{"h":8,"w":8,"x":8,"y":13},"targets":[{"expr":"100 * (1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"})","legendFormat":"{{mountpoint}}"}],"fieldConfig":{"defaults":{"unit":"percent","max":100,"min":0}}},
+    {"type":"timeseries","title":"Container CPU / memory","id":10,"gridPos":{"h":8,"w":8,"x":16,"y":13},"targets":[{"expr":"sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[5m])) * 100","legendFormat":"CPU {{name}}"},{"expr":"sum by (name) (container_memory_working_set_bytes{name!=\"\"})","legendFormat":"Memory {{name}}"}]},
+    {"type":"timeseries","title":"PostgreSQL connections","id":11,"gridPos":{"h":8,"w":8,"x":0,"y":21},"targets":[{"expr":"sum(pg_stat_activity_count)","legendFormat":"active/idle connections"}]},
+    {"type":"stat","title":"Backup run status","id":12,"gridPos":{"h":8,"w":8,"x":8,"y":21},"targets":[{"expr":"myvita_backup_last_run_success","legendFormat":"local"},{"expr":"myvita_offsite_backup_last_run_success","legendFormat":"off-site"}]},
+    {"type":"alertlist","title":"Active alerts","id":13,"gridPos":{"h":8,"w":8,"x":16,"y":21},"options":{"show":"current","sortOrder":1,"stateFilter":{"alerting":true,"pending":true,"noData":true,"normal":false,"error":true}}},
+    {"type":"timeseries","title":"PostgreSQL database size","id":14,"gridPos":{"h":8,"w":8,"x":0,"y":29},"targets":[{"expr":"pg_database_size_bytes{datname!~\"template.*\"}","legendFormat":"{{datname}}"}],"fieldConfig":{"defaults":{"unit":"bytes"}}}
+  ],
+  "refresh":"30s",
+  "schemaVersion":41,
+  "tags":["myvita","operations"],
+  "templating":{"list":[]},
+  "time":{"from":"now-6h","to":"now"},
+  "timezone":"browser",
+  "title":"myVita Operations",
+  "uid":"myvita-operations",
+  "version":1
+}
