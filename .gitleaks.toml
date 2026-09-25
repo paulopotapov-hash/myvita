@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented Portuguese placeholder used in README production examples"
+regexTarget = "match"
+regexes = ['''gera-um-valor-com-pelo-menos-32-bytes''']

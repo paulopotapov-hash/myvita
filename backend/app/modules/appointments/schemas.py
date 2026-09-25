@@ -3,10 +3,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.schemas import RequestModel
 from app.models.appointment import AppointmentStatus
 
 
-class AppointmentCreateRequest(BaseModel):
+class AppointmentCreateRequest(RequestModel):
     """
     Created by staff/clinic_admin. clinic_id is deliberately NOT part of
     this payload — it's always taken from the authenticated staff member's
@@ -41,7 +42,7 @@ class AppointmentPublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class AppointmentUpdateRequest(BaseModel):
+class AppointmentUpdateRequest(RequestModel):
     patient_id: uuid.UUID | None = None
     staff_id: uuid.UUID | None = None
     scheduled_at: datetime | None = None

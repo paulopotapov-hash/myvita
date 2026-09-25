@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     COOKIE_NAME: str = "myvita_session"
     COOKIE_SECURE: bool = True  # False only for local http dev
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+    MAX_REQUEST_BODY_BYTES: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
 
     # CSRF (double-submit cookie, HMAC-bound to the session)
     CSRF_COOKIE_NAME: str = "myvita_csrf"

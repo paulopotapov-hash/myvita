@@ -1,15 +1,4 @@
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-sqlalchemy==2.0.36
-alembic==1.14.0
-psycopg[binary]==3.2.3
-pydantic==2.10.3
-pydantic[email]==2.10.3
-pydantic-settings==2.7.0
-passlib[argon2]==1.7.4
-pyjwt==2.13.0
-python-multipart==0.0.31
-slowapi==0.1.10
+-r requirements-runtime.txt
 
 # testing
 pytest==9.0.3

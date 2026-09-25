@@ -232,3 +232,16 @@ def test_no_secrets_ever_appear_in_audit_log(client):
         for forbidden in ("password", "jwt", "cookie", "csrf_token"):
             if row.event_metadata:
                 assert forbidden not in str(row.event_metadata).lower()
+
+
+def test_attacker_controlled_audit_fields_are_bounded(client):
+    _onboard_clinic(client)
+    client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@clinica.pt", "password": "wrong"},
+        headers={"user-agent": "A" * 10_000},
+    )
+
+    failures = _audit_events(AuditAction.LOGIN_FAILURE)
+    assert len(failures) == 1
+    assert failures[0].user_agent == "A" * 255

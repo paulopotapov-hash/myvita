@@ -3,10 +3,11 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.schemas import RequestModel
 from app.models.medication import MedicationStatus
 
 
-class MedicationCreateRequest(BaseModel):
+class MedicationCreateRequest(RequestModel):
     name: str = Field(min_length=1, max_length=200)
     dosage: str = Field(min_length=1, max_length=200)
     instructions: str | None = Field(default=None, max_length=2000)
@@ -28,7 +29,7 @@ class MedicationCreateRequest(BaseModel):
         return self
 
 
-class MedicationUpdateRequest(BaseModel):
+class MedicationUpdateRequest(RequestModel):
     dosage: str | None = Field(default=None, min_length=1, max_length=200)
     instructions: str | None = Field(default=None, max_length=2000)
     status: MedicationStatus | None = None

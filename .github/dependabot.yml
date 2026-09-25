@@ -8,6 +8,13 @@ updates:
     open-pull-requests-limit: 5
     labels: ["dependencies", "backend"]
 
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+
   # The GitHub Actions used by our own CI workflow
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -18,6 +25,18 @@ updates:
   # Base image pinned in backend/Dockerfile
   - package-ecosystem: "docker"
     directory: "/backend"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/proxy"
     schedule:
       interval: "weekly"
     labels: ["dependencies", "docker"]

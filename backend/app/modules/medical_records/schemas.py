@@ -3,8 +3,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.schemas import RequestModel
 
-class MedicalRecordCreateRequest(BaseModel):
+
+class MedicalRecordCreateRequest(RequestModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=20_000)
 

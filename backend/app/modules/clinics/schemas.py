@@ -2,10 +2,11 @@ import uuid
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.core.schemas import RequestModel
 from app.core.validators import validate_password_strength
 
 
-class ClinicOnboardingRequest(BaseModel):
+class ClinicOnboardingRequest(RequestModel):
     """
     Public endpoint payload: a new clinic self-registers along with its
     first admin user in a single step. This is intentionally unauthenticated
@@ -18,7 +19,7 @@ class ClinicOnboardingRequest(BaseModel):
     phone: str | None = Field(default=None, max_length=30)
 
     admin_full_name: str = Field(min_length=2, max_length=255)
-    admin_email: EmailStr
+    admin_email: EmailStr = Field(max_length=255)
     admin_password: str = Field(min_length=8, max_length=128)
 
     @field_validator("admin_password")

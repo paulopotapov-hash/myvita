@@ -153,6 +153,56 @@ def test_baseline_security_headers_present_on_every_response(client):
     assert r.headers["x-frame-options"] == "DENY"
     assert r.headers["referrer-policy"] == "no-referrer"
     assert "permissions-policy" in r.headers
+    assert "default-src 'none'" in r.headers["content-security-policy"]
+
+
+def test_api_responses_are_not_cacheable(client):
+    r = client.get("/api/v1/auth/me")
+    assert r.headers["cache-control"] == "no-store"
+    assert r.headers["pragma"] == "no-cache"
+
+
+def test_oversized_request_is_rejected_before_payload_parsing(client):
+    r = client.post(
+        "/api/v1/auth/login",
+        content=b"x" * 1_048_577,
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 413
+    assert r.json() == {"detail": "Pedido demasiado grande."}
+    assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_unknown_payload_fields_are_rejected(client):
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@clinica.pt", "password": "wrong", "role": "clinic_admin"},
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["type"] == "extra_forbidden"
+
+
+def test_public_login_rejects_untrusted_browser_origin(client):
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@clinica.pt", "password": "wrong"},
+        headers={"origin": "https://evil.example"},
+    )
+    assert r.status_code == 403
+    assert r.json() == {"detail": "Origem do pedido não permitida."}
+
+
+def test_email_longer_than_database_column_is_rejected(client):
+    local_part = "a" * 250
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": f"{local_part}@example.com", "password": "wrong"},
+    )
+    assert r.status_code == 422
+
+
+def test_audit_log_has_no_tenant_facing_api(client):
+    assert client.get("/api/v1/audit-logs").status_code == 404
 
 
 # --- Settings validation (unit-level, no HTTP client needed) -----------------

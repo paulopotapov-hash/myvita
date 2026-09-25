@@ -84,6 +84,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     # No source volumes: the image built by backend/Dockerfile already
     # contains the code. Mounting source over it here would silently make
     # "production" run whatever happens to be on the host filesystem.
@@ -114,6 +121,10 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     # Static production image only: no source mounts, Node process, Vite
     # dev server, or API reverse proxy.
     networks:
@@ -138,6 +149,10 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       edge:
         ipv4_address: 172.30.0.10

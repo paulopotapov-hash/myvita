@@ -112,13 +112,14 @@ O token CSRF invalida-se automaticamente ao fazer logout (está ligado ao `token
 - **Sessões:** cookie httpOnly + JWT (HS256/384/512 apenas — outros algoritmos são rejeitados no arranque; chave mínima de 32 bytes, também imposta no arranque), invalidação imediata via `token_epoch` (logout, mudança de password).
 - **CSRF:** ver secção acima.
 - **Rate limiting:** login (10/min), registo de paciente e onboarding de clínica (5/min), criação de staff (20/min) — tudo pelo IP real do cliente (`app/core/client_ip.py`, ver nota sobre trusted proxy abaixo), não pelo IP do reverse proxy. Armazenamento em memória, adequado a uma única réplica; ver comentário em `app/core/rate_limit.py` para o que muda com múltiplas réplicas (Redis).
-- **Security headers:** `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, e `Strict-Transport-Security` quando `ENVIRONMENT=production`.
+- **Security headers:** CSP restritiva, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cache-Control: no-store` nas APIs e `Strict-Transport-Security` quando `ENVIRONMENT=production`.
 - **CORS:** origins, métodos (`GET`/`POST`/`PATCH`/`DELETE`) e headers (`Content-Type`, `X-CSRF-Token`, `X-Request-ID`) explícitos — nunca `*`. Produção recusa arrancar com `CORS_ORIGINS` vazio ou contendo `*` (incompatível com `allow_credentials=True`, que a app usa para os cookies).
 - **Trusted proxy / IP do cliente:** `X-Forwarded-For` só é aceite quando o peer TCP direto está em `TRUSTED_PROXIES` (vazio por padrão — nada é confiado até se configurar explicitamente). Sem isto, qualquer cliente podia falsificar o próprio IP e contornar rate limiting ou poluir o audit log — ver `app/core/client_ip.py`.
 - **Multi-tenancy:** isolamento por `clinic_id` reforçado a nível de serviço (nunca confia em `clinic_id` vindo do payload do cliente); testado explicitamente contra IDOR entre clínicas.
 - **Audit logging:** ver secção própria abaixo.
 - **Timing side-channel:** `authenticate()` executa sempre uma verificação Argon2 completa, mesmo para emails inexistentes, para não revelar por timing quais emails têm conta.
 - **Tratamento de erros:** exceções não tratadas e erros de base de dados nunca devolvem stack traces, SQL, ou credenciais ao cliente — apenas uma mensagem genérica; o detalhe fica nos logs internos, associado ao `request_id` (ver Observability abaixo). Ver `app/main.py`.
+- **Revisão completa:** o inventário endpoint-a-endpoint, superfícies ausentes e riscos aceites estão em [`docs/security-hardening.md`](docs/security-hardening.md).
 - **Não fazemos (ainda):** rotação automática de secrets, 2FA, bloqueio de conta após N tentativas falhadas (o rate limiting por IP mitiga parcialmente).
 
 ## Audit logging & acesso clínico
@@ -126,7 +127,7 @@ O token CSRF invalida-se automaticamente ao fazer logout (está ligado ao `token
 Tabela única `audit_logs` (ver `app/models/audit_log.py` para a justificação de não a separar em duas). Cobre:
 
 - Eventos de segurança: `LOGIN_SUCCESS`/`LOGIN_FAILURE`, `LOGOUT`, `PATIENT_CREATED`, `STAFF_CREATED`, `CLINIC_CREATED`, `PERMISSION_DENIED`, `CSRF_FAILURE`, `RATE_LIMITED`.
-- Acesso clínico: `STAFF_VIEWED_APPOINTMENT`, `PATIENT_VIEWED_OWN_RECORD` — atualmente instrumentado na listagem de consultas (`GET /api/v1/appointments`), que é o único endpoint de leitura de dados sensíveis que existe hoje no código. **Não há ainda endpoints de leitura/detalhe de ficha de paciente** — quando existirem, devem emitir `STAFF_VIEWED_PATIENT` da mesma forma.
+- Acesso clínico: consultas, pacientes, consentimentos, registos clínicos, medicação e respetivas revisões emitem os eventos de leitura/mutação definidos em `AuditAction`.
 
 Cada escrita usa a sua própria sessão de BD (`app/core/audit.py`), independente da transação do pedido que a originou — assim uma falha de login ou uma transação revertida não apagam o registo de auditoria. Nunca contém passwords, JWTs, cookies, tokens CSRF, ou dados clínicos — só identificadores mínimos. Ver testes em `tests/test_audit_logging.py`, incluindo um teste dedicado a confirmar que nenhuma password aparece na tabela.
 
