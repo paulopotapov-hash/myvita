@@ -38,6 +38,8 @@ class AuditAction(str, enum.Enum):
     LOGIN_FAILURE = "login_failure"
     LOGOUT = "logout"
     PASSWORD_CHANGE = "password_change"
+    INVITATION_CREATED = "invitation_created"
+    INVITATION_ACCEPTED = "invitation_accepted"
     USER_CREATED = "user_created"
     USER_DISABLED = "user_disabled"
     PATIENT_CREATED = "patient_created"

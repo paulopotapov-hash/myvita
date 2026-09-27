@@ -214,6 +214,7 @@ Para validar localmente por HTTP, usa o overlay que desativa cookies `Secure` ap
 ```bash
 POSTGRES_USER=myvita POSTGRES_PASSWORD='valor-local' POSTGRES_DB=myvita \
 JWT_SECRET_KEY='gera-um-valor-com-pelo-menos-32-bytes' PUBLIC_DOMAIN=localhost \
+ALLOWED_HOSTS='["localhost"]' \
 docker compose -f docker-compose.prod.yml -f docker-compose.prod-http.yml up -d --build
 ```
 
@@ -236,7 +237,7 @@ O ficheiro `docker-compose.prod-tls.yml.example` e `proxy/nginx.tls.conf.templat
 
 No deployment real:
 
-- define `PUBLIC_DOMAIN=app.example.com`;
+- define `PUBLIC_DOMAIN` com o hostname real e `ALLOWED_HOSTS` como uma lista JSON contendo exatamente esse hostname;
 - mantém `COOKIE_SECURE=true` e `ENVIRONMENT=production`;
 - usa `CORS_ORIGINS='["https://app.example.com"]'` se precisares de uma origem explícita (a navegação normal é same-origin);
 - publica 80 apenas para redirecionar e 443 para HTTPS;
@@ -250,7 +251,7 @@ No deployment real:
 - `/health` — o processo está vivo; nunca toca na base de dados (uma BD lenta ou em baixo não deve fazer o processo parecer morto).
 - `/ready` — confirma a ligação à base de dados com um `SELECT 1`; usa isto nos healthchecks do orquestrador, não como endpoint de alta frequência.
 
-A stack operacional opcional e isolada está em `docker-compose.monitoring.yml`: Prometheus, Grafana, Alertmanager, exporters de host/containers/PostgreSQL, probes HTTP e dashboard provisionado. O runbook completo de backups off-site, disaster recovery, monitoring, alerting e incident response está em [`docs/operations.md`](docs/operations.md). Credenciais reais de object storage e um destino humano de alertas continuam a ser dependências do deployment e nunca pertencem ao Git.
+A stack operacional opcional e isolada está em `docker-compose.monitoring.yml`: Prometheus, Grafana, Alertmanager, exporters de host/containers/PostgreSQL, probes HTTP e dashboard provisionado. O runbook completo de backups off-site, disaster recovery, monitoring, alerting e incident response está em [`docs/operations.md`](docs/operations.md). O deployment e onboarding controlado estão documentados em [`docs/production-deployment.md`](docs/production-deployment.md) e [`docs/clinic-onboarding.md`](docs/clinic-onboarding.md); a classificação final está em [`docs/production-readiness.md`](docs/production-readiness.md). Credenciais reais de object storage e um destino humano de alertas continuam a ser dependências do deployment e nunca pertencem ao Git.
 
 ## Estado atual
 
@@ -271,14 +272,14 @@ Implementado:
 - Dependabot (pip, GitHub Actions, Docker base image)
 - Backup/restore automático diário, atómico, com checksum, retenção configurável, volume persistente separado e verificação end-to-end (`scripts/backup_db.sh`, `scripts/restore_db.sh`)
 - `docker-compose.prod.yml` separado do dev, sem defaults inseguros, sem exposição desnecessária da BD
-- 88 testes automatizados no backend e 33 no frontend
+- Convites seguros, de uso único e ligados à clínica para onboarding controlado de staff/pacientes; alteração de password invalida sessões anteriores
 
 Por fazer:
 - Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`) — e, quando existirem, os eventos `APPOINTMENT_UPDATED`/`APPOINTMENT_CANCELLED` já definidos em `AuditAction`
 - Endpoints de leitura/detalhe de ficha de paciente — e o evento `STAFF_VIEWED_PATIENT` já definido, à espera de ter onde ligar
-- Modelos adiados: `Medication`, `Notification`, `Consent`
+- Recuperação de password e MFA (dependem de identidade/entrega verificadas e de uma política operacional aprovada)
 - Bloqueio de conta após N tentativas falhadas (hoje mitigado só pelo rate limiting por IP)
-- Cópias off-site dos backups locais (P2.2)
+- Validação do upload/restore off-site com credenciais reais e entrega de alertas a um destino humano real
 
 ## Notas para produção que dependem do ambiente de deployment
 

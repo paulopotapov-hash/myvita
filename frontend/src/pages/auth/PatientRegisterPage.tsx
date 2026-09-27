@@ -6,6 +6,7 @@ import { TextField } from '../../components/TextField'
 import { usePatientRegister } from '../../hooks/useAuthMutations'
 import { useClinics } from '../../hooks/useClinicData'
 import { useSession } from '../../hooks/useSession'
+import { usePublicConfig } from '../../hooks/usePublicConfig'
 import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { patientRegisterSchema, zodErrorsToRecord } from '../../lib/validation'
@@ -17,10 +18,14 @@ export function PatientRegisterPage() {
   const { isAuthenticated } = useSession()
   const clinics = useClinics()
   const register = usePatientRegister()
+  const publicConfig = usePublicConfig()
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   if (isAuthenticated) return <Navigate to="/app" replace />
+  if (publicConfig.isSuccess && !publicConfig.data.patient_registration_enabled) {
+    return <Navigate to="/login" replace />
+  }
 
   function update<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))

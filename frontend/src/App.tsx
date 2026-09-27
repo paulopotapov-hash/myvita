@@ -5,6 +5,7 @@ import { RootRedirect } from './app/RootRedirect'
 import { AppLayout } from './layouts/AppLayout'
 import { ClinicOnboardingPage } from './pages/auth/ClinicOnboardingPage'
 import { LoginPage } from './pages/auth/LoginPage'
+import { InvitationAcceptPage } from './pages/auth/InvitationAcceptPage'
 import { PatientRegisterPage } from './pages/auth/PatientRegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -14,6 +15,7 @@ import { PatientsPage } from './pages/staff/PatientsPage'
 import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
+import { AccountSecurityPage } from './pages/AccountSecurityPage'
 
 export default function App() {
   return (
@@ -22,6 +24,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/registo" element={<PatientRegisterPage />} />
       <Route path="/nova-clinica" element={<ClinicOnboardingPage />} />
+      <Route path="/convite" element={<InvitationAcceptPage />} />
 
       <Route
         path="/app"
@@ -34,6 +37,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route
           path="saude"
           element={

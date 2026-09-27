@@ -131,6 +131,47 @@ export interface LoginRequest {
   password: string
 }
 
+export interface PublicConfig {
+  clinic_onboarding_enabled: boolean
+  patient_registration_enabled: boolean
+}
+
+export interface InvitationPreview {
+  clinic_name: string
+  email: string
+  full_name: string
+  role: Exclude<UserRole, 'clinic_admin'>
+  staff_role: StaffRole | null
+  expires_at: string
+}
+
+export interface InvitationAcceptRequest {
+  token: string
+  password: string
+}
+
+export interface StaffInvitationRequest {
+  full_name: string
+  email: string
+  staff_role: StaffRole
+  specialty?: string
+}
+
+export interface InvitationCreated extends StaffInvitationRequest {
+  id: string
+  clinic_id: string
+  role: Exclude<UserRole, 'clinic_admin'>
+  status: 'pending' | 'accepted' | 'revoked'
+  token: string
+  expires_at: string
+  created_at: string
+}
+
+export interface PasswordChangeRequest {
+  current_password: string
+  new_password: string
+}
+
 export interface ClinicOnboardingRequest {
   clinic_name: string
   nif?: string

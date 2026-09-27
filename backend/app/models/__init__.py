@@ -7,6 +7,7 @@ from app.models.appointment import Appointment, AppointmentStatus  # noqa: F401
 from app.models.audit_log import AuditAction, AuditLog, AuditResult  # noqa: F401
 from app.models.clinic import Clinic  # noqa: F401
 from app.models.consent import Consent, ConsentStatus, ConsentType  # noqa: F401
+from app.models.invitation import Invitation, InvitationStatus  # noqa: F401
 from app.models.medical_record import MedicalRecord, MedicalRecordRevision  # noqa: F401
 from app.models.medication import Medication, MedicationStatus  # noqa: F401
 from app.models.notification import Notification  # noqa: F401

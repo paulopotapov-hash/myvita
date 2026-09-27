@@ -17,12 +17,14 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app/perfil', label: 'Perfil' },
     { to: '/app/saude', label: 'Dados clínicos' },
     { to: '/app/notificacoes', label: 'Notificações' },
+    { to: '/app/seguranca', label: 'Segurança' },
   ],
   staff: [
     { to: '/app', label: 'Início' },
     { to: '/app/consultas', label: 'Consultas' },
     { to: '/app/pacientes', label: 'Pacientes' },
     { to: '/app/notificacoes', label: 'Notificações' },
+    { to: '/app/seguranca', label: 'Segurança' },
   ],
   clinic_admin: [
     { to: '/app', label: 'Início' },
@@ -30,6 +32,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app/pacientes', label: 'Pacientes' },
     { to: '/app/equipa', label: 'Equipa' },
     { to: '/app/notificacoes', label: 'Notificações' },
+    { to: '/app/seguranca', label: 'Segurança' },
   ],
 }
 

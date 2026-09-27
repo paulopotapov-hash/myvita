@@ -1,13 +1,15 @@
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { TextField } from '../../components/TextField'
-import { useCreateStaff, useStaff } from '../../hooks/useClinicData'
+import { useStaff } from '../../hooks/useClinicData'
 import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { staffCreateSchema, zodErrorsToRecord } from '../../lib/validation'
+import { invitationsService } from '../../services/invitations'
 import type { StaffRole } from '../../types/api'
 
 const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
@@ -16,14 +18,14 @@ const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   admin: 'Administrativo(a)',
 }
 
-const EMPTY_FORM = { full_name: '', email: '', password: '', staff_role: 'doctor' as StaffRole, specialty: '' }
+const EMPTY_FORM = { full_name: '', email: '', staff_role: 'doctor' as StaffRole, specialty: '' }
 
 export function StaffManagementPage() {
   const staff = useStaff()
-  const createStaff = useCreateStaff()
+  const createStaff = useMutation({ mutationFn: invitationsService.inviteStaff })
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [justCreated, setJustCreated] = useState(false)
+  const [invitationLink, setInvitationLink] = useState('')
 
   function update<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -31,7 +33,7 @@ export function StaffManagementPage() {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    setJustCreated(false)
+    setInvitationLink('')
     const result = staffCreateSchema.safeParse(form)
     if (!result.success) {
       setFieldErrors(zodErrorsToRecord(result.error))
@@ -41,9 +43,9 @@ export function StaffManagementPage() {
     createStaff.mutate(
       { ...result.data, specialty: result.data.specialty || undefined },
       {
-        onSuccess: () => {
+        onSuccess: (invitation) => {
           setForm(EMPTY_FORM)
-          setJustCreated(true)
+          setInvitationLink(`${window.location.origin}/convite?token=${encodeURIComponent(invitation.token)}`)
         },
         onError: (error) => {
           if (error instanceof ApiError && error.fieldErrors) {
@@ -61,7 +63,7 @@ export function StaffManagementPage() {
       <h1 className="text-2xl font-semibold text-slate-900">Equipa</h1>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="mb-4 text-lg font-medium text-slate-900">Adicionar profissional</h2>
+        <h2 className="mb-4 text-lg font-medium text-slate-900">Convidar profissional</h2>
         <form onSubmit={handleSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
           <TextField
             label="Nome completo"
@@ -75,14 +77,6 @@ export function StaffManagementPage() {
             value={form.email}
             onChange={(e) => update('email', e.target.value)}
             error={fieldErrors.email}
-          />
-          <TextField
-            label="Palavra-passe inicial"
-            type="password"
-            autoComplete="new-password"
-            value={form.password}
-            onChange={(e) => update('password', e.target.value)}
-            error={fieldErrors.password}
           />
           <div className="flex flex-col gap-1">
             <label htmlFor="staff_role" className="text-sm font-medium text-slate-700">
@@ -112,9 +106,14 @@ export function StaffManagementPage() {
                 {fieldErrors._root}
               </p>
             )}
-            {justCreated && <p className="mb-2 text-sm text-teal-700">Profissional adicionado com sucesso.</p>}
+            {invitationLink && (
+              <div className="mb-3 rounded-md bg-teal-50 p-3 text-sm text-teal-900">
+                <p className="font-medium">Convite criado. Partilha uma única vez por um canal privado aprovado.</p>
+                <p className="mt-1 break-all select-all">{invitationLink}</p>
+              </div>
+            )}
             <Button type="submit" isLoading={createStaff.isPending}>
-              Adicionar
+              Criar convite
             </Button>
           </div>
         </form>

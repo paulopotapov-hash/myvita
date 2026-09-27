@@ -23,6 +23,14 @@ env:
   COOKIE_SECURE: "false"
 
 jobs:
+  repository-quality:
+    name: Repository formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject whitespace errors
+        run: git diff --check HEAD~1 HEAD
+
   backend:
     name: Backend (lint, types, tests, migrations)
     runs-on: ubuntu-latest
@@ -151,6 +159,10 @@ jobs:
         run: docker build -t myvita-frontend:ci frontend
       - name: Build backup image
         run: docker build -f backup/Dockerfile -t myvita-backup:ci .
+      - name: Build public proxy image
+        run: docker build -t myvita-proxy:ci proxy
+      - name: Build metrics proxy image
+        run: docker build -t myvita-metrics-proxy:ci monitoring/metrics-proxy
       - name: Validate monitoring configuration and alert behavior
         run: |
           docker run --rm --entrypoint /bin/promtool \
@@ -162,6 +174,7 @@ jobs:
           python -m json.tool monitoring/grafana/dashboards/myvita-operations.json >/dev/null
           POSTGRES_USER=ci POSTGRES_PASSWORD=ci POSTGRES_DB=ci \
           JWT_SECRET_KEY=ci-only-not-a-real-secret-do-not-reuse PUBLIC_DOMAIN=localhost \
+          ALLOWED_HOSTS='["localhost"]' \
           METRICS_TOKEN=ci-metrics-only GRAFANA_ADMIN_PASSWORD=ci-grafana-only \
           docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml config --quiet
 

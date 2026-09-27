@@ -7,11 +7,17 @@ import { LoginPage } from './LoginPage'
 import { ApiError } from '../../lib/apiClient'
 import { safePostLoginPath } from '../../lib/navigation'
 import { authService } from '../../services/auth'
+import { publicConfigService } from '../../services/publicConfig'
 
 vi.mock('../../services/auth')
+vi.mock('../../services/publicConfig')
 
 function renderLoginPage() {
   vi.mocked(authService.me).mockRejectedValue(new ApiError(401, 'unauthorized'))
+  vi.mocked(publicConfigService.get).mockResolvedValue({
+    clinic_onboarding_enabled: false,
+    patient_registration_enabled: false,
+  })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const rendered = render(
     <QueryClientProvider client={queryClient}>
@@ -27,6 +33,13 @@ function renderLoginPage() {
 }
 
 describe('LoginPage', () => {
+  it('does not expose public registration links when registration is disabled', async () => {
+    renderLoginPage()
+    await waitFor(() => expect(publicConfigService.get).toHaveBeenCalled())
+    expect(screen.queryByRole('link', { name: 'Regista-te como paciente' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Cria a conta da tua clínica' })).not.toBeInTheDocument()
+  })
+
   it('only accepts internal protected routes as post-login destinations', () => {
     expect(safePostLoginPath({ from: '/app/pacientes?tab=ativos' })).toBe('/app/pacientes?tab=ativos')
     expect(safePostLoginPath({ from: '//evil.example/phishing' })).toBe('/app')

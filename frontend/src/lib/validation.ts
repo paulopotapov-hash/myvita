@@ -50,6 +50,23 @@ const passwordSchema = z
   .refine((value) => !COMMON_WEAK_PASSWORDS.has(value.toLowerCase()), 'Palavra-passe demasiado fraca.')
   .refine((value) => new Set(value).size > 2, 'Palavra-passe demasiado fraca.')
 
+export const invitationAcceptSchema = z.object({
+  password: passwordSchema,
+  confirm_password: z.string(),
+}).refine((value) => value.password === value.confirm_password, {
+  path: ['confirm_password'],
+  message: 'As palavras-passe não coincidem.',
+})
+
+export const passwordChangeSchema = z.object({
+  current_password: z.string().min(1, 'Introduz a palavra-passe atual.'),
+  new_password: passwordSchema,
+  confirm_password: z.string(),
+}).refine((value) => value.new_password === value.confirm_password, {
+  path: ['confirm_password'],
+  message: 'As palavras-passe não coincidem.',
+})
+
 export const clinicOnboardingSchema = z.object({
   clinic_name: z.string().min(2, 'Nome demasiado curto.').max(255),
   nif: z.string().max(20).optional().or(z.literal('')),
@@ -74,10 +91,8 @@ export type PatientRegisterFormValues = z.infer<typeof patientRegisterSchema>
 export const staffCreateSchema = z.object({
   full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
   email: z.email('Introduz um email válido.'),
-  password: passwordSchema,
   staff_role: z.enum(['doctor', 'nurse', 'admin']),
   specialty: z.string().max(255).optional().or(z.literal('')),
-  license_number: z.string().max(50).optional().or(z.literal('')),
 })
 export type StaffCreateFormValues = z.infer<typeof staffCreateSchema>
 

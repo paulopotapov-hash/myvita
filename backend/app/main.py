@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.config import settings
@@ -37,6 +38,7 @@ from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
 from app.modules.clinics.router import router as clinics_router
 from app.modules.consents.router import router as consents_router
+from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
 from app.modules.notifications.router import router as notifications_router
@@ -108,6 +110,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_with_audit)
 app.add_exception_handler(SQLAlchemyError, _database_error_handler)
 app.add_exception_handler(Exception, _unhandled_exception_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 app.add_middleware(
     CORSMiddleware,
@@ -205,6 +208,15 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/v1/config/public", tags=["system"])
+def public_config() -> dict[str, bool]:
+    """Non-sensitive capability flags used to keep public UI and API aligned."""
+    return {
+        "clinic_onboarding_enabled": settings.ALLOW_PUBLIC_CLINIC_ONBOARDING,
+        "patient_registration_enabled": settings.ALLOW_PUBLIC_PATIENT_REGISTRATION,
+    }
+
+
 @app.get("/ready", tags=["system"])
 def ready() -> Response:
     """Readiness probe — verifies the database connection actually works.
@@ -242,4 +254,5 @@ app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["ap
 app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
+app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])

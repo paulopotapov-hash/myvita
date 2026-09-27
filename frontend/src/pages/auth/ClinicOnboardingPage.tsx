@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
 import { useClinicOnboarding } from '../../hooks/useAuthMutations'
 import { useSession } from '../../hooks/useSession'
+import { usePublicConfig } from '../../hooks/usePublicConfig'
 import { toUserMessage } from '../../lib/errorMessages'
 import { ApiError } from '../../lib/apiClient'
 import { clinicOnboardingSchema, zodErrorsToRecord } from '../../lib/validation'
@@ -22,10 +23,14 @@ const EMPTY_FORM = {
 export function ClinicOnboardingPage() {
   const { isAuthenticated } = useSession()
   const onboard = useClinicOnboarding()
+  const publicConfig = usePublicConfig()
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   if (isAuthenticated) return <Navigate to="/app" replace />
+  if (publicConfig.isSuccess && !publicConfig.data.clinic_onboarding_enabled) {
+    return <Navigate to="/login" replace />
+  }
 
   function update<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))

@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # temporarily enable clinic onboarding during a supervised bootstrap.
     ALLOW_PUBLIC_CLINIC_ONBOARDING: bool = False
     ALLOW_PUBLIC_PATIENT_REGISTRATION: bool = False
+    INVITATION_EXPIRE_HOURS: int = Field(default=24, ge=1, le=168)
 
     # CSRF (double-submit cookie, HMAC-bound to the session)
     CSRF_COOKIE_NAME: str = "myvita_csrf"
@@ -63,6 +64,7 @@ class Settings(BaseSettings):
     CORS_ALLOW_HEADERS: list[str] = Field(
         default_factory=lambda: ["Content-Type", "X-CSRF-Token", "X-Request-ID"]
     )
+    ALLOWED_HOSTS: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "testserver"])
 
     # IPs/CIDRs of reverse proxies allowed to set X-Forwarded-For — empty by
     # default, meaning NOTHING is trusted until explicitly configured (fail
@@ -100,6 +102,8 @@ class Settings(BaseSettings):
             )
         if not self.CORS_ORIGINS:
             raise ValueError("CORS_ORIGINS must be set explicitly when ENVIRONMENT=production.")
+        if not self.ALLOWED_HOSTS or "*" in self.ALLOWED_HOSTS:
+            raise ValueError("ALLOWED_HOSTS must contain explicit hostnames in production.")
         return self
 
     @property

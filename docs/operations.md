@@ -62,7 +62,7 @@ Start the production stack with the monitoring overlay:
 
 ```bash
 POSTGRES_USER=... POSTGRES_PASSWORD=... POSTGRES_DB=... \
-JWT_SECRET_KEY=... PUBLIC_DOMAIN=... METRICS_TOKEN=... \
+JWT_SECRET_KEY=... PUBLIC_DOMAIN=... ALLOWED_HOSTS='["<PUBLIC_DOMAIN>"]' METRICS_TOKEN=... \
 GRAFANA_ADMIN_PASSWORD=... \
 docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml up -d --build
 ```
@@ -120,3 +120,12 @@ Controlled detection test:
 4. **Recover:** rollback the last known risky change or restore the affected component. For data loss, follow the isolated verification and disaster-recovery procedure above.
 5. **Verify:** confirm health/readiness, representative synthetic workflows, database integrity, metrics, alerts, and backup operation. Watch for recurrence.
 6. **Document:** record timeline, impact, root cause, actions, recovery evidence, and concrete follow-ups. Rotate any credential suspected of exposure.
+
+Scenario guidance:
+
+- **Backend down:** remove traffic, inspect proxy/backend health and logs by request ID, check the last migration/deploy, rollback the application image if appropriate, then verify synthetic login and readiness.
+- **Database down:** stop writes/traffic, check storage and PostgreSQL health without deleting volumes, recover the service or provision an isolated replacement, and use only a checksum-verified backup through the restore procedure.
+- **Disk full:** remove traffic before PostgreSQL is harmed, identify the consuming filesystem, preserve database and backup evidence, expand or safely reclaim non-data space, then verify database integrity and run a backup.
+- **Backup failure:** do not prune the last known-good copy; inspect the backup result metric and storage/network/authentication error, repair it, run a new backup, validate checksum/archive, and schedule an isolated restore drill.
+- **Authentication issue:** determine whether it is configuration, rate limiting, session invalidation, or suspected compromise. Never bypass password checks. Restore service safely; for compromise, invalidate sessions and rotate affected credentials.
+- **Security incident:** restrict access, preserve immutable logs/backups, record scope and timeline, rotate exposed credentials, assess data exposure with the approved privacy process, recover from a known-good release, and notify the designated incident/privacy roles once those roles exist.

@@ -18,6 +18,8 @@ services:
   db:
     image: postgres:16-alpine
     restart: always
+    init: true
+    stop_grace_period: 60s
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER — no insecure default in production}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD — no insecure default in production}
@@ -41,6 +43,8 @@ services:
       context: .
       dockerfile: backup/Dockerfile
     restart: always
+    init: true
+    stop_grace_period: 30s
     environment:
       DB_HOST: db
       DB_PORT: "5432"
@@ -60,6 +64,7 @@ services:
       OFFSITE_RETENTION_DAYS: ${OFFSITE_RETENTION_DAYS:-30}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +77,8 @@ services:
   backend:
     build: ./backend
     restart: always
+    init: true
+    stop_grace_period: 30s
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.30.0.10"]
     environment:
       ENVIRONMENT: production
@@ -79,9 +86,11 @@ services:
       COOKIE_SECURE: "true"
       ALLOW_PUBLIC_CLINIC_ONBOARDING: ${ALLOW_PUBLIC_CLINIC_ONBOARDING:-false}
       ALLOW_PUBLIC_PATIENT_REGISTRATION: ${ALLOW_PUBLIC_PATIENT_REGISTRATION:-false}
+      INVITATION_EXPIRE_HOURS: ${INVITATION_EXPIRE_HOURS:-24}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
       TRUSTED_PROXIES: '["172.30.0.10"]'
     depends_on:
       db:
@@ -119,6 +128,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
     depends_on:
       db:
         condition: service_healthy
@@ -140,6 +150,8 @@ services:
         # cookies and CSRF same-origin and avoid unnecessary browser CORS.
         VITE_API_BASE_URL: ""
     restart: always
+    init: true
+    stop_grace_period: 15s
     depends_on:
       backend:
         condition: service_healthy
@@ -161,6 +173,8 @@ services:
   proxy:
     build: ./proxy
     restart: always
+    init: true
+    stop_grace_period: 15s
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}
       NGINX_ENVSUBST_FILTER: ^PUBLIC_DOMAIN$

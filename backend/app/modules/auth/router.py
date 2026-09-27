@@ -1,14 +1,20 @@
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.database import get_db
 from app.core.rate_limit import LOGIN_RATE_LIMIT, limiter
-from app.core.security import clear_session_cookie, get_current_user, set_session_cookie
+from app.core.security import (
+    clear_session_cookie,
+    get_current_user,
+    hash_password,
+    set_session_cookie,
+    verify_password,
+)
 from app.models import AuditAction, AuditResult, Patient, Staff, User
-from app.modules.auth.schemas import LoginRequest, UserPublic
+from app.modules.auth.schemas import LoginRequest, PasswordChangeRequest, UserPublic
 from app.modules.auth.service import authenticate
 
 logger = logging.getLogger("myvita.auth")
@@ -71,3 +77,34 @@ def _public_user(db: Session, user: User) -> UserPublic:
 @router.get("/me", response_model=UserPublic)
 def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> UserPublic:
     return _public_user(db, user)
+
+
+@router.post("/change-password", status_code=204)
+def change_password(
+    payload: PasswordChangeRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Palavra-passe atual incorreta.")
+    if verify_password(payload.new_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A nova palavra-passe deve ser diferente.",
+        )
+    user.hashed_password = hash_password(payload.new_password)
+    user.token_epoch += 1
+    db.commit()
+    db.refresh(user)
+    set_session_cookie(response, user)
+    record_audit_event(
+        action=AuditAction.PASSWORD_CHANGE,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
