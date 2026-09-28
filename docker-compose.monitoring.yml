@@ -14,6 +14,7 @@ services:
     restart: always
     environment:
       METRICS_TOKEN: ${METRICS_TOKEN:?Set the same dedicated METRICS_TOKEN used by the backend}
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}
     depends_on:
       backend:
         condition: service_healthy

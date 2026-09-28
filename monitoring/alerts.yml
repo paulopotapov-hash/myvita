@@ -8,13 +8,13 @@ groups:
         annotations:
           summary: myVita proxy is unavailable
       - alert: MyVitaBackendDown
-        expr: probe_success{instance="http://backend:8000/health"} == 0
+        expr: probe_success{instance="http://metrics-proxy:8080/health"} == 0
         for: 2m
         labels: {severity: critical}
         annotations:
           summary: myVita backend is unavailable
       - alert: MyVitaBackendNotReady
-        expr: probe_success{instance="http://backend:8000/ready"} == 0
+        expr: probe_success{instance="http://metrics-proxy:8080/ready"} == 0
         for: 2m
         labels: {severity: critical}
         annotations:
@@ -28,6 +28,18 @@ groups:
 
   - name: myvita-errors-resources
     rules:
+      - alert: MyVitaAuthenticationFailuresHigh
+        expr: increase(myvita_auth_failures_total[10m]) > 20
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Authentication failures exceeded the pilot threshold
+      - alert: MyVitaAuthorizationDenialsHigh
+        expr: increase(myvita_authorization_denials_total[10m]) > 20
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Authorization denials exceeded the pilot threshold
       - alert: MyVitaHighHTTP5xxRate
         expr: sum(rate(myvita_http_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(myvita_http_requests_total[5m])), 0.001) > 0.05 and sum(rate(myvita_http_requests_total[5m])) > 0.1
         for: 10m

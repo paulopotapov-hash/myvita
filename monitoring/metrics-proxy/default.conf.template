@@ -5,7 +5,14 @@ server {
     location = /metrics {
         proxy_pass http://backend:8000/metrics;
         proxy_set_header X-Metrics-Token "${METRICS_TOKEN}";
-        proxy_set_header Host backend;
+        proxy_set_header Host "${PUBLIC_DOMAIN}";
+    }
+
+    # Internal-only health forwarding keeps production Host validation on.
+    # This container has no published port; Blackbox is the only consumer.
+    location ~ ^/(health|ready)$ {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host "${PUBLIC_DOMAIN}";
     }
 
     location / {

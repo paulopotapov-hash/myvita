@@ -7,6 +7,7 @@ The monitoring overlay provides Prometheus, Grafana, Alertmanager, PostgreSQL/no
 - `/health`, `/ready`, proxy and frontend health;
 - PostgreSQL reachability/connections;
 - HTTP request/status/latency trends without sensitive labels;
+- aggregate authentication failures and authorization denials without identity/resource labels;
 - host CPU, memory and disk; container restarts/resources;
 - local/off-site backup success and freshness;
 - Prometheus configuration/rules and all scrape targets;

@@ -68,6 +68,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - myvita_backups:/backups
       - myvita_backup_metrics:/metrics
@@ -89,6 +91,9 @@ services:
       ALLOW_DIRECT_STAFF_CREATION: "false"
       INVITATION_EXPIRE_HOURS: ${INVITATION_EXPIRE_HOURS:-24}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
@@ -109,7 +114,9 @@ services:
     # contains the code. Mounting source over it here would silently make
     # "production" run whatever happens to be on the host filesystem.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      # TrustedHostMiddleware intentionally rejects localhost in production,
+      # so the internal probe must send the configured public Host header.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://localhost:8000/ready', headers={'Host': '${PUBLIC_DOMAIN}'}))"]
       interval: 15s
       timeout: 5s
       retries: 5

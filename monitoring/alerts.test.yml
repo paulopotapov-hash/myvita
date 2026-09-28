@@ -6,14 +6,14 @@ evaluation_interval: 1m
 tests:
   - interval: 1m
     input_series:
-      - series: 'probe_success{instance="http://backend:8000/health",job="blackbox"}'
+      - series: 'probe_success{instance="http://metrics-proxy:8080/health",job="blackbox"}'
         values: '1 0 0 0 1'
     alert_rule_test:
       - eval_time: 3m
         alertname: MyVitaBackendDown
         exp_alerts:
           - exp_labels:
-              instance: http://backend:8000/health
+              instance: http://metrics-proxy:8080/health
               job: blackbox
               severity: critical
             exp_annotations:
@@ -39,3 +39,25 @@ tests:
       - eval_time: 7m
         alertname: MyVitaBackupLastRunFailed
         exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'myvita_auth_failures_total'
+        values: '0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45'
+      - series: 'myvita_authorization_denials_total'
+        values: '0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: MyVitaAuthenticationFailuresHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Authentication failures exceeded the pilot threshold
+      - eval_time: 15m
+        alertname: MyVitaAuthorizationDenialsHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Authorization denials exceeded the pilot threshold

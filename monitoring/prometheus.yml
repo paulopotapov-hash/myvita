@@ -34,8 +34,8 @@ scrape_configs:
     static_configs:
       - targets:
           - http://proxy:8080/healthz
-          - http://backend:8000/health
-          - http://backend:8000/ready
+          - http://metrics-proxy:8080/health
+          - http://metrics-proxy:8080/ready
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
