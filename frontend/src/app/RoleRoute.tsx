@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useSession } from '../hooks/useSession'
+import { homePathForRole } from '../lib/navigation'
 import type { UserRole } from '../types/api'
 
 /**
@@ -14,7 +15,7 @@ export function RoleRoute({ allow, children }: { allow: UserRole[]; children: Re
   const { user } = useSession()
   if (!user) return null
   if (!allow.includes(user.role)) {
-    return <Navigate to="/app" replace />
+    return <Navigate to={homePathForRole(user.role)} replace />
   }
   return <>{children}</>
 }

@@ -4,11 +4,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { RoleRoute } from './RoleRoute'
 import { authService } from '../services/auth'
-import type { UserPublic } from '../types/api'
+import type { UserPublic, UserRole } from '../types/api'
 
 vi.mock('../services/auth')
 
-function renderAsRole(role: UserPublic['role']) {
+function renderRoute(role: UserPublic['role'], initialPath: string, allow: UserRole[]) {
   vi.mocked(authService.me).mockResolvedValue({
     id: '1',
     email: 'a@b.pt',
@@ -21,14 +21,15 @@ function renderAsRole(role: UserPublic['role']) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/app/equipa']}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
-          <Route path="/app" element={<div>Dashboard</div>} />
+          <Route path="/app" element={<div>Staff home</div>} />
+          <Route path="/patient" element={<div>Patient home</div>} />
           <Route
-            path="/app/equipa"
+            path={initialPath}
             element={
-              <RoleRoute allow={['clinic_admin']}>
-                <div>Gestão de equipa</div>
+              <RoleRoute allow={allow}>
+                <div>Allowed page</div>
               </RoleRoute>
             }
           />
@@ -39,19 +40,23 @@ function renderAsRole(role: UserPublic['role']) {
 }
 
 describe('RoleRoute', () => {
-  it('renders the page when the role is allowed', async () => {
-    renderAsRole('clinic_admin')
-    await waitFor(() => expect(screen.getByText('Gestão de equipa')).toBeInTheDocument())
+  it('renders a directly opened page when the role is allowed', async () => {
+    renderRoute('clinic_admin', '/app/equipa', ['clinic_admin'])
+    await waitFor(() => expect(screen.getByText('Allowed page')).toBeInTheDocument())
   })
 
-  it('redirects away when the role is not allowed (patient hitting an admin-only page)', async () => {
-    renderAsRole('patient')
-    await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument())
-    expect(screen.queryByText('Gestão de equipa')).not.toBeInTheDocument()
+  it('redirects a patient opening /app/* to /patient without looping', async () => {
+    renderRoute('patient', '/app/equipa', ['clinic_admin'])
+    await waitFor(() => expect(screen.getByText('Patient home')).toBeInTheDocument())
   })
 
-  it('redirects away for staff too (only clinic_admin is allowed here)', async () => {
-    renderAsRole('staff')
-    await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument())
+  it.each(['staff', 'clinic_admin'] as const)('redirects %s opening /patient/* to /app', async (role) => {
+    renderRoute(role, '/patient/saude', ['patient'])
+    await waitFor(() => expect(screen.getByText('Staff home')).toBeInTheDocument())
+  })
+
+  it('keeps staff out of the admin-only team route', async () => {
+    renderRoute('staff', '/app/equipa', ['clinic_admin'])
+    await waitFor(() => expect(screen.getByText('Staff home')).toBeInTheDocument())
   })
 })

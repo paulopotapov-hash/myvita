@@ -25,6 +25,7 @@ function renderLoginPage() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/app" element={<div>Área autenticada</div>} />
+          <Route path="/patient" element={<div>Área do paciente</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -41,11 +42,14 @@ describe('LoginPage', () => {
   })
 
   it('only accepts internal protected routes as post-login destinations', () => {
-    expect(safePostLoginPath({ from: '/app/pacientes?tab=ativos' })).toBe('/app/pacientes?tab=ativos')
-    expect(safePostLoginPath({ from: '//evil.example/phishing' })).toBe('/app')
-    expect(safePostLoginPath({ from: 'https://evil.example/phishing' })).toBe('/app')
-    expect(safePostLoginPath({ from: '/login' })).toBe('/app')
-    expect(safePostLoginPath({ from: '/app\\evil.example' })).toBe('/app')
+    expect(safePostLoginPath({ from: '/app/pacientes?tab=ativos' }, 'staff')).toBe('/app/pacientes?tab=ativos')
+    expect(safePostLoginPath({ from: '/patient/perfil' }, 'patient')).toBe('/patient/perfil')
+    expect(safePostLoginPath({ from: '/app/pacientes' }, 'patient')).toBe('/patient')
+    expect(safePostLoginPath({ from: '/patient/saude' }, 'clinic_admin')).toBe('/app')
+    expect(safePostLoginPath({ from: '//evil.example/phishing' }, 'patient')).toBe('/patient')
+    expect(safePostLoginPath({ from: 'https://evil.example/phishing' }, 'staff')).toBe('/app')
+    expect(safePostLoginPath({ from: '/login' }, 'staff')).toBe('/app')
+    expect(safePostLoginPath({ from: '/app\\evil.example' }, 'staff')).toBe('/app')
   })
 
   it('shows validation errors for an empty/invalid form without calling the API', async () => {
@@ -74,7 +78,7 @@ describe('LoginPage', () => {
     expect(await screen.findByText('Email ou palavra-passe incorretos.')).toBeInTheDocument()
   })
 
-  it('redirects to /app after a successful login', async () => {
+  it('redirects a patient to /patient after a successful login', async () => {
     vi.mocked(authService.login).mockResolvedValue({
       id: '1',
       email: 'ana@example.com',
@@ -92,7 +96,7 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText('Palavra-passe'), 'senha-correta')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
 
-    await waitFor(() => expect(screen.getByText('Área autenticada')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Área do paciente')).toBeInTheDocument())
     expect(queryClient.getQueryData(['patients'])).toBeUndefined()
   })
 })

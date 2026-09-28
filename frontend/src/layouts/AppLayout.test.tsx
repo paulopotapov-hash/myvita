@@ -38,19 +38,11 @@ function renderLayoutAsRole(role: UserPublic['role']) {
 }
 
 describe('AppLayout navigation', () => {
-  it('starts the server-backed logout flow from the application shell', async () => {
+  it('starts the server-backed logout flow from the staff shell', async () => {
     const user = userEvent.setup()
-    renderLayoutAsRole('patient')
+    renderLayoutAsRole('staff')
     await user.click(await screen.findByRole('button', { name: 'Sair' }))
     expect(logoutMutate).toHaveBeenCalledOnce()
-  })
-
-  it('shows patient-only links for the patient role', async () => {
-    renderLayoutAsRole('patient')
-    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
-    expect(screen.getAllByRole('link', { name: 'Perfil' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'As minhas consultas' }).length).toBeGreaterThan(0)
-    expect(screen.queryAllByRole('link', { name: 'Equipa' })).toHaveLength(0)
   })
 
   it('shows admin-only "Equipa" link only for clinic_admin', async () => {

@@ -3,6 +3,7 @@ import { ProtectedRoute } from './app/ProtectedRoute'
 import { RoleRoute } from './app/RoleRoute'
 import { RootRedirect } from './app/RootRedirect'
 import { AppLayout } from './layouts/AppLayout'
+import { PatientLayout } from './layouts/PatientLayout'
 import { ClinicOnboardingPage } from './pages/auth/ClinicOnboardingPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { InvitationAcceptPage } from './pages/auth/InvitationAcceptPage'
@@ -16,6 +17,7 @@ import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
+import { PatientDashboard } from './pages/patient/PatientDashboard'
 
 export default function App() {
   return (
@@ -30,7 +32,9 @@ export default function App() {
         path="/app"
         element={
           <ProtectedRoute>
-            <AppLayout />
+            <RoleRoute allow={['staff', 'clinic_admin']}>
+              <AppLayout />
+            </RoleRoute>
           </ProtectedRoute>
         }
       >
@@ -38,22 +42,6 @@ export default function App() {
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
-        <Route
-          path="saude"
-          element={
-            <RoleRoute allow={['patient']}>
-              <PatientDetailPage own />
-            </RoleRoute>
-          }
-        />
-        <Route
-          path="perfil"
-          element={
-            <RoleRoute allow={['patient']}>
-              <PatientProfilePage />
-            </RoleRoute>
-          }
-        />
         <Route
           path="pacientes"
           element={
@@ -78,6 +66,23 @@ export default function App() {
             </RoleRoute>
           }
         />
+      </Route>
+
+      <Route
+        path="/patient"
+        element={
+          <ProtectedRoute>
+            <RoleRoute allow={['patient']}>
+              <PatientLayout />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<PatientDashboard />} />
+        <Route path="consultas" element={<AppointmentsPage />} />
+        <Route path="perfil" element={<PatientProfilePage />} />
+        <Route path="saude" element={<PatientDetailPage own />} />
+        <Route path="notificacoes" element={<NotificationsPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

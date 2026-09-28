@@ -11,7 +11,7 @@ import { loginSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 
 export function LoginPage() {
-  const { isAuthenticated } = useSession()
+  const { user } = useSession()
   const location = useLocation()
   const login = useLogin()
   const publicConfig = usePublicConfig()
@@ -21,8 +21,8 @@ export function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // Already logged in (e.g. opened /login in a second tab) — go straight in.
-  if (isAuthenticated) {
-    const redirectTo = safePostLoginPath(location.state)
+  if (user) {
+    const redirectTo = safePostLoginPath(location.state, user.role)
     return <Navigate to={redirectTo} replace />
   }
 

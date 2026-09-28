@@ -1,15 +1,22 @@
-export function safePostLoginPath(state: unknown): string {
-  if (typeof state !== 'object' || state === null || !('from' in state)) return '/app'
-  const from = (state as { from?: unknown }).from
-  if (typeof from !== 'string') return '/app'
+import type { UserRole } from '../types/api'
 
-  // ProtectedRoute only creates destinations below /app. Treat route state
-  // as untrusted nevertheless: protocol-relative URLs, backslashes and
-  // control characters must never become post-login navigation targets.
+export function homePathForRole(role: UserRole): '/patient' | '/app' {
+  return role === 'patient' ? '/patient' : '/app'
+}
+
+export function safePostLoginPath(state: unknown, role: UserRole): string {
+  const homePath = homePathForRole(role)
+  if (typeof state !== 'object' || state === null || !('from' in state)) return homePath
+  const from = (state as { from?: unknown }).from
+  if (typeof from !== 'string') return homePath
+
+  // Router state is untrusted: only the current role's area is restorable,
+  // and protocol-relative URLs, backslashes or control characters are rejected.
   const hasUnsafeCharacter = [...from].some((character) => {
     const code = character.charCodeAt(0)
     return character === '\\' || code <= 31 || code === 127
   })
-  if (!/^\/app(?:[/?#]|$)/.test(from) || hasUnsafeCharacter) return '/app'
+  const roleAreaPattern = role === 'patient' ? /^\/patient(?:[/?#]|$)/ : /^\/app(?:[/?#]|$)/
+  if (!roleAreaPattern.test(from) || hasUnsafeCharacter) return homePath
   return from
 }
