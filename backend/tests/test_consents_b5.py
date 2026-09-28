@@ -150,13 +150,8 @@ def test_patient_cannot_access_another_patient_in_same_clinic(client: TestClient
         },
     )
     other_id = response.json()["id"]
-    assert (
-        client.get(
-            f"/api/v1/patients/{other_id}/consents",
-            cookies={settings.COOKIE_NAME: tenant["patient"]["session"]},
-        ).status_code
-        == 404
-    )
+    client.cookies.set(settings.COOKIE_NAME, tenant["patient"]["session"])
+    assert client.get(f"/api/v1/patients/{other_id}/consents").status_code == 404
 
 
 def test_cross_tenant_create_read_and_revoke_are_hidden(client: TestClient):

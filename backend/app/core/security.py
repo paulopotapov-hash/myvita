@@ -4,7 +4,7 @@ protection, and FastAPI dependencies that enforce authentication + tenant
 (clinic) scoping.
 
 Design decisions (do not change without discussion):
-- Passwords hashed with Argon2id (via passlib's argon2 backend).
+- Passwords hashed with Argon2id via argon2-cffi.
 - Sessions are httpOnly cookies carrying a JWT, NOT localStorage.
 - Each JWT embeds a `token_epoch` matching the user's current epoch in DB.
   Bumping the user's epoch (e.g. on password change / forced logout)
@@ -20,15 +20,16 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
 from fastapi import Cookie, Depends, HTTPException, Request, Response, status
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User, UserRole
 
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+password_hasher = PasswordHasher()
 
 # Methods that never require a CSRF token, per RFC 7231 they must not have
 # side effects. OPTIONS is included so CORS preflight always succeeds.
@@ -36,11 +37,14 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def hash_password(plain_password: str) -> str:
-    return pwd_context.hash(plain_password)
+    return password_hasher.hash(plain_password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return password_hasher.verify(hashed_password, plain_password)
+    except (VerificationError, InvalidHashError):
+        return False
 
 
 def create_access_token(user: User) -> str:

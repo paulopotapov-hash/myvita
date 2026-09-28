@@ -52,9 +52,9 @@ warn_unused_configs = true
 no_implicit_optional = true
 
 # No official type stubs published for these; silencing import errors here
-# is scoped to exactly these two libraries, not the whole codebase.
+# is scoped to exactly these libraries, not the whole codebase.
 [[tool.mypy.overrides]]
-module = ["jwt.*", "passlib.*", "slowapi.*"]
+module = ["jwt.*", "slowapi.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

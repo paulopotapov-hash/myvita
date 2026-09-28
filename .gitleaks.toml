@@ -5,3 +5,8 @@ useDefault = true
 description = "Documented Portuguese placeholder used in README production examples"
 regexTarget = "match"
 regexes = ['''gera-um-valor-com-pelo-menos-32-bytes''']
+
+[[allowlists]]
+description = "Known prose-only finding in the production-readiness matrix; contains no assigned value"
+regexTarget = "secret"
+regexes = ['''encryption/immutability''']

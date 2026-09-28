@@ -6,6 +6,6 @@ psycopg[binary]==3.2.3
 pydantic==2.10.3
 pydantic[email]==2.10.3
 pydantic-settings==2.7.0
-passlib[argon2]==1.7.4
+argon2-cffi==25.1.0
 pyjwt==2.13.0
 slowapi==0.1.10
