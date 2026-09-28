@@ -30,6 +30,10 @@ class InvitationAcceptRequest(RequestModel):
         return validate_password_strength(value)
 
 
+class InvitationPreviewRequest(RequestModel):
+    token: str = Field(min_length=40, max_length=200)
+
+
 class InvitationPublic(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID

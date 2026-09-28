@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 from app.core.audit import client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
+from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, Patient, User, UserRole
 from app.modules.patients.schemas import PatientPublic, PatientRegisterRequest, PatientUpdateRequest
 from app.modules.patients.service import (
+    deactivate_patient,
     get_patient_for_user,
     list_patients_for_clinic,
     register_patient,
@@ -22,6 +23,7 @@ router = APIRouter()
 # See app/modules/appointments/router.py for why this is a module-level
 # variable instead of an inline require_roles(...) call in the signature.
 _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
+_admin_only = require_roles(UserRole.CLINIC_ADMIN)
 
 
 def _public(patient: Patient) -> PatientPublic:
@@ -145,6 +147,30 @@ def update(
         actor_email=user.email,
         resource_type="patient",
         resource_id=patient.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return _public(patient)
+
+
+@router.post("/{patient_id}/deactivate", response_model=PatientPublic)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def deactivate(
+    patient_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_admin_only),
+) -> PatientPublic:
+    patient = deactivate_patient(db, patient_id, clinic_id)
+    record_audit_event(
+        action=AuditAction.USER_DISABLED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="user",
+        resource_id=patient.user_id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )

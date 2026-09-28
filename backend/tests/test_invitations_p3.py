@@ -19,10 +19,19 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _clinic_user(db, *, name: str, email: str, role: UserRole, staff_role: StaffRole | None = None):
-    clinic = Clinic(name=name)
-    db.add(clinic)
-    db.flush()
+def _clinic_user(
+    db,
+    *,
+    name: str,
+    email: str,
+    role: UserRole,
+    staff_role: StaffRole | None = None,
+    clinic: Clinic | None = None,
+):
+    clinic = clinic or Clinic(name=name)
+    if clinic.id is None:
+        db.add(clinic)
+        db.flush()
     user = User(
         email=email,
         full_name=email,
@@ -102,6 +111,21 @@ def test_expired_and_unknown_invitations_are_rejected(client, db_session):
     )
     assert expired.status_code == 410
     assert unknown.status_code == 404
+
+
+def test_invitation_token_never_uses_query_string_and_tampering_is_rejected(client, db_session):
+    _, admin = _clinic_user(
+        db_session, name="Clinic Preview", email="admin-preview@example.com", role=UserRole.CLINIC_ADMIN
+    )
+    created = _invite_staff(client, _authenticate(client, admin), "preview@example.com")
+    token = created.json()["token"]
+
+    preview = client.post("/api/v1/invitations/preview", json={"token": token})
+    assert preview.status_code == 200
+    assert preview.json()["email"] == "preview@example.com"
+    assert client.get(f"/api/v1/invitations/preview?token={token}").status_code == 405
+    tampered = f"{token[:-1]}{'A' if token[-1] != 'A' else 'B'}"
+    assert client.post("/api/v1/invitations/preview", json={"token": tampered}).status_code == 404
 
 
 def test_cross_tenant_and_privilege_escalation_inputs_are_blocked(client, db_session):
@@ -190,3 +214,101 @@ def test_password_change_requires_current_password_and_revokes_old_session(clien
     )
     assert old_login.status_code == 401
     assert new_login.status_code == 200
+
+
+def test_admin_deactivation_revokes_staff_session_and_is_tenant_scoped(client, db_session):
+    clinic, admin = _clinic_user(
+        db_session, name="Offboarding Clinic", email="offboard-admin@example.com", role=UserRole.CLINIC_ADMIN
+    )
+    _, doctor = _clinic_user(
+        db_session,
+        name="Offboarding Clinic",
+        email="offboard-doctor@example.com",
+        role=UserRole.STAFF,
+        staff_role=StaffRole.DOCTOR,
+        clinic=clinic,
+    )
+    other_clinic, other_admin = _clinic_user(
+        db_session, name="Other Clinic", email="other-admin@example.com", role=UserRole.CLINIC_ADMIN
+    )
+    staff = doctor.staff_profile
+    doctor_token = create_access_token(doctor)
+
+    forbidden = client.post(
+        f"/api/v1/staff/{staff.id}/deactivate",
+        headers=_authenticate(client, other_admin),
+    )
+    assert forbidden.status_code == 404
+    assert doctor.is_active is True
+    assert other_clinic.id != clinic.id
+
+    deactivated = client.post(
+        f"/api/v1/staff/{staff.id}/deactivate",
+        headers=_authenticate(client, admin),
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+
+    client.cookies.clear()
+    from app.core.config import settings
+
+    client.cookies.set(settings.COOKIE_NAME, doctor_token)
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_direct_staff_password_creation_is_disabled_outside_test_escape_hatch(
+    client, db_session, monkeypatch
+):
+    _, admin = _clinic_user(
+        db_session, name="Invite Only Clinic", email="invite-only@example.com", role=UserRole.CLINIC_ADMIN
+    )
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ALLOW_DIRECT_STAFF_CREATION", False)
+    response = client.post(
+        "/api/v1/staff",
+        headers=_authenticate(client, admin),
+        json={
+            "email": "legacy-password@example.com",
+            "full_name": "Legacy Account",
+            "password": PASSWORD,
+            "staff_role": "doctor",
+        },
+    )
+    assert response.status_code == 403
+    assert db_session.query(User).filter(User.email == "legacy-password@example.com").first() is None
+
+
+def test_admin_can_deactivate_patient_but_not_cross_tenant(client, db_session):
+    clinic, admin = _clinic_user(
+        db_session, name="Patient Offboarding", email="patient-admin@example.com", role=UserRole.CLINIC_ADMIN
+    )
+    _, patient_user = _clinic_user(
+        db_session,
+        name="Patient Offboarding",
+        email="offboard-patient@example.com",
+        role=UserRole.PATIENT,
+        clinic=clinic,
+    )
+    _, other_admin = _clinic_user(
+        db_session, name="Other Patient Clinic", email="other-patient-admin@example.com", role=UserRole.CLINIC_ADMIN
+    )
+    patient = patient_user.patient_profile
+    old_token = create_access_token(patient_user)
+
+    assert client.post(
+        f"/api/v1/patients/{patient.id}/deactivate",
+        headers=_authenticate(client, other_admin),
+    ).status_code == 404
+    response = client.post(
+        f"/api/v1/patients/{patient.id}/deactivate",
+        headers=_authenticate(client, admin),
+    )
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+    from app.core.config import settings
+
+    client.cookies.clear()
+    client.cookies.set(settings.COOKIE_NAME, old_token)
+    assert client.get("/api/v1/auth/me").status_code == 401

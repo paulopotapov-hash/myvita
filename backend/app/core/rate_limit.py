@@ -34,3 +34,4 @@ REGISTRATION_RATE_LIMIT = "5/minute"
 # caller already proved who they are, so this is about capping the blast
 # radius of a compromised/malicious admin session, not brute force.
 AUTHENTICATED_WRITE_RATE_LIMIT = "20/minute"
+INVITATION_PUBLIC_RATE_LIMIT = "10/minute"

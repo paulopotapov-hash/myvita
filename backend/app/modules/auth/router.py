@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.database import get_db
-from app.core.rate_limit import LOGIN_RATE_LIMIT, limiter
+from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, LOGIN_RATE_LIMIT, limiter
 from app.core.security import (
     clear_session_cookie,
     get_current_user,
@@ -80,6 +80,7 @@ def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) ->
 
 
 @router.post("/change-password", status_code=204)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
 def change_password(
     payload: PasswordChangeRequest,
     request: Request,

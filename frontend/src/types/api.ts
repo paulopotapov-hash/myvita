@@ -51,6 +51,7 @@ export interface StaffPublic {
   full_name: string
   staff_role: StaffRole
   specialty: string | null
+  is_active: boolean
 }
 
 export interface AppointmentPublic {

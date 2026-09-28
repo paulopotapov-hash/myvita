@@ -220,6 +220,7 @@ def test_production_config_rejects_wildcard_cors():
         Settings(
             JWT_SECRET_KEY="x" * 32,
             ENVIRONMENT="production",
+            ALLOW_DIRECT_STAFF_CREATION=False,
             COOKIE_SECURE=True,
             CORS_ORIGINS=["*"],
         )
@@ -234,6 +235,7 @@ def test_production_config_rejects_empty_cors():
         Settings(
             JWT_SECRET_KEY="x" * 32,
             ENVIRONMENT="production",
+            ALLOW_DIRECT_STAFF_CREATION=False,
             COOKIE_SECURE=True,
             CORS_ORIGINS=[],
         )

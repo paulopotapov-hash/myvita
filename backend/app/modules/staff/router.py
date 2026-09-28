@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, Request
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import client_ip, record_audit_event
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
 from app.models import AuditAction, AuditResult, Staff, User, UserRole
 from app.modules.staff.schemas import StaffCreateRequest, StaffPublic
-from app.modules.staff.service import create_staff_member
+from app.modules.staff.service import create_staff_member, deactivate_staff_member
 
 router = APIRouter()
 
@@ -25,6 +28,11 @@ def create(
     clinic_id: str = Depends(get_current_clinic_id),
     _admin: User = Depends(_clinic_admin_only),
 ) -> StaffPublic:
+    if not settings.ALLOW_DIRECT_STAFF_CREATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Criação direta desativada. Utilize um convite seguro.",
+        )
     staff = create_staff_member(db, clinic_id, payload)
     record_audit_event(
         action=AuditAction.STAFF_CREATED,
@@ -43,6 +51,7 @@ def create(
         full_name=payload.full_name,
         staff_role=staff.staff_role,
         specialty=staff.specialty,
+        is_active=staff.user.is_active,
     )
 
 
@@ -71,6 +80,38 @@ def list_mine(
             full_name=s.user.full_name,
             staff_role=s.staff_role,
             specialty=s.specialty,
+            is_active=s.user.is_active,
         )
         for s in staff_members
     ]
+
+
+@router.post("/{staff_id}/deactivate", response_model=StaffPublic)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def deactivate(
+    staff_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_clinic_admin_only),
+) -> StaffPublic:
+    staff = deactivate_staff_member(db, staff_id, clinic_id, admin.id)
+    record_audit_event(
+        action=AuditAction.USER_DISABLED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="user",
+        resource_id=staff.user_id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return StaffPublic(
+        id=staff.id,
+        clinic_id=staff.clinic_id,
+        full_name=staff.user.full_name,
+        staff_role=staff.staff_role,
+        specialty=staff.specialty,
+        is_active=staff.user.is_active,
+    )

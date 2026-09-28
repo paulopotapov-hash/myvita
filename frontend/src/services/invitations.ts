@@ -3,7 +3,7 @@ import type { InvitationAcceptRequest, InvitationCreated, InvitationPreview, Sta
 
 export const invitationsService = {
   preview: (token: string, signal?: AbortSignal) =>
-    api.get<InvitationPreview>(`/api/v1/invitations/preview?token=${encodeURIComponent(token)}`, signal),
+    api.post<InvitationPreview>('/api/v1/invitations/preview', { token }, signal),
   accept: (payload: InvitationAcceptRequest) =>
     api.post<UserPublic>('/api/v1/invitations/accept', payload),
   inviteStaff: (payload: StaffInvitationRequest) =>

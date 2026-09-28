@@ -230,7 +230,11 @@ def test_production_with_cookie_secure_is_accepted():
     from app.core.config import Settings
 
     settings = Settings(
-        JWT_SECRET_KEY="x" * 32, ENVIRONMENT="production", COOKIE_SECURE=True, CORS_ORIGINS=["https://app.myvita.pt"]
+        JWT_SECRET_KEY="x" * 32,
+        ENVIRONMENT="production",
+        COOKIE_SECURE=True,
+        CORS_ORIGINS=["https://app.myvita.pt"],
+        ALLOW_DIRECT_STAFF_CREATION=False,
     )
     assert settings.is_production
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import client_ip, record_audit_event
 from app.core.clinical_access import clinical_staff
 from app.core.database import get_db
+from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, INVITATION_PUBLIC_RATE_LIMIT, limiter
 from app.core.security import require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, User, UserRole
 from app.modules.auth.router import _public_user
@@ -14,6 +15,7 @@ from app.modules.invitations.schemas import (
     InvitationAcceptRequest,
     InvitationCreated,
     InvitationPreview,
+    InvitationPreviewRequest,
     PatientInvitationCreateRequest,
     StaffInvitationCreateRequest,
 )
@@ -45,6 +47,7 @@ def _audit(
 
 
 @router.post("/staff", response_model=InvitationCreated, status_code=status.HTTP_201_CREATED)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
 def invite_staff(
     payload: StaffInvitationCreateRequest,
     request: Request,
@@ -68,6 +71,7 @@ def invite_staff(
 
 
 @router.post("/patients", response_model=InvitationCreated, status_code=status.HTTP_201_CREATED)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
 def invite_patient(
     payload: PatientInvitationCreateRequest,
     request: Request,
@@ -89,9 +93,14 @@ def invite_patient(
     return InvitationCreated.model_validate({**invitation.__dict__, "token": token})
 
 
-@router.get("/preview", response_model=InvitationPreview)
-def preview(token: str, db: Session = Depends(get_db)) -> InvitationPreview:
-    invitation, clinic = invitation_preview(db, token)
+@router.post("/preview", response_model=InvitationPreview)
+@limiter.limit(INVITATION_PUBLIC_RATE_LIMIT)
+def preview(
+    payload: InvitationPreviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> InvitationPreview:
+    invitation, clinic = invitation_preview(db, payload.token)
     return InvitationPreview(
         clinic_name=clinic.name,
         email=invitation.email,
@@ -103,6 +112,7 @@ def preview(token: str, db: Session = Depends(get_db)) -> InvitationPreview:
 
 
 @router.post("/accept", response_model=UserPublic)
+@limiter.limit(INVITATION_PUBLIC_RATE_LIMIT)
 def accept(
     payload: InvitationAcceptRequest,
     request: Request,

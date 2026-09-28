@@ -29,5 +29,6 @@ class StaffPublic(BaseModel):
     full_name: str
     staff_role: StaffRole
     specialty: str | None
+    is_active: bool
 
     model_config = {"from_attributes": True}

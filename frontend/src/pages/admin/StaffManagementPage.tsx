@@ -45,7 +45,7 @@ export function StaffManagementPage() {
       {
         onSuccess: (invitation) => {
           setForm(EMPTY_FORM)
-          setInvitationLink(`${window.location.origin}/convite?token=${encodeURIComponent(invitation.token)}`)
+          setInvitationLink(`${window.location.origin}/convite#token=${encodeURIComponent(invitation.token)}`)
         },
         onError: (error) => {
           if (error instanceof ApiError && error.fieldErrors) {

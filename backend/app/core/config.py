@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # temporarily enable clinic onboarding during a supervised bootstrap.
     ALLOW_PUBLIC_CLINIC_ONBOARDING: bool = False
     ALLOW_PUBLIC_PATIENT_REGISTRATION: bool = False
+    ALLOW_DIRECT_STAFF_CREATION: bool = False
     INVITATION_EXPIRE_HOURS: int = Field(default=24, ge=1, le=168)
 
     # CSRF (double-submit cookie, HMAC-bound to the session)
@@ -104,6 +105,8 @@ class Settings(BaseSettings):
             raise ValueError("CORS_ORIGINS must be set explicitly when ENVIRONMENT=production.")
         if not self.ALLOWED_HOSTS or "*" in self.ALLOWED_HOSTS:
             raise ValueError("ALLOWED_HOSTS must contain explicit hostnames in production.")
+        if self.ALLOW_DIRECT_STAFF_CREATION:
+            raise ValueError("Direct staff creation is forbidden in production; use invitations.")
         return self
 
     @property

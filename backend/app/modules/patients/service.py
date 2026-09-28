@@ -86,3 +86,20 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateReq
     db.commit()
     db.refresh(patient)
     return patient
+
+
+def deactivate_patient(db: Session, patient_id: uuid.UUID, clinic_id: str) -> Patient:
+    patient = (
+        db.query(Patient)
+        .options(selectinload(Patient.user))
+        .filter(Patient.id == patient_id, Patient.clinic_id == clinic_id)
+        .first()
+    )
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
+    if patient.user.is_active:
+        patient.user.is_active = False
+        patient.user.token_epoch += 1
+        db.commit()
+        db.refresh(patient)
+    return patient

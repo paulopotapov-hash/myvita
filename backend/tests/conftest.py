@@ -17,6 +17,7 @@ from sqlalchemy.orm import sessionmaker
 # Compose explicitly defaults these controls to false.
 os.environ.setdefault("ALLOW_PUBLIC_CLINIC_ONBOARDING", "true")
 os.environ.setdefault("ALLOW_PUBLIC_PATIENT_REGISTRATION", "true")
+os.environ.setdefault("ALLOW_DIRECT_STAFF_CREATION", "true")
 
 from app.core.database import Base
 from app.core.rate_limit import limiter

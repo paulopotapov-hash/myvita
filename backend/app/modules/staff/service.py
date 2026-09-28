@@ -1,5 +1,7 @@
+import uuid
+
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import hash_password
 from app.models import Staff, User, UserRole
@@ -33,4 +35,28 @@ def create_staff_member(db: Session, clinic_id: str, payload: StaffCreateRequest
     db.add(staff)
     db.commit()
     db.refresh(staff)
+    return staff
+
+
+def deactivate_staff_member(
+    db: Session, staff_id: uuid.UUID, clinic_id: str, actor_user_id: uuid.UUID
+) -> Staff:
+    staff = (
+        db.query(Staff)
+        .options(selectinload(Staff.user))
+        .filter(Staff.id == staff_id, Staff.clinic_id == clinic_id)
+        .first()
+    )
+    if staff is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profissional não encontrado.")
+    if staff.user_id == actor_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Não pode desativar a própria conta administrativa.",
+        )
+    if staff.user.is_active:
+        staff.user.is_active = False
+        staff.user.token_epoch += 1
+        db.commit()
+        db.refresh(staff)
     return staff

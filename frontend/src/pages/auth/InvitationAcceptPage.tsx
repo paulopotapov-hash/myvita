@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
@@ -12,12 +12,14 @@ import { AuthLayout } from '../../layouts/AuthLayout'
 import { invitationsService } from '../../services/invitations'
 
 export function InvitationAcceptPage() {
-  const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '')
   const queryClient = useQueryClient()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (window.location.hash) window.history.replaceState(null, '', '/convite')
+  }, [])
   const preview = useQuery({
     queryKey: ['invitation-preview', token],
     queryFn: ({ signal }) => invitationsService.preview(token, signal),
