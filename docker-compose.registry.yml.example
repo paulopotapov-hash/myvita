@@ -1,0 +1,22 @@
+# Optional immutable-image overlay for a real deployment.
+#
+# Every value must be a reviewed registry reference pinned by digest, for example:
+#   ghcr.io/<owner>/<repository>/backend@sha256:<digest>
+# Pull first, then start with --no-build so the host never builds mutable source:
+#   docker compose -f docker-compose.prod.yml \
+#     -f docker-compose.monitoring.yml \
+#     -f docker-compose.registry.yml.example pull
+#   docker compose ... up -d --no-build
+services:
+  backend:
+    image: ${MYVITA_BACKEND_IMAGE:?Set a digest-pinned backend image}
+  migrate:
+    image: ${MYVITA_BACKEND_IMAGE:?Set a digest-pinned backend image}
+  frontend:
+    image: ${MYVITA_FRONTEND_IMAGE:?Set a digest-pinned frontend image}
+  backup:
+    image: ${MYVITA_BACKUP_IMAGE:?Set a digest-pinned backup image}
+  proxy:
+    image: ${MYVITA_PROXY_IMAGE:?Set a digest-pinned proxy image}
+  metrics-proxy:
+    image: ${MYVITA_METRICS_PROXY_IMAGE:?Set a digest-pinned metrics-proxy image}
