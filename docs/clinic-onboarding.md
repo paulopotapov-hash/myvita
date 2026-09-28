@@ -32,3 +32,19 @@ Self-service password recovery and MFA are intentionally not simulated. They req
 5. Revoke/replace an exposed pending invitation. Escalate suspected accepted-token compromise as an incident and invalidate sessions.
 
 Clinic administrators can deactivate a staff or patient account through the tenant-scoped deactivation endpoints. Deactivation preserves clinical/audit history, increments `token_epoch`, and immediately rejects previously issued sessions. Cross-clinic targets are returned as not found, and an administrator cannot deactivate their own administrative account through the staff endpoint.
+
+## End-to-end controlled pilot sequence
+
+1. Externally verify the clinic and first administrator identity/authority.
+2. During a supervised bootstrap only, enable clinic onboarding, create the clinic/first admin over TLS, then immediately disable and verify the endpoint is closed.
+3. The clinic admin creates a staff invitation; only the one-time fragment link leaves the application response.
+4. The staff recipient previews the clinic/role, accepts, creates a private password and receives a session.
+5. Verify `/auth/me`, tenant/role and invitation audit events; the operator never sees the password.
+6. Clinic admin or doctor/nurse creates a patient invitation and delivers it through the approved private channel.
+7. Patient previews/accepts, creates a password and receives a session.
+8. Verify the patient can see only their own resources and administrative roles cannot see clinical fields.
+9. For offboarding/compromise, the clinic admin deactivates the same-clinic user; existing sessions return 401.
+10. Logout and password change also increment the epoch and revoke older sessions.
+11. Reactivation/role change is not implemented; escalate through the approved owner rather than modifying the database ad hoc.
+
+There is no permanent superadmin. If a safe supervised bootstrap mechanism is unavailable in the selected infrastructure, first-clinic creation is an operational blocker; do not leave public onboarding enabled as a workaround.
