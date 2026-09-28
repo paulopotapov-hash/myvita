@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.logging_setup import configure_logging
 from app.core.metrics import (
+    authorization_denials_total,
     db_errors_total,
     http_request_duration_seconds_count,
     http_request_duration_seconds_sum,
@@ -55,6 +56,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url=None,
+    openapi_url="/openapi.json" if not settings.is_production else None,
 )
 
 app.state.limiter = limiter
@@ -158,7 +160,11 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
     try:
         response: Response | None = None
         origin = request.headers.get("origin")
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and origin is not None and origin not in settings.CORS_ORIGINS:
+        if (
+            request.method not in {"GET", "HEAD", "OPTIONS"}
+            and origin is not None
+            and origin not in settings.CORS_ORIGINS
+        ):
             response = JSONResponse(status_code=403, content={"detail": "Origem do pedido não permitida."})
 
         content_length = request.headers.get("content-length")
@@ -183,6 +189,8 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
 
         method = request.method
         http_requests_total.inc(method, status_class(response.status_code))
+        if response.status_code == 403:
+            authorization_denials_total.inc()
         http_request_duration_seconds_sum.inc(method, amount=duration_ms / 1000)
         http_request_duration_seconds_count.inc(method)
 

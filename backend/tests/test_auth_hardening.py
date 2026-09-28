@@ -5,6 +5,11 @@ Tests for Phase 1 foundation hardening:
 - baseline security headers on every response
 - fail-closed settings validation (JWT algorithm allowlist, prod cookie flag)
 """
+
+import os
+import subprocess
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -230,10 +235,12 @@ def test_production_with_cookie_secure_is_accepted():
     from app.core.config import Settings
 
     settings = Settings(
-        JWT_SECRET_KEY="x" * 32,
+        JWT_SECRET_KEY="production-key-material-with-12+unique-chars!",
         ENVIRONMENT="production",
         COOKIE_SECURE=True,
         CORS_ORIGINS=["https://app.myvita.pt"],
+        ALLOWED_HOSTS=["app.myvita.pt"],
+        DATABASE_URL="postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
         ALLOW_DIRECT_STAFF_CREATION=False,
     )
     assert settings.is_production
@@ -246,3 +253,61 @@ def test_jwt_secret_key_too_short_is_rejected():
 
     with pytest.raises(ValidationError):
         Settings(JWT_SECRET_KEY="too-short")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"JWT_SECRET_KEY": "x" * 32}, "JWT_SECRET_KEY"),
+        ({"DATABASE_URL": "postgresql+psycopg://myvita:myvita@db:5432/myvita"}, "DATABASE_URL"),
+        ({"CORS_ORIGINS": ["http://app.myvita.pt"]}, "HTTPS"),
+        ({"ALLOWED_HOSTS": ["localhost"]}, "local/test"),
+        ({"METRICS_TOKEN": "short"}, "METRICS_TOKEN"),
+    ],
+)
+def test_production_rejects_obviously_insecure_configuration(overrides, message):
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    values = {
+        "JWT_SECRET_KEY": "production-key-material-with-12+unique-chars!",
+        "ENVIRONMENT": "production",
+        "COOKIE_SECURE": True,
+        "CORS_ORIGINS": ["https://app.myvita.pt"],
+        "ALLOWED_HOSTS": ["app.myvita.pt"],
+        "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
+    }
+    values.update(overrides)
+    with pytest.raises(ValidationError, match=message):
+        Settings(**values)
+
+
+def test_production_disables_interactive_and_openapi_documentation():
+    environment = {
+        **os.environ,
+        "ENVIRONMENT": "production",
+        "DEBUG": "false",
+        "COOKIE_SECURE": "true",
+        "JWT_SECRET_KEY": "production-key-material-with-12+unique-chars!",
+        "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
+        "CORS_ORIGINS": '["https://app.myvita.pt"]',
+        "ALLOWED_HOSTS": '["app.myvita.pt"]',
+        "ALLOW_PUBLIC_CLINIC_ONBOARDING": "false",
+        "ALLOW_PUBLIC_PATIENT_REGISTRATION": "false",
+        "ALLOW_DIRECT_STAFF_CREATION": "false",
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.main import app; "
+            "assert app.docs_url is None; assert app.redoc_url is None; assert app.openapi_url is None",
+        ],
+        cwd=os.path.dirname(os.path.dirname(__file__)),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

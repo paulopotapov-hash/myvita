@@ -10,6 +10,7 @@ at once: it blows up cardinality in any real metrics backend, and it turns
 the metrics endpoint into an accidental second, access-control-free audit
 log. Labels here are small, fixed sets only: HTTP method, status class.
 """
+
 import threading
 
 _LabelKey = tuple[str, ...]
@@ -33,6 +34,7 @@ http_requests_total = _Counter()  # labels: (method, status_class)
 http_request_duration_seconds_sum = _Counter()  # labels: (method,)
 http_request_duration_seconds_count = _Counter()  # labels: (method,)
 auth_failures_total = _Counter()  # no labels
+authorization_denials_total = _Counter()  # no labels
 rate_limit_events_total = _Counter()  # no labels
 db_errors_total = _Counter()  # no labels
 
@@ -62,6 +64,7 @@ def render_prometheus_text() -> str:
         "myvita_http_request_duration_seconds_count", http_request_duration_seconds_count, ("method",)
     )
     lines += _render("myvita_auth_failures_total", auth_failures_total, ())
+    lines += _render("myvita_authorization_denials_total", authorization_denials_total, ())
     lines += _render("myvita_rate_limit_events_total", rate_limit_events_total, ())
     lines += _render("myvita_db_errors_total", db_errors_total, ())
     return "\n".join(lines) + "\n"

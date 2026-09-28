@@ -6,6 +6,7 @@ Uses the same create_all/drop_all client pattern as test_auth_hardening.py.
 Named to sort before test_data_integrity.py alphabetically — see that
 file's fixture docstring for why fixture ordering across files matters here.
 """
+
 import logging
 
 import pytest
@@ -182,9 +183,7 @@ def test_no_secrets_in_logs_across_a_full_auth_flow(client, caplog):
         session_cookie_value = client.cookies.get("myvita_session")
         csrf_cookie_value = client.cookies.get("myvita_csrf")
 
-        client.post(
-            "/api/v1/auth/login", json={"email": "admin@clinica.pt", "password": "wrong-password"}
-        )
+        client.post("/api/v1/auth/login", json={"email": "admin@clinica.pt", "password": "wrong-password"})
         client.post(
             "/api/v1/staff",
             json={
@@ -218,11 +217,13 @@ def test_production_config_rejects_wildcard_cors():
 
     with pytest.raises(ValidationError):
         Settings(
-            JWT_SECRET_KEY="x" * 32,
+            JWT_SECRET_KEY="production-key-material-with-12+unique-chars!",
             ENVIRONMENT="production",
             ALLOW_DIRECT_STAFF_CREATION=False,
             COOKIE_SECURE=True,
             CORS_ORIGINS=["*"],
+            ALLOWED_HOSTS=["app.myvita.pt"],
+            DATABASE_URL="postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
         )
 
 
@@ -233,11 +234,13 @@ def test_production_config_rejects_empty_cors():
 
     with pytest.raises(ValidationError):
         Settings(
-            JWT_SECRET_KEY="x" * 32,
+            JWT_SECRET_KEY="production-key-material-with-12+unique-chars!",
             ENVIRONMENT="production",
             ALLOW_DIRECT_STAFF_CREATION=False,
             COOKIE_SECURE=True,
             CORS_ORIGINS=[],
+            ALLOWED_HOSTS=["app.myvita.pt"],
+            DATABASE_URL="postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
         )
 
 

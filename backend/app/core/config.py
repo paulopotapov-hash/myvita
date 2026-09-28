@@ -4,6 +4,7 @@ Application configuration.
 All settings are loaded from environment variables (see .env.example).
 Nothing sensitive is hardcoded here.
 """
+
 from functools import lru_cache
 from typing import Literal
 
@@ -15,6 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # actually use closes off both a misconfiguration (typo'd env var silently
 # picking "none") and the classic "alg confusion" class of JWT bugs.
 _ALLOWED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
+_DEVELOPMENT_DATABASE_URL = "postgresql+psycopg://myvita:myvita@db:5432/myvita"
 
 
 class Settings(BaseSettings):
@@ -30,9 +32,12 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = Field(
-        default="postgresql+psycopg://myvita:myvita@db:5432/myvita",
+        default=_DEVELOPMENT_DATABASE_URL,
         description="SQLAlchemy connection string (sync driver: psycopg).",
     )
+    DB_POOL_SIZE: int = Field(default=5, ge=1, le=50)
+    DB_MAX_OVERFLOW: int = Field(default=10, ge=0, le=100)
+    DB_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=1, le=120)
 
     # Auth / security
     JWT_SECRET_KEY: str = Field(
@@ -83,9 +88,7 @@ class Settings(BaseSettings):
     @classmethod
     def _jwt_algorithm_must_be_hmac(cls, v: str) -> str:
         if v not in _ALLOWED_JWT_ALGORITHMS:
-            raise ValueError(
-                f"JWT_ALGORITHM must be one of {sorted(_ALLOWED_JWT_ALGORITHMS)}, got {v!r}."
-            )
+            raise ValueError(f"JWT_ALGORITHM must be one of {sorted(_ALLOWED_JWT_ALGORITHMS)}, got {v!r}.")
         return v
 
     @model_validator(mode="after")
@@ -94,6 +97,16 @@ class Settings(BaseSettings):
             return self
         if not self.COOKIE_SECURE:
             raise ValueError("COOKIE_SECURE must be true when ENVIRONMENT=production.")
+        if self.DATABASE_URL == _DEVELOPMENT_DATABASE_URL or "myvita:myvita@" in self.DATABASE_URL:
+            raise ValueError("DATABASE_URL must use dedicated production credentials.")
+        if not self.DATABASE_URL.startswith(("postgresql://", "postgresql+psycopg://")):
+            raise ValueError("DATABASE_URL must use PostgreSQL in production.")
+        normalized_secret = self.JWT_SECRET_KEY.lower()
+        if len(set(self.JWT_SECRET_KEY)) < 12 or any(
+            marker in normalized_secret
+            for marker in ("change-me", "not-a-real", "do-not-reuse", "example", "temporary")
+        ):
+            raise ValueError("JWT_SECRET_KEY is obviously unsuitable for production.")
         if "*" in self.CORS_ORIGINS:
             raise ValueError(
                 "CORS_ORIGINS may not contain '*' when ENVIRONMENT=production "
@@ -103,8 +116,16 @@ class Settings(BaseSettings):
             )
         if not self.CORS_ORIGINS:
             raise ValueError("CORS_ORIGINS must be set explicitly when ENVIRONMENT=production.")
+        if any(not origin.startswith("https://") for origin in self.CORS_ORIGINS):
+            raise ValueError("CORS_ORIGINS must use HTTPS in production.")
         if not self.ALLOWED_HOSTS or "*" in self.ALLOWED_HOSTS:
             raise ValueError("ALLOWED_HOSTS must contain explicit hostnames in production.")
+        if any(host in {"localhost", "127.0.0.1", "testserver"} for host in self.ALLOWED_HOSTS):
+            raise ValueError("ALLOWED_HOSTS must not contain local/test hosts in production.")
+        if self.METRICS_TOKEN is not None and (
+            len(self.METRICS_TOKEN) < 24 or len(set(self.METRICS_TOKEN)) < 10
+        ):
+            raise ValueError("METRICS_TOKEN is obviously unsuitable for production.")
         if self.ALLOW_DIRECT_STAFF_CREATION:
             raise ValueError("Direct staff creation is forbidden in production; use invitations.")
         return self
