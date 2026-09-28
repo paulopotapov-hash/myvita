@@ -10,3 +10,8 @@ regexes = ['''gera-um-valor-com-pelo-menos-32-bytes''']
 description = "Known prose-only finding in the production-readiness matrix; contains no assigned value"
 regexTarget = "secret"
 regexes = ['''encryption/immutability''']
+
+[[allowlists]]
+description = "P4.1 prose-only privacy review phrase; contains no assigned value"
+regexTarget = "secret"
+regexes = ['''DPIA/privacy/legal''']
