@@ -35,6 +35,13 @@ class PatientPublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PatientSummary(BaseModel):
+    id: uuid.UUID
+    clinic_id: uuid.UUID
+    full_name: str
+    is_active: bool
+
+
 class PatientUpdateRequest(RequestModel):
     birth_date: date | None = None
     phone: str | None = Field(default=None, max_length=30)

@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
+from app.core.clinical_access import is_clinical_staff
 from app.core.database import get_db
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
-from app.models import Appointment, AuditAction, AuditResult, Patient, User, UserRole
+from app.models import Appointment, AuditAction, AuditResult, Patient, Staff, User, UserRole
 from app.modules.appointments.schemas import (
     AppointmentCreateRequest,
     AppointmentPublic,
@@ -29,6 +30,43 @@ router = APIRouter()
 _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
 
 
+def _public(appointment: Appointment, user: User, db: Session) -> AppointmentPublic:
+    may_read_reason = user.role == UserRole.PATIENT or is_clinical_staff(db, user)
+    return AppointmentPublic(
+        id=appointment.id,
+        clinic_id=appointment.clinic_id,
+        patient_id=appointment.patient_id,
+        staff_id=appointment.staff_id,
+        scheduled_at=appointment.scheduled_at,
+        duration_minutes=appointment.duration_minutes,
+        status=appointment.status,
+        reason=appointment.reason if may_read_reason else None,
+    )
+
+
+def _reject_admin_reason(
+    payload: AppointmentCreateRequest | AppointmentUpdateRequest, user: User, db: Session
+) -> None:
+    if "reason" in payload.model_fields_set and not is_clinical_staff(db, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas profissionais clínicos podem registar o motivo da consulta.",
+        )
+
+
+def _hide_cross_tenant_targets(payload: AppointmentCreateRequest, clinic_id: str, db: Session) -> None:
+    patient = db.get(Patient, payload.patient_id)
+    if patient is None or str(patient.clinic_id) != str(clinic_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado nesta clínica."
+        )
+    staff = db.get(Staff, payload.staff_id)
+    if staff is None or str(staff.clinic_id) != str(clinic_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Profissional não encontrado nesta clínica."
+        )
+
+
 @router.post(
     "",
     response_model=AppointmentPublic,
@@ -41,7 +79,9 @@ def create(
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     _staff_user: User = Depends(_staff_or_admin_only),
-) -> Appointment:
+) -> AppointmentPublic:
+    _hide_cross_tenant_targets(payload, clinic_id, db)
+    _reject_admin_reason(payload, _staff_user, db)
     appointment = create_appointment(db, clinic_id, payload)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CREATED,
@@ -54,13 +94,13 @@ def create(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return appointment
+    return _public(appointment, _staff_user, db)
 
 
 @router.get("", response_model=list[AppointmentPublic])
 def list_mine(
     request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
-) -> list[Appointment]:
+) -> list[AppointmentPublic]:
     """
     Patients get their own appointments; staff/clinic_admin get every
     appointment in their own clinic. Scoping happens entirely server-side
@@ -87,7 +127,7 @@ def list_mine(
         user_agent=request.headers.get("user-agent"),
         metadata={"count": len(appointments)},
     )
-    return appointments
+    return [_public(appointment, user, db) for appointment in appointments]
 
 
 @router.get("/{appointment_id}", response_model=AppointmentPublic)
@@ -97,7 +137,7 @@ def detail(
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     _user: User = Depends(get_current_user),
-) -> Appointment:
+) -> AppointmentPublic:
     appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
     if _user.role == UserRole.PATIENT:
         patient = db.query(Patient).filter(Patient.user_id == _user.id).first()
@@ -118,7 +158,7 @@ def detail(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return appointment
+    return _public(appointment, _user, db)
 
 
 @router.patch("/{appointment_id}", response_model=AppointmentPublic)
@@ -129,7 +169,9 @@ def update(
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     staff_user: User = Depends(_staff_or_admin_only),
-) -> Appointment:
+) -> AppointmentPublic:
+    get_appointment_for_clinic(db, appointment_id, clinic_id)
+    _reject_admin_reason(payload, staff_user, db)
     appointment = update_appointment(db, appointment_id, clinic_id, payload)
     record_audit_event(
         action=AuditAction.APPOINTMENT_UPDATED,
@@ -142,7 +184,7 @@ def update(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return appointment
+    return _public(appointment, staff_user, db)
 
 
 @router.post("/{appointment_id}/cancel", response_model=AppointmentPublic)
@@ -152,7 +194,7 @@ def cancel(
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     staff_user: User = Depends(_staff_or_admin_only),
-) -> Appointment:
+) -> AppointmentPublic:
     appointment = cancel_appointment(db, appointment_id, clinic_id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CANCELLED,
@@ -165,4 +207,4 @@ def cancel(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return appointment
+    return _public(appointment, staff_user, db)

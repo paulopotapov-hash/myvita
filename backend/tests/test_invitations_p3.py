@@ -306,6 +306,7 @@ def test_admin_can_deactivate_patient_but_not_cross_tenant(client, db_session):
     )
     assert response.status_code == 200
     assert response.json()["is_active"] is False
+    assert set(response.json()) == {"id", "clinic_id", "full_name", "is_active"}
 
     from app.core.config import settings
 

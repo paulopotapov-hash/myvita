@@ -7,13 +7,16 @@ import { PatientsPage } from './PatientsPage'
 const { usePatientsPage } = vi.hoisted(() => ({ usePatientsPage: vi.fn() }))
 
 vi.mock('../../hooks/useClinicData', () => ({ usePatientsPage }))
+vi.mock('../../hooks/useSession', () => ({
+  useSession: () => ({ user: { role: 'staff', staff_role: 'doctor' } }),
+}))
 
 describe('PatientsPage', () => {
   it('uses backend totals to paginate the patient directory', async () => {
     usePatientsPage.mockImplementation((page: number) => ({
       data: {
         total: 21,
-        items: [{ id: `p${page}`, clinic_id: 'c1', full_name: `Paciente ${page}`, birth_date: null, phone: null, national_health_number: null, is_active: true }],
+        items: [{ id: `p${page}`, clinic_id: 'c1', full_name: `Paciente ${page}`, is_active: true }],
       },
       isLoading: false,
       isError: false,

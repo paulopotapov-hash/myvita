@@ -45,6 +45,13 @@ export interface PatientPublic {
   is_active: boolean
 }
 
+export interface PatientSummary {
+  id: string
+  clinic_id: string
+  full_name: string
+  is_active: boolean
+}
+
 export interface StaffPublic {
   id: string
   clinic_id: string

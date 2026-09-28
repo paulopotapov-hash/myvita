@@ -14,7 +14,7 @@ const { appointmentState, cancelMutate, createMutate, updateMutate } = vi.hoiste
 
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({
-    user: { id: 'admin-1', email: 'admin@example.pt', full_name: 'Admin', role: 'clinic_admin', clinic_id: 'clinic-1', staff_role: null, patient_id: null },
+    user: { id: 'doctor-1', email: 'doctor@example.pt', full_name: 'Doctor', role: 'staff', clinic_id: 'clinic-1', staff_role: 'doctor', patient_id: null },
   }),
 }))
 

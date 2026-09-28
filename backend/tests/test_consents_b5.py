@@ -79,7 +79,7 @@ def _tenant(client: TestClient, suffix: str) -> dict:
 
 
 def _grant(client: TestClient, tenant: dict, purpose: str = "Provide clinical treatment"):
-    headers = _use(client, tenant["admin"])
+    headers = _use(client, tenant["patient"])
     return client.post(
         f"/api/v1/patients/{tenant['patient_id']}/consents",
         json={"consent_type": "treatment", "purpose": purpose},
@@ -168,9 +168,7 @@ def test_cross_tenant_create_read_and_revoke_are_hidden(client: TestClient):
         == 404
     )
     assert client.get(f"/api/v1/consents/{consent_id}").status_code == 404
-    assert (
-        client.post(f"/api/v1/consents/{consent_id}/revoke", headers=headers).status_code == 404
-    )
+    assert client.post(f"/api/v1/consents/{consent_id}/revoke", headers=headers).status_code == 404
 
 
 def test_unknown_patient_and_invalid_uuid_are_rejected(client: TestClient):

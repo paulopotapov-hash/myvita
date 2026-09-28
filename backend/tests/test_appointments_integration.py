@@ -11,6 +11,7 @@ SAME TestClient instance, so we must save/restore BOTH the session cookie
 AND the matching CSRF cookie for each identity — the CSRF token is bound
 to a specific user's session, not shared across identities.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -119,7 +120,6 @@ def test_staff_can_book_appointment_for_their_clinic(client):
             "patient_id": a["patient_id"],
             "staff_id": a["staff_id"],
             "scheduled_at": "2026-10-01T10:00:00Z",
-            "reason": "Consulta geral",
         },
         headers=headers,
     )
@@ -132,7 +132,11 @@ def test_patient_sees_only_their_own_appointment(client):
     headers = _use_identity(client, a["admin"])
     client.post(
         "/api/v1/appointments",
-        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": "2026-10-01T10:00:00Z"},
+        json={
+            "patient_id": a["patient_id"],
+            "staff_id": a["staff_id"],
+            "scheduled_at": "2026-10-01T10:00:00Z",
+        },
         headers=headers,
     )
 
@@ -149,7 +153,11 @@ def test_patient_cannot_create_appointments_directly(client):
 
     r = client.post(
         "/api/v1/appointments",
-        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": "2026-10-01T10:00:00Z"},
+        json={
+            "patient_id": a["patient_id"],
+            "staff_id": a["staff_id"],
+            "scheduled_at": "2026-10-01T10:00:00Z",
+        },
         headers=headers,
     )
     assert r.status_code == 403
@@ -201,14 +209,22 @@ def test_staff_list_only_shows_own_clinic_appointments(client):
     headers = _use_identity(client, a["admin"])
     client.post(
         "/api/v1/appointments",
-        json={"patient_id": a["patient_id"], "staff_id": a["staff_id"], "scheduled_at": "2026-10-01T10:00:00Z"},
+        json={
+            "patient_id": a["patient_id"],
+            "staff_id": a["staff_id"],
+            "scheduled_at": "2026-10-01T10:00:00Z",
+        },
         headers=headers,
     )
 
     headers = _use_identity(client, b["admin"])
     client.post(
         "/api/v1/appointments",
-        json={"patient_id": b["patient_id"], "staff_id": b["staff_id"], "scheduled_at": "2026-10-01T11:00:00Z"},
+        json={
+            "patient_id": b["patient_id"],
+            "staff_id": b["staff_id"],
+            "scheduled_at": "2026-10-01T11:00:00Z",
+        },
         headers=headers,
     )
 

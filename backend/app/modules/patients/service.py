@@ -3,6 +3,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.clinical_access import accessible_patient, is_clinical_staff
 from app.core.security import hash_password
 from app.models import Clinic, Patient, User, UserRole
 from app.modules.patients.schemas import PatientRegisterRequest, PatientUpdateRequest
@@ -65,6 +66,13 @@ def list_patients_for_clinic(
 
 
 def get_patient_for_user(db: Session, patient_id: uuid.UUID, user: User) -> Patient:
+    patient = accessible_patient(db, patient_id, user)
+    _ = patient.user
+    return patient
+
+
+def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateRequest, user: User) -> Patient:
+    changes = payload.model_dump(exclude_unset=True)
     patient = (
         db.query(Patient)
         .options(selectinload(Patient.user))
@@ -73,14 +81,18 @@ def get_patient_for_user(db: Session, patient_id: uuid.UUID, user: User) -> Pati
     )
     if patient is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
-    if user.role == UserRole.PATIENT and patient.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
-    return patient
-
-
-def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateRequest, user: User) -> Patient:
-    patient = get_patient_for_user(db, patient_id, user)
-    changes = payload.model_dump(exclude_unset=True)
+    if user.role == UserRole.PATIENT:
+        if patient.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
+        if set(changes) != {"phone"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="O paciente só pode alterar o próprio telefone."
+            )
+    elif not is_clinical_staff(db, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas profissionais clínicos podem alterar dados demográficos.",
+        )
     for field, value in changes.items():
         setattr(patient, field, value)
     db.commit()

@@ -92,6 +92,8 @@ describe('PatientDetailPage consent workflow', () => {
   })
 
   it('grants and revokes using the real B5 payload shape', async () => {
+    sessionState.role = 'patient'
+    sessionState.patient_id = 'patient-1'
     const user = userEvent.setup()
     renderPage()
     await user.type(screen.getByLabelText('Finalidade'), 'Partilha assistencial')

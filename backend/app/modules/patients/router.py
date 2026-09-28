@@ -9,7 +9,12 @@ from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, Patient, User, UserRole
-from app.modules.patients.schemas import PatientPublic, PatientRegisterRequest, PatientUpdateRequest
+from app.modules.patients.schemas import (
+    PatientPublic,
+    PatientRegisterRequest,
+    PatientSummary,
+    PatientUpdateRequest,
+)
 from app.modules.patients.service import (
     deactivate_patient,
     get_patient_for_user,
@@ -34,6 +39,15 @@ def _public(patient: Patient) -> PatientPublic:
         birth_date=patient.birth_date,
         phone=patient.phone,
         national_health_number=patient.national_health_number,
+        is_active=patient.user.is_active,
+    )
+
+
+def _summary(patient: Patient) -> PatientSummary:
+    return PatientSummary(
+        id=patient.id,
+        clinic_id=patient.clinic_id,
+        full_name=patient.user.full_name,
         is_active=patient.user.is_active,
     )
 
@@ -72,7 +86,7 @@ def register(
     )
 
 
-@router.get("", response_model=list[PatientPublic])
+@router.get("", response_model=list[PatientSummary])
 def list_mine(
     request: Request,
     response: Response,
@@ -81,7 +95,7 @@ def list_mine(
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     staff_user: User = Depends(_staff_or_admin_only),
-) -> list[PatientPublic]:
+) -> list[PatientSummary]:
     """
     Patient directory for the caller's own clinic — needed so staff can
     pick a patient when creating an appointment, and so appointment lists
@@ -101,7 +115,7 @@ def list_mine(
         user_agent=request.headers.get("user-agent"),
         metadata={"count": len(patients)},
     )
-    return [_public(p) for p in patients]
+    return [_summary(p) for p in patients]
 
 
 @router.get("/{patient_id}", response_model=PatientPublic)
@@ -153,7 +167,7 @@ def update(
     return _public(patient)
 
 
-@router.post("/{patient_id}/deactivate", response_model=PatientPublic)
+@router.post("/{patient_id}/deactivate", response_model=PatientSummary)
 @limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
 def deactivate(
     patient_id: uuid.UUID,
@@ -161,7 +175,7 @@ def deactivate(
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     admin: User = Depends(_admin_only),
-) -> PatientPublic:
+) -> PatientSummary:
     patient = deactivate_patient(db, patient_id, clinic_id)
     record_audit_event(
         action=AuditAction.USER_DISABLED,
@@ -174,4 +188,4 @@ def deactivate(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return _public(patient)
+    return _summary(patient)

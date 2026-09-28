@@ -22,7 +22,7 @@ const CONSENT_LABELS: Record<ConsentType, string> = {
   research: 'Investigação',
 }
 
-function PatientUpdateForm({ patient }: { patient: PatientPublic }) {
+function PatientUpdateForm({ patient, patientOwnRecord }: { patient: PatientPublic; patientOwnRecord: boolean }) {
   const update = useUpdatePatient(patient.id)
   const [phone, setPhone] = useState(patient.phone ?? '')
   const [healthNumber, setHealthNumber] = useState(patient.national_health_number ?? '')
@@ -35,7 +35,7 @@ function PatientUpdateForm({ patient }: { patient: PatientPublic }) {
         event.preventDefault()
         setMessage('')
         update.mutate(
-          { phone: phone || null, national_health_number: healthNumber || null },
+          patientOwnRecord ? { phone: phone || null } : { phone: phone || null, national_health_number: healthNumber || null },
           {
             onSuccess: () => setMessage('Dados atualizados com sucesso.'),
             onError: (error) => setMessage(toUserMessage(error)),
@@ -44,7 +44,7 @@ function PatientUpdateForm({ patient }: { patient: PatientPublic }) {
       }}
     >
       <TextField label="Telefone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-      <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} />
+      {!patientOwnRecord && <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} />}
       <div className="flex items-center gap-3 sm:col-span-2">
         <Button type="submit" isLoading={update.isPending}>Guardar dados</Button>
         {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
@@ -167,7 +167,7 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
           <Detail label="Número de utente" value={patient.national_health_number ?? '—'} />
           <Detail label="Estado" value={patient.is_active ? 'Ativo' : 'Inativo'} />
         </dl>
-        <PatientUpdateForm patient={patient} />
+        <PatientUpdateForm patient={patient} patientOwnRecord={user?.role === 'patient'} />
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6">
@@ -195,12 +195,12 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
       {canReadClinical && <MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} />}
       {canReadClinical && <MedicationsSection patientId={patient.id} canWrite={canWriteClinical} />}
 
-      <ConsentSection patientId={patient.id} />
+      <ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} />
     </div>
   )
 }
 
-function ConsentSection({ patientId }: { patientId: string }) {
+function ConsentSection({ patientId, canManage }: { patientId: string; canManage: boolean }) {
   const consents = usePatientConsents(patientId)
   const grant = useGrantConsent(patientId)
   const revoke = useRevokeConsent(patientId)
@@ -246,7 +246,7 @@ function ConsentSection({ patientId }: { patientId: string }) {
         <p className="text-sm text-slate-500">A revogação preserva sempre o registo original no histórico.</p>
       </div>
 
-      <form onSubmit={submit} className="mb-6 grid gap-4 border-b border-slate-200 pb-6 md:grid-cols-3">
+      {canManage && <form onSubmit={submit} className="mb-6 grid gap-4 border-b border-slate-200 pb-6 md:grid-cols-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="consent-type" className="text-sm font-medium text-slate-700">Tipo</label>
           <select
@@ -270,7 +270,7 @@ function ConsentSection({ patientId }: { patientId: string }) {
         <div className="flex items-end"><Button type="submit" isLoading={grant.isPending}>Conceder</Button></div>
         {errors._root && <p role="alert" className="text-sm text-red-600 md:col-span-3">{errors._root}</p>}
         {success && <p role="status" className="text-sm text-teal-700 md:col-span-3">{success}</p>}
-      </form>
+      </form>}
 
       {consents.isLoading && <LoadingSpinner />}
       {consents.isError && <ErrorState message={toUserMessage(consents.error)} onRetry={() => consents.refetch()} />}
@@ -289,7 +289,7 @@ function ConsentSection({ patientId }: { patientId: string }) {
                 <p className="text-sm text-slate-600">{consent.purpose}</p>
                 <p className="mt-1 text-xs text-slate-500">Concedido em {formatDateTime(consent.granted_at)}{consent.revoked_at ? ` · Revogado em ${formatDateTime(consent.revoked_at)}` : ''}</p>
               </div>
-              {consent.status === 'granted' && (
+              {canManage && consent.status === 'granted' && (
                 <Button variant="secondary" disabled={revoke.isPending} onClick={() => confirmRevoke(consent.id)}>Revogar</Button>
               )}
             </li>

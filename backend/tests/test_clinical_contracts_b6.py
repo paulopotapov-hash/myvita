@@ -120,7 +120,7 @@ def test_auth_me_exposes_only_the_authenticated_profile_identity(client: TestCli
 def test_patient_pagination_detail_update_and_cross_tenant_isolation(client: TestClient):
     first = _tenant(client, "patient-a")
     second = _tenant(client, "patient-b")
-    headers = _use(client, first["admin"])
+    headers = _use(client, first["doctor"])
     listed = client.get("/api/v1/patients?page=1&page_size=1")
     assert listed.status_code == 200
     assert listed.headers["x-total-count"] == "1"
@@ -135,7 +135,9 @@ def test_patient_pagination_detail_update_and_cross_tenant_isolation(client: Tes
     )
     assert updated.status_code == 200
     assert updated.json()["national_health_number"] == "123456789"
-    assert client.patch(f"/api/v1/patients/{first['patient_id']}", headers=headers, json={}).status_code == 422
+    assert (
+        client.patch(f"/api/v1/patients/{first['patient_id']}", headers=headers, json={}).status_code == 422
+    )
     assert client.get(f"/api/v1/patients/{second['patient_id']}").status_code == 404
 
     _use(client, first["patient"])
@@ -171,11 +173,14 @@ def test_appointment_update_conflict_cancel_and_lifecycle(client: TestClient):
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
     assert client.post(f"/api/v1/appointments/{appointment_id}/cancel", headers=headers).status_code == 409
-    assert client.patch(
-        f"/api/v1/appointments/{appointment_id}",
-        headers=_use(client, tenant["patient"]),
-        json={"duration_minutes": 60},
-    ).status_code == 403
+    assert (
+        client.patch(
+            f"/api/v1/appointments/{appointment_id}",
+            headers=_use(client, tenant["patient"]),
+            json={"duration_minutes": 60},
+        ).status_code
+        == 403
+    )
 
 
 def test_medical_record_and_medication_are_versioned_and_patient_readable(client: TestClient):
@@ -235,11 +240,14 @@ def test_clinical_cross_tenant_idor_and_notification_ownership(client: TestClien
     _use(client, second["doctor"])
     assert client.get(f"/api/v1/medical-records/{record_id}").status_code == 404
     assert client.get(f"/api/v1/medications/{medication_id}").status_code == 404
-    assert client.post(
-        f"/api/v1/patients/{first['patient_id']}/medical-records",
-        headers=_use(client, first["admin"]),
-        json={"title": "Admin", "content": "Não permitido"},
-    ).status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/patients/{first['patient_id']}/medical-records",
+            headers=_use(client, first["admin"]),
+            json={"title": "Admin", "content": "Não permitido"},
+        ).status_code
+        == 403
+    )
 
     db = client.test_session()
     try:

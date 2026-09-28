@@ -5,10 +5,12 @@ import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { usePatientsPage } from '../../hooks/useClinicData'
 import { toUserMessage } from '../../lib/errorMessages'
-import { formatDate } from '../../lib/formatDate'
 import { Link } from 'react-router-dom'
+import { useSession } from '../../hooks/useSession'
 
 export function PatientsPage() {
+  const { user } = useSession()
+  const canOpenClinicalRecord = user?.role === 'staff' && (user.staff_role === 'doctor' || user.staff_role === 'nurse')
   const [page, setPage] = useState(1)
   const pageSize = 20
   const patients = usePatientsPage(page, pageSize)
@@ -34,20 +36,16 @@ export function PatientsPage() {
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 font-medium">Nome</th>
-                <th className="py-2 font-medium">Data de nascimento</th>
-                <th className="py-2 font-medium">Telefone</th>
+                <th className="py-2 font-medium">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((patient) => (
                 <tr key={patient.id}>
                   <td className="py-2 font-medium text-slate-900">
-                    <Link className="text-teal-700 hover:underline" to={`/app/pacientes/${patient.id}`}>
-                      {patient.full_name}
-                    </Link>
+                    {canOpenClinicalRecord ? <Link className="text-teal-700 hover:underline" to={`/app/pacientes/${patient.id}`}>{patient.full_name}</Link> : patient.full_name}
                   </td>
-                  <td className="py-2 text-slate-600">{patient.birth_date ? formatDate(patient.birth_date) : '—'}</td>
-                  <td className="py-2 text-slate-600">{patient.phone ?? '—'}</td>
+                  <td className="py-2 text-slate-600">{patient.is_active ? 'Ativo' : 'Inativo'}</td>
                 </tr>
               ))}
             </tbody>
