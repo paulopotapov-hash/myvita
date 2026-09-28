@@ -178,6 +178,19 @@ jobs:
           METRICS_TOKEN=ci-metrics-only GRAFANA_ADMIN_PASSWORD=ci-grafana-only \
           docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml config --quiet
 
+      - name: Production readiness preflight (ephemeral CI values)
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-database-only
+          POSTGRES_DB: ci
+          JWT_SECRET_KEY: ci-generated-signing-material-ABCdef1234567890!
+          PUBLIC_DOMAIN: pilot-ci.example.test
+          ALLOWED_HOSTS: '["pilot-ci.example.test"]'
+          CORS_ORIGINS: '["https://pilot-ci.example.test"]'
+          METRICS_TOKEN: ci-generated-metrics-ABCdef1234567890!
+          GRAFANA_ADMIN_PASSWORD: ci-grafana-only
+        run: scripts/production_preflight.sh
+
   frontend:
     name: Frontend (typecheck, lint, tests, build)
     runs-on: ubuntu-latest
