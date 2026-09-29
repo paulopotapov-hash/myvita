@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { Logo } from '../components/Logo'
 import { useLogout } from '../hooks/useAuthMutations'
 import { useSession } from '../hooks/useSession'
 import { toUserMessage } from '../lib/errorMessages'
@@ -44,7 +45,9 @@ export function AuthenticatedLayout({ areaLabel, homePath, navItems }: Authentic
     <div className="flex min-h-screen bg-slate-50">
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white md:block">
         <div className="px-4 py-5">
-          <p className="text-lg font-semibold tracking-tight text-teal-700">myVita</p>
+          <p className="flex items-center gap-2 text-lg font-semibold tracking-tight text-teal-700">
+            myVita <Logo size="header" alt="" />
+          </p>
         </div>
         <nav className="flex flex-col gap-1 px-2" aria-label="Navegação principal">
           {navigation(false)}
@@ -64,6 +67,9 @@ export function AuthenticatedLayout({ areaLabel, homePath, navItems }: Authentic
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
+          <p className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-teal-700 md:hidden">
+            myVita <Logo size="header" alt="" />
+          </p>
 
           <div className="ml-auto flex items-center gap-4">
             <div className="text-right">

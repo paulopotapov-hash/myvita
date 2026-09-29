@@ -35,18 +35,20 @@ function renderRoot(role?: UserRole) {
 }
 
 describe('RootRedirect', () => {
-  it('redirects an anonymous user to /login', async () => {
+  it('shows the splash before redirecting an anonymous user to /login', async () => {
     renderRoot()
-    await waitFor(() => expect(screen.getByText('Login')).toBeInTheDocument())
+    expect(await screen.findByRole('img', { name: 'myVita', hidden: true })).toBeInTheDocument()
+    expect(screen.queryByText('Login')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Login')).toBeInTheDocument(), { timeout: 3000 })
   })
 
-  it('redirects a patient to /patient', async () => {
+  it('redirects a patient to /patient after the splash', async () => {
     renderRoot('patient')
-    await waitFor(() => expect(screen.getByText('Patient home')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Patient home')).toBeInTheDocument(), { timeout: 3000 })
   })
 
-  it.each(['staff', 'clinic_admin'] as const)('redirects %s to /app', async (role) => {
+  it.each(['staff', 'clinic_admin'] as const)('redirects %s to /app after the splash', async (role) => {
     renderRoot(role)
-    await waitFor(() => expect(screen.getByText('Staff home')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Staff home')).toBeInTheDocument(), { timeout: 3000 })
   })
 })
