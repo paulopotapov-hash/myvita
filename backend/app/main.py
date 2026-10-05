@@ -105,7 +105,11 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> Resp
         request.method,
         type(exc).__name__,
     )
-    return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+    # ServerErrorMiddleware sits outside `observability`, so headers must be set here.
+    response = JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+    _apply_security_headers(request, response)
+    response.headers[REQUEST_ID_HEADER] = getattr(request.state, "request_id", None) or get_request_id()
+    return response
 
 
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_with_audit)
