@@ -24,7 +24,7 @@ router = APIRouter()
 
 @router.post("/login", response_model=UserPublic)
 @limiter.limit(LOGIN_RATE_LIMIT)
-def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> User:
+def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> UserPublic:
     user = authenticate(
         db,
         payload.email,
@@ -33,7 +33,8 @@ def login(request: Request, payload: LoginRequest, response: Response, db: Sessi
         user_agent=request.headers.get("user-agent"),
     )
     set_session_cookie(response, user)
-    return user
+    # The SPA caches this body as the session identity, so it must match /auth/me (staff_role, patient_id).
+    return _public_user(db, user)
 
 
 @router.post("/logout", status_code=204)

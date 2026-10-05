@@ -64,3 +64,14 @@ def test_list_endpoints_return_only_the_minimum_fields(world: World):
     )
     me = world.a.doctor.get("/api/v1/auth/me").json()
     assert not {"hashed_password", "token_epoch", "is_active"} & set(me)
+
+
+def test_login_response_matches_auth_me_so_the_spa_has_staff_role_and_patient_id(world: World):
+    # Regression (Phase 6, UAT-10): login returned staff_role/patient_id as null, hiding role-dependent UI until reload.
+    for actor in (world.a.doctor, world.a.nurse, world.a.admin, world.a.staff_admin, world.a.patients["a1"]):
+        fresh = Actor("fresh", actor.email)
+        login_body = fresh.login().json()
+        assert login_body == fresh.get("/api/v1/auth/me").json(), actor.key
+    doctor_login = Actor("fresh-doc", world.a.doctor.email).login().json()
+    assert doctor_login["staff_role"] == "doctor"
+    assert Actor("fresh-pat", world.a.patients["a1"].email).login().json()["patient_id"] == world.a.patients["a1"].patient_id
