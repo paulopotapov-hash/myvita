@@ -14,10 +14,17 @@
 # bare VPS, an AWS/Azure/GCP VM, or any other Docker host. It does not
 # include certificate material. See README.md#production for the documented
 # HTTP validation overlay and future TLS overlay.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:16-alpine
     restart: always
+    logging: *default-logging
     init: true
     stop_grace_period: 60s
     environment:
@@ -43,6 +50,7 @@ services:
       context: .
       dockerfile: backup/Dockerfile
     restart: always
+    logging: *default-logging
     init: true
     stop_grace_period: 30s
     environment:
@@ -79,6 +87,7 @@ services:
   backend:
     build: ./backend
     restart: always
+    logging: *default-logging
     init: true
     stop_grace_period: 30s
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.30.0.10"]
@@ -128,6 +137,7 @@ services:
   migrate:
     build: ./backend
     restart: "no"
+    logging: *default-logging
     command: ["alembic", "upgrade", "head"]
     environment:
       ENVIRONMENT: production
@@ -158,6 +168,7 @@ services:
         # cookies and CSRF same-origin and avoid unnecessary browser CORS.
         VITE_API_BASE_URL: ""
     restart: always
+    logging: *default-logging
     init: true
     stop_grace_period: 15s
     depends_on:
@@ -181,6 +192,7 @@ services:
   proxy:
     build: ./proxy
     restart: always
+    logging: *default-logging
     init: true
     stop_grace_period: 15s
     environment:
