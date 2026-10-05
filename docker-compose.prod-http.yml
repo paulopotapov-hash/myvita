@@ -6,3 +6,9 @@ services:
       ENVIRONMENT: development
       COOKIE_SECURE: "false"
       CORS_ORIGINS: '["${LOCAL_ORIGIN:-http://localhost}"]'
+  # Settings validation runs for the migration job too, so it needs the same relaxation.
+  migrate:
+    environment:
+      ENVIRONMENT: development
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: '["${LOCAL_ORIGIN:-http://localhost}"]'
