@@ -129,3 +129,29 @@ Scenario guidance:
 - **Backup failure:** do not prune the last known-good copy; inspect the backup result metric and storage/network/authentication error, repair it, run a new backup, validate checksum/archive, and schedule an isolated restore drill.
 - **Authentication issue:** determine whether it is configuration, rate limiting, session invalidation, or suspected compromise. Never bypass password checks. Restore service safely; for compromise, invalidate sessions and rotate affected credentials.
 - **Security incident:** restrict access, preserve immutable logs/backups, record scope and timeline, rotate exposed credentials, assess data exposure with the approved privacy process, recover from a known-good release, and notify the designated incident/privacy roles once those roles exist.
+
+## Phase 4 drill evidence (local rehearsal, synthetic data)
+
+Run on 2026-10-05 against the production topology (`docker-compose.prod.yml` + `prod-http` + `monitoring` overlays) on a developer machine, **not** on real staging (none exists yet). Alerts were routed to a throwaway local webhook; the off-site target was a local S3-compatible server (moto), so it proves the code path, not a separate failure domain.
+
+| Check | Result |
+|---|---|
+| Prometheus targets (backend, postgres, host, containers, blackbox, alertmanager) | all up; public `/metrics` returns 404 |
+| `promtool check rules` / `test rules` | 17 rules valid; unit tests pass |
+| Local backup (`pg_dump -Fc`, checksum, `pg_restore --list`) | success, metrics `last_run_success=1` |
+| Off-site upload, size check, retention | success; a prior unreachable-endpoint run correctly reported `offsite_last_run_success=0` |
+| Download from off-site, checksum verified, restore into isolated PostgreSQL | restore 0.37 s for a 48 KB dump |
+| Restored data vs source | all 12 tables identical (row counts and content md5); Alembic `f6a7b8c9d0e1`; a backend booted on the restored DB accepted a synthetic doctor login |
+| Drill: PostgreSQL stopped | `/ready` 503 immediately, `/health` stayed 200; `PostgreSQLDown` delivered to the receiver at +132 s; `MyVitaBackendNotReady` at +157 s |
+| Recovery: PostgreSQL started | `/ready` 200 after 3 s; login worked; alerts resolved within about 50 s; row counts unchanged |
+
+Supported by this evidence: RPO 24 h (daily schedule, off-site copy after each run) and an RTO well inside 4 h for a database of this size. The restore time is **not** representative of a clinic database; repeat the timed restore on real staging and again as data grows.
+
+Defects found and fixed during the drill: the disk alerts and dashboard counted read-only `erofs`/`squashfs`/`iso9660` mounts (always 100% used) and fired a false `HostDiskUsageCritical`; containers had no log rotation, so Docker logs could grow without bound (now `json-file`, 10 MB x 5 per service).
+
+Known limits (not closed by this phase):
+
+- Alertmanager has no real receiver (`pending-human-destination`); a staffed email/webhook receiver is required before a pilot.
+- Backups and the database share one host and the backup container holds both database and off-site credentials; a real off-site bucket with prefix-scoped, write-only credentials, encryption and retention policy is still to be provisioned and tested.
+- Logs live only in rotated container logs; central aggregation and a retention period are undecided. Metrics have request counts and duration sum/count, but no latency histogram, so there is no p95 alert.
+- TLS, Secure cookies, JSON production logs and a real staging deployment are unverified (Phase 3 is blocked on infrastructure).
