@@ -5,8 +5,8 @@ from app.core.audit import client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
-from app.core.security import set_session_cookie
-from app.models import AuditAction, AuditResult, Clinic
+from app.core.security import get_optional_user, set_session_cookie
+from app.models import AuditAction, AuditResult, Clinic, User
 from app.modules.clinics.schemas import ClinicOnboardingRequest, ClinicPublic, ClinicSummary
 from app.modules.clinics.service import onboard_clinic
 
@@ -40,9 +40,15 @@ def create_clinic(
 
 
 @router.get("", response_model=list[ClinicSummary])
-def list_clinics(db: Session = Depends(get_db)) -> list[Clinic]:
+def list_clinics(db: Session = Depends(get_db), user: User | None = Depends(get_optional_user)) -> list[Clinic]:
     """
-    Public, minimal clinic directory — just id + name — so a patient
-    sign-up form can offer a clinic picker. No sensitive clinic data here.
+    Minimal clinic directory (id + name). Anyone may list it only while public
+    patient registration is enabled; otherwise a signed-in user sees just their
+    own clinic, so the client list of the platform is not enumerable.
     """
-    return db.query(Clinic).order_by(Clinic.name).all()
+    query = db.query(Clinic)
+    if not settings.ALLOW_PUBLIC_PATIENT_REGISTRATION:
+        if user is None or user.clinic_id is None:
+            return []
+        query = query.filter(Clinic.id == user.clinic_id)
+    return query.order_by(Clinic.name).all()

@@ -283,6 +283,18 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    request: Request,
+    session_token: str | None = Cookie(default=None, alias=settings.COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but yields None instead of 401, for read-only public endpoints."""
+    try:
+        return get_current_user(request, session_token, db)
+    except HTTPException:
+        return None
+
+
 def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
     """
     Dependency factory for endpoint-level authorization.

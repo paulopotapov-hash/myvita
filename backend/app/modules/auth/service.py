@@ -41,10 +41,9 @@ def authenticate(
         # this branch takes roughly the same time as the "wrong password"
         # branch below — see _DUMMY_HASH comment.
         verify_password(password, _DUMMY_HASH)
-        # Safe to log the reason server-side (unlike the HTTP response,
-        # which must stay generic): this is for security monitoring, not
-        # sent back to whoever made the request.
-        logger.warning("Tentativa de login falhada (email desconhecido ou inativo): %s", email)
+        # The attempted email is personal data (often a mistyped real address);
+        # it is kept only in the access-controlled audit trail, never in app logs.
+        logger.warning("Tentativa de login falhada (email desconhecido ou inativo)")
         auth_failures_total.inc()
         record_audit_event(
             action=AuditAction.LOGIN_FAILURE,
