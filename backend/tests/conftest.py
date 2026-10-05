@@ -90,3 +90,6 @@ def db_session(engine):
     session.close()
     transaction.rollback()
     connection.close()
+
+# Phase 1 two-clinic dataset (module-scoped); see tests/phase1_world.py.
+from tests.phase1_world import world  # noqa: E402, F401
