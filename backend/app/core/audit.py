@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from app.core.client_ip import get_client_ip as client_ip  # re-exported: see app/core/client_ip.py
-from app.core.database import SessionLocal
+from app.core.database import AuditSessionLocal
 from app.models.audit_log import AuditAction, AuditLog, AuditResult
 
 __all__ = ["record_audit_event", "client_ip"]
@@ -48,7 +48,7 @@ def record_audit_event(
     Never pass passwords, JWTs, cookies, CSRF tokens, or clinical payloads
     in `metadata` — see app/models/audit_log.py.
     """
-    session = SessionLocal()
+    session = AuditSessionLocal()
     try:
         session.add(
             AuditLog(

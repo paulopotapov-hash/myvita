@@ -19,7 +19,7 @@ os.environ.setdefault("ALLOW_PUBLIC_CLINIC_ONBOARDING", "true")
 os.environ.setdefault("ALLOW_PUBLIC_PATIENT_REGISTRATION", "true")
 os.environ.setdefault("ALLOW_DIRECT_STAFF_CREATION", "true")
 
-from app.core.database import Base
+from app.core.database import Base, audit_engine
 from app.core.database import engine as app_engine
 from app.core.rate_limit import limiter
 
@@ -93,3 +93,10 @@ def db_session(engine):
 
 # Phase 1 two-clinic dataset (module-scoped); see tests/phase1_world.py.
 from tests.phase1_world import world  # noqa: E402, F401
+
+
+@pytest.fixture(autouse=True)
+def _reset_audit_pool():
+    """Tests drop and recreate tables/enum types; pooled audit connections must not outlive them."""
+    yield
+    audit_engine.dispose()
