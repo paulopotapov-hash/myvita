@@ -70,7 +70,7 @@ export function AppointmentsPage() {
                       ? `Com ${staffNameById.get(appointment.staff_id) ?? 'profissional'}`
                       : `${patientNameById.get(appointment.patient_id) ?? 'Paciente'} — ${staffNameById.get(appointment.staff_id) ?? 'profissional'}`}
                   </p>
-                  {appointment.reason && <p className="text-sm text-slate-400">{appointment.reason}</p>}
+                  {appointment.reason && <p className="text-sm text-slate-600">{appointment.reason}</p>}
                 </div>
                 <div className="flex items-center gap-3">
                   <AppointmentStatusBadge status={appointment.status} />
