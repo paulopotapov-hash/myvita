@@ -30,8 +30,13 @@ router = APIRouter()
 _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
 
 
-def _public(appointment: Appointment, user: User, db: Session) -> AppointmentPublic:
-    may_read_reason = user.role == UserRole.PATIENT or is_clinical_staff(db, user)
+def _may_read_reason(user: User, db: Session) -> bool:
+    return user.role == UserRole.PATIENT or is_clinical_staff(db, user)
+
+
+def _public(appointment: Appointment, user: User, db: Session, *, may_read_reason: bool | None = None) -> AppointmentPublic:
+    if may_read_reason is None:
+        may_read_reason = _may_read_reason(user, db)
     return AppointmentPublic(
         id=appointment.id,
         clinic_id=appointment.clinic_id,
@@ -135,7 +140,8 @@ def list_mine(
         user_agent=request.headers.get("user-agent"),
         metadata={"count": len(appointments)},
     )
-    return [_public(appointment, user, db) for appointment in appointments]
+    may_read_reason = _may_read_reason(user, db)  # once per request, not once per row
+    return [_public(appointment, user, db, may_read_reason=may_read_reason) for appointment in appointments]
 
 
 @router.get("/{appointment_id}", response_model=AppointmentPublic)
