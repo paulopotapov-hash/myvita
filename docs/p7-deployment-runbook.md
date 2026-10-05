@@ -32,3 +32,15 @@ The TLS overlay redirects port 80 to 443, supports TLS 1.2/1.3 and HSTS. Certifi
 ## Production smoke contract
 
 `production_smoke.sh` verifies HTTPS, health/readiness, frontend, hidden metrics/OpenAPI and security headers. With approved synthetic credentials it verifies login, Secure+HttpOnly session cookie, authenticated identity and logout. Optional URLs must demonstrate a 403 authorization denial and 404 cross-tenant concealment. Database, monitoring targets, backup freshness and alert delivery remain operator-side checks because they are deliberately not public.
+
+## Staging synthetic data and acceptance
+
+Public onboarding/registration stay disabled, so staging identities are created with `backend/scripts/seed_staging.py` (two clinics: admin, doctor and patient each, plus a nurse in clinic A). It refuses to run unless `STAGING_SEED_CONFIRM=yes` and `STAGING_SEED_PASSWORD` are set, and refuses databases that contain non-seed clinics. The password is generated per environment and never stored in Git:
+
+```sh
+docker compose -f docker-compose.prod.yml exec -T -e STAGING_SEED_CONFIRM=yes \
+  -e STAGING_SEED_PASSWORD="$STAGING_SEED_PASSWORD" backend python -m scripts.seed_staging
+BASE_URL=https://<approved-host> SEED_PASSWORD="$STAGING_SEED_PASSWORD" node scripts/staging_acceptance.mjs
+```
+
+`staging_acceptance.mjs` is re-runnable and uses fewer than 10 logins so it stays inside the login rate limit. It covers SPA refresh, health, cookies, CSRF, the clinical write paths, role denials, cross-clinic concealment and logout revocation. The topology can be rehearsed locally with `docker-compose.prod.yml` plus `docker-compose.prod-http.yml` (see README); that rehearsal proves routing, port exposure and persistence but not TLS, HSTS, `Secure` cookies or JSON production logs.
