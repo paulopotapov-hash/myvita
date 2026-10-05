@@ -32,3 +32,8 @@ class StaffPublic(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class StaffRoleUpdateRequest(RequestModel):
+    staff_role: StaffRole
+    specialty: str | None = Field(default=None, max_length=255)

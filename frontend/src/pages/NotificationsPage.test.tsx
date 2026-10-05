@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { NotificationsPage } from './NotificationsPage'
 
@@ -11,6 +12,9 @@ const { markRead, useNotifications } = vi.hoisted(() => ({
 vi.mock('../hooks/useClinicalData', () => ({
   useNotifications,
   useMarkNotificationRead: () => ({ mutate: markRead, isPending: false }),
+}))
+vi.mock('../hooks/useSession', () => ({
+  useSession: () => ({ user: { role: 'patient' } }),
 }))
 
 describe('NotificationsPage', () => {
@@ -26,10 +30,10 @@ describe('NotificationsPage', () => {
       isError: false,
     }))
     const user = userEvent.setup()
-    render(<NotificationsPage />)
+    render(<MemoryRouter><NotificationsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: 'Marcar como lida' }))
-    expect(markRead).toHaveBeenCalledWith('n1')
+    expect(markRead).toHaveBeenCalledWith('n1', expect.objectContaining({ onError: expect.any(Function) }))
     await user.click(screen.getByRole('button', { name: 'Seguinte' }))
     expect(useNotifications).toHaveBeenLastCalledWith(2, 20)
     expect(screen.getByText('Página seguinte')).toBeInTheDocument()

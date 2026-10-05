@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { medicalRecordsService } from '../services/medicalRecords'
 import { medicationsService } from '../services/medications'
 import { notificationsService } from '../services/notifications'
-import type { MedicalRecordWriteRequest, MedicationCreateRequest, MedicationUpdateRequest } from '../types/api'
+import type { MedicalRecordCreateRequest, MedicalRecordUpdateRequest, MedicationCreateRequest, MedicationUpdateRequest } from '../types/api'
 
 export function useMedicalRecords(patientId: string, enabled = true) {
   return useQuery({ queryKey: ['patients', patientId, 'medical-records'], queryFn: ({ signal }) => medicalRecordsService.list(patientId, signal), enabled: enabled && Boolean(patientId) })
@@ -12,11 +12,11 @@ export function useMedicalRecordRevisions(recordId: string) {
 }
 export function useCreateMedicalRecord(patientId: string) {
   const client = useQueryClient()
-  return useMutation({ mutationFn: (payload: MedicalRecordWriteRequest) => medicalRecordsService.create(patientId, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medical-records'] }) })
+  return useMutation({ mutationFn: (payload: MedicalRecordCreateRequest) => medicalRecordsService.create(patientId, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medical-records'] }) })
 }
 export function useUpdateMedicalRecord(patientId: string) {
   const client = useQueryClient()
-  return useMutation({ mutationFn: ({ id, payload }: { id: string; payload: MedicalRecordWriteRequest }) => medicalRecordsService.update(id, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medical-records'] }) })
+  return useMutation({ mutationFn: ({ id, payload }: { id: string; payload: MedicalRecordUpdateRequest }) => medicalRecordsService.update(id, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medical-records'] }) })
 }
 export function useMedications(patientId: string, enabled = true) {
   return useQuery({ queryKey: ['patients', patientId, 'medications'], queryFn: ({ signal }) => medicationsService.list(patientId, signal), enabled: enabled && Boolean(patientId) })

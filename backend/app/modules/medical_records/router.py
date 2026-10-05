@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
@@ -36,10 +36,14 @@ def _audit(request: Request, user: User, action: AuditAction, record: MedicalRec
 def list_for_patient(
     patient_id: uuid.UUID,
     request: Request,
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[MedicalRecord]:
-    records = list_records(db, patient_id, user)
+    records, total = list_records(db, patient_id, user, offset=(page - 1) * page_size, limit=page_size)
+    response.headers["X-Total-Count"] = str(total)
     record_audit_event(
         action=AuditAction.MEDICAL_RECORD_VIEWED,
         result=AuditResult.SUCCESS,

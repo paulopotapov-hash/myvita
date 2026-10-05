@@ -92,6 +92,7 @@ def list_mine(
     response: Response,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
+    search: str | None = Query(default=None, min_length=1, max_length=100),
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     staff_user: User = Depends(_staff_or_admin_only),
@@ -102,7 +103,15 @@ def list_mine(
     can show a name instead of a bare UUID. Never a cross-clinic listing:
     clinic_id always comes from the staff member's own session.
     """
-    patients, total = list_patients_for_clinic(db, clinic_id, offset=(page - 1) * page_size, limit=page_size)
+    if search is not None and not search.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Pesquisa vazia.")
+    patients, total = list_patients_for_clinic(
+        db,
+        clinic_id,
+        offset=(page - 1) * page_size,
+        limit=page_size,
+        search=search,
+    )
     response.headers["X-Total-Count"] = str(total)
     record_audit_event(
         action=AuditAction.STAFF_VIEWED_PATIENT,

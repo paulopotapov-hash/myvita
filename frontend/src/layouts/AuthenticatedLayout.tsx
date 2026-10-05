@@ -82,14 +82,15 @@ export function AuthenticatedLayout({ areaLabel, homePath, navItems }: Authentic
               disabled={logout.isPending}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
-              {logout.isPending ? 'A sair…' : 'Sair'}
+              {logout.isPending ? 'A sair…' : logout.isError ? 'Tentar sair novamente' : 'Sair'}
             </button>
           </div>
         </header>
         {logout.isError && (
-          <p role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-right text-sm text-red-700">
-            {toUserMessage(logout.error)}
-          </p>
+          <div role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-right text-sm text-red-700">
+            <p>{toUserMessage(logout.error)}</p>
+            <p className="mt-1 text-xs">A sessão continua ativa neste ecrã. Podes voltar a tentar em “Sair”.</p>
+          </div>
         )}
         {mobileNavOpen && (
           <nav className="border-b border-slate-200 bg-white px-2 py-2 md:hidden" aria-label="Navegação principal">

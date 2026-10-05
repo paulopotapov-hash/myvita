@@ -5,7 +5,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { TextField } from '../../components/TextField'
-import { useStaff } from '../../hooks/useClinicData'
+import { useSetStaffActive, useStaff, useUpdateStaffRole } from '../../hooks/useClinicData'
 import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { staffCreateSchema, zodErrorsToRecord } from '../../lib/validation'
@@ -23,6 +23,8 @@ const EMPTY_FORM = { full_name: '', email: '', staff_role: 'doctor' as StaffRole
 export function StaffManagementPage() {
   const staff = useStaff()
   const createStaff = useMutation({ mutationFn: invitationsService.inviteStaff })
+  const setStaffActive = useSetStaffActive()
+  const updateStaffRole = useUpdateStaffRole()
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [invitationLink, setInvitationLink] = useState('')
@@ -127,14 +129,35 @@ export function StaffManagementPage() {
         {staff.data && staff.data.length > 0 && (
           <ul className="flex flex-col divide-y divide-slate-100">
             {staff.data.map((member) => (
-              <li key={member.id} className="flex items-center justify-between py-3">
+              <li key={member.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <p className="font-medium text-slate-900">{member.full_name}</p>
                   {member.specialty && <p className="text-sm text-slate-500">{member.specialty}</p>}
+                  <p className="text-xs text-slate-500">{member.is_active ? 'Acesso ativo' : 'Acesso desativado'}</p>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                  {STAFF_ROLE_LABELS[member.staff_role]}
-                </span>
+                <div className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor={`role-${member.id}`}>Função de {member.full_name}</label>
+                  <select
+                    id={`role-${member.id}`}
+                    value={member.staff_role}
+                    disabled={updateStaffRole.isPending && updateStaffRole.variables?.id === member.id}
+                    onChange={(event) => updateStaffRole.mutate({
+                      id: member.id,
+                      staffRole: event.target.value as StaffRole,
+                      specialty: member.specialty ?? undefined,
+                    })}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                  >
+                    {Object.entries(STAFF_ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                  <Button
+                    variant="secondary"
+                    isLoading={setStaffActive.isPending && setStaffActive.variables?.id === member.id}
+                    onClick={() => setStaffActive.mutate({ id: member.id, active: !member.is_active })}
+                  >
+                    {member.is_active ? 'Desativar' : 'Reativar'}
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

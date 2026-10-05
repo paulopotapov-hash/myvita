@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
@@ -54,7 +54,8 @@ def invite_staff(
     db: Session = Depends(get_db),
     admin: User = Depends(_admin_only),
 ) -> InvitationCreated:
-    assert admin.clinic_id is not None
+    if admin.clinic_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Conta sem clínica associada.")
     invitation, token = create_invitation(
         db,
         clinic_id=admin.clinic_id,
@@ -78,7 +79,8 @@ def invite_patient(
     db: Session = Depends(get_db),
     actor: User = Depends(_staff_or_admin),
 ) -> InvitationCreated:
-    assert actor.clinic_id is not None
+    if actor.clinic_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Conta sem clínica associada.")
     if actor.role == UserRole.STAFF:
         clinical_staff(db, actor)
     invitation, token = create_invitation(

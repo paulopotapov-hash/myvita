@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
@@ -99,14 +99,22 @@ def create(
 
 @router.get("", response_model=list[AppointmentPublic])
 def list_mine(
-    request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    request: Request,
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[AppointmentPublic]:
     """
     Patients get their own appointments; staff/clinic_admin get every
     appointment in their own clinic. Scoping happens entirely server-side
     based on the authenticated session — see service.list_appointments_for_user.
     """
-    appointments = list_appointments_for_user(db, user)
+    appointments, total = list_appointments_for_user(
+        db, user, offset=(page - 1) * page_size, limit=page_size
+    )
+    response.headers["X-Total-Count"] = str(total)
     # Clinical access log: who looked at appointment data, and whose.
     # One row per request (not per appointment) — the "resource" for this
     # event is "the appointment list this user is entitled to see", not

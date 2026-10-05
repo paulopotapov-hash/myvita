@@ -9,8 +9,13 @@ from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
 from app.models import AuditAction, AuditResult, Staff, User, UserRole
-from app.modules.staff.schemas import StaffCreateRequest, StaffPublic
-from app.modules.staff.service import create_staff_member, deactivate_staff_member
+from app.modules.staff.schemas import StaffCreateRequest, StaffPublic, StaffRoleUpdateRequest
+from app.modules.staff.service import (
+    activate_staff_member,
+    create_staff_member,
+    deactivate_staff_member,
+    update_staff_role,
+)
 
 router = APIRouter()
 
@@ -106,6 +111,71 @@ def deactivate(
         resource_id=staff.user_id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+    )
+    return StaffPublic(
+        id=staff.id,
+        clinic_id=staff.clinic_id,
+        full_name=staff.user.full_name,
+        staff_role=staff.staff_role,
+        specialty=staff.specialty,
+        is_active=staff.user.is_active,
+    )
+
+
+@router.post("/{staff_id}/activate", response_model=StaffPublic)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def activate(
+    staff_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_clinic_admin_only),
+) -> StaffPublic:
+    staff = activate_staff_member(db, staff_id, clinic_id)
+    record_audit_event(
+        action=AuditAction.STAFF_UPDATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="user",
+        resource_id=staff.user_id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"active": True},
+    )
+    return StaffPublic(
+        id=staff.id,
+        clinic_id=staff.clinic_id,
+        full_name=staff.user.full_name,
+        staff_role=staff.staff_role,
+        specialty=staff.specialty,
+        is_active=staff.user.is_active,
+    )
+
+
+@router.patch("/{staff_id}/role", response_model=StaffPublic)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def change_role(
+    staff_id: uuid.UUID,
+    payload: StaffRoleUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_clinic_admin_only),
+) -> StaffPublic:
+    staff = update_staff_role(db, staff_id, clinic_id, payload)
+    record_audit_event(
+        action=AuditAction.STAFF_UPDATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="staff",
+        resource_id=staff.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"staff_role": staff.staff_role.value},
     )
     return StaffPublic(
         id=staff.id,

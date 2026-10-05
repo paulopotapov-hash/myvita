@@ -47,7 +47,7 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
 
 
 def list_patients_for_clinic(
-    db: Session, clinic_id: str, *, offset: int = 0, limit: int = 50
+    db: Session, clinic_id: str, *, offset: int = 0, limit: int = 50, search: str | None = None
 ) -> tuple[list[Patient], int]:
     """
     Staff/clinic_admin only (enforced in the router) — the patient directory
@@ -60,6 +60,9 @@ def list_patients_for_clinic(
         .filter(Patient.clinic_id == clinic_id)
         .join(User, Patient.user_id == User.id)
     )
+    if search:
+        escaped = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(User.full_name.ilike(f"%{escaped}%", escape="\\"))
     total = query.count()
     patients = query.order_by(User.full_name, Patient.id).offset(offset).limit(limit).all()
     return patients, total

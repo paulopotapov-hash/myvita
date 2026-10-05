@@ -181,7 +181,8 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 response = await call_next(request)
         elif response is None:
             response = await call_next(request)
-        assert response is not None
+        if response is None:  # Defensive invariant; should be unreachable after call_next above.
+            raise RuntimeError("Request middleware completed without a response")
         duration_ms = (time.monotonic() - start) * 1000
 
         _apply_security_headers(request, response)

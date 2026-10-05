@@ -17,6 +17,7 @@ import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
+import { AccountProfilePage } from './pages/AccountProfilePage'
 import { PatientDashboard } from './pages/patient/PatientDashboard'
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route path="perfil" element={<AccountProfilePage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route
           path="pacientes"
@@ -81,6 +83,8 @@ export default function App() {
         <Route index element={<PatientDashboard />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="perfil" element={<PatientProfilePage />} />
+        <Route path="consentimentos" element={<PatientDetailPage own section="consents" />} />
+        <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route path="saude" element={<PatientDetailPage own />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
       </Route>

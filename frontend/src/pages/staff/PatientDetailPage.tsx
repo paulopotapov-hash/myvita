@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { ApiError } from '../../lib/apiClient'
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
@@ -45,7 +47,7 @@ function PatientUpdateForm({ patient, patientOwnRecord }: { patient: PatientPubl
     >
       <TextField label="Telefone" value={phone} onChange={(event) => setPhone(event.target.value)} />
       {!patientOwnRecord && <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} />}
-      <div className="flex items-center gap-3 sm:col-span-2">
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <Button type="submit" isLoading={update.isPending}>Guardar dados</Button>
         {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
       </div>
@@ -61,6 +63,14 @@ function MedicalRecordsSection({ patientId, canWrite }: { patientId: string; can
   const revisions = useMedicalRecordRevisions(selected?.id ?? '')
   const [form, setForm] = useState({ title: '', content: '' })
   const [message, setMessage] = useState('')
+  const [leaveConfirmation, setLeaveConfirmation] = useState<(() => void) | null>(null)
+  const formDirty = Boolean(form.title || form.content)
+  const saving = create.isPending || update.isPending
+
+  function leaveEditor() {
+    setSelected(null)
+    setForm({ title: '', content: '' })
+  }
 
   function save(event: React.FormEvent) {
     event.preventDefault()
@@ -75,29 +85,32 @@ function MedicalRecordsSection({ patientId, canWrite }: { patientId: string; can
         setForm({ title: '', content: '' })
         setMessage('Registo clínico guardado.')
       },
-      onError: (error: unknown) => setMessage(toUserMessage(error)),
+      onError: (error: unknown) => setMessage(error instanceof ApiError && error.status === 409
+        ? error.detail ?? 'Este registo foi alterado por outra pessoa. Atualiza a ficha e volta a tentar.'
+        : toUserMessage(error)),
     }
-    if (selected) update.mutate({ id: selected.id, payload: form }, options)
+    if (selected) update.mutate({ id: selected.id, payload: { ...form, expected_version: selected.version } }, options)
     else create.mutate(form, options)
   }
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-medium">Histórico clínico</h2>
+      <h2 className="mb-4 text-lg font-medium">Registos clínicos</h2>
       {canWrite && (
         <form className="mb-6 grid gap-3 border-b border-slate-100 pb-5" onSubmit={save}>
           <TextField label="Título do registo" value={form.title} onChange={(event) => setForm((value) => ({ ...value, title: event.target.value }))} />
           <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">Conteúdo clínico
             <textarea className="min-h-28 rounded-md border border-slate-300 px-3 py-2 font-normal" value={form.content} onChange={(event) => setForm((value) => ({ ...value, content: event.target.value }))} maxLength={20000} />
           </label>
-          <div className="flex items-center gap-3"><Button type="submit" isLoading={create.isPending || update.isPending}>{selected ? 'Guardar nova versão' : 'Criar registo'}</Button>{selected && <Button variant="secondary" onClick={() => { setSelected(null); setForm({ title: '', content: '' }) }}>Cancelar edição</Button>}</div>
-          {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
+          <div className="flex flex-wrap items-center gap-3"><Button type="submit" isLoading={saving}>{selected ? 'Guardar alterações' : 'Criar registo'}</Button>{selected && <Button variant="secondary" disabled={saving} onClick={() => { if (formDirty) setLeaveConfirmation(() => leaveEditor); else leaveEditor() }}>Cancelar edição</Button>}</div>
+          {message && <p role={message.includes('guardado') ? 'status' : 'alert'} className={`text-sm ${message.includes('guardado') ? 'text-teal-700' : 'text-red-700'}`}>{message}</p>}
         </form>
       )}
       {records.isLoading && <LoadingSpinner />}
       {records.isError && <ErrorState message={toUserMessage(records.error)} onRetry={() => records.refetch()} />}
       {records.data?.length === 0 && <EmptyState title="Sem registos clínicos" />}
-      {records.data && records.data.length > 0 && <ul className="divide-y divide-slate-100">{records.data.map((record) => <li key={record.id} className="py-4"><div className="flex items-start justify-between gap-3"><div><p className="font-medium">{record.title}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{record.content}</p><p className="mt-1 text-xs text-slate-500">Versão {record.version} · {formatDateTime(record.updated_at)}</p></div>{canWrite && <Button variant="secondary" onClick={() => { setSelected(record); setForm({ title: record.title, content: record.content }) }}>Editar</Button>}</div>{selected?.id === record.id && <div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="text-sm font-medium">Revisões</p>{revisions.isLoading && <LoadingSpinner />}{revisions.data?.map((revision) => <p key={revision.id} className="mt-1 text-xs text-slate-600">Versão {revision.version} · {formatDateTime(revision.created_at)}</p>)}</div>}</li>)}</ul>}
+      {records.data && records.data.length > 0 && <ul className="divide-y divide-slate-100">{records.data.map((record) => <li key={record.id} className="py-4"><div className="flex items-start justify-between gap-3"><div><p className="font-medium">{record.title}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{record.content}</p><p className="mt-1 text-xs text-slate-500">Autor {record.author_staff_id} · Criado {formatDateTime(record.created_at)} · Versão {record.version} · Atualizado {formatDateTime(record.updated_at)}</p></div>{canWrite && <Button variant="secondary" onClick={() => { if (formDirty) { setLeaveConfirmation(() => () => { setSelected(record); setForm({ title: record.title, content: record.content }); setMessage('') }); return } setSelected(record); setForm({ title: record.title, content: record.content }); setMessage('') }}>Editar</Button>}</div>{selected?.id === record.id && <div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="text-sm font-medium">Revisões</p>{revisions.isLoading && <LoadingSpinner />}{revisions.isError && <ErrorState message={toUserMessage(revisions.error)} onRetry={() => revisions.refetch()} />}{revisions.data?.length === 0 && <p className="mt-1 text-sm text-slate-500">Sem revisões anteriores.</p>}{revisions.data?.map((revision) => <p key={revision.id} className="mt-1 text-xs text-slate-600">Autor {revision.editor_staff_id} · Versão {revision.version} · {formatDateTime(revision.created_at)}</p>)}</div>}</li>)}</ul>}
+      {leaveConfirmation && <ConfirmDialog title="Descartar alterações" description="As alterações ainda não guardadas serão perdidas." confirmLabel="Descartar" onCancel={() => setLeaveConfirmation(null)} onConfirm={() => { const action = leaveConfirmation; setLeaveConfirmation(null); action() }} />}
     </section>
   )
 }
@@ -126,9 +139,11 @@ function MedicationsSection({ patientId, canWrite }: { patientId: string; canWri
   )
 }
 
-export function PatientDetailPage({ own = false }: { own?: boolean }) {
+export function PatientDetailPage({ own = false, section: initialSection = 'overview' }: { own?: boolean; section?: 'overview' | 'consents' }) {
   const { id: routeId = '' } = useParams()
+  const location = useLocation()
   const { user } = useSession()
+  const [activeSection, setActiveSection] = useState<'personal' | 'appointments' | 'records' | 'medications' | 'consents'>(initialSection === 'consents' ? 'consents' : 'personal')
   const id = own ? (user?.patient_id ?? '') : routeId
   const patientQuery = usePatient(id)
   const appointments = useAppointments()
@@ -149,7 +164,7 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
   return (
     <div className="flex flex-col gap-6">
       {!own && <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
-        <Link to="/app/pacientes" className="hover:text-teal-700 hover:underline">Pacientes</Link>
+        <Link to={{ pathname: '/app/pacientes', search: location.search }} className="hover:text-teal-700 hover:underline">Voltar à lista de pacientes</Link>
         <span aria-hidden="true"> / </span>
         <span>{patient.full_name}</span>
       </nav>}
@@ -159,7 +174,19 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
         <p className="text-sm text-slate-500">Ficha do paciente</p>
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
+      <nav role="tablist" aria-label="Secções da ficha" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+        {([
+          ['personal', 'Dados pessoais'], ['appointments', 'Consultas'],
+          ...(canReadClinical ? [['records', 'Registos clínicos'], ['medications', 'Medicamentos']] : []),
+          ['consents', 'Consentimentos'],
+        ] as Array<[typeof activeSection, string]>).map(([key, label]) => (
+          <button key={key} id={`patient-tab-${key}`} type="button" role="tab" aria-controls={`patient-panel-${key}`} aria-selected={activeSection === key} onClick={() => setActiveSection(key)} className={`rounded-md px-3 py-2 text-sm font-medium focus-visible:outline-2 ${activeSection === key ? 'bg-teal-50 text-teal-800' : 'text-slate-600 hover:bg-slate-100'}`}>
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {activeSection === 'personal' && <section id="patient-panel-personal" role="tabpanel" aria-labelledby="patient-tab-personal" className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-medium">Dados pessoais</h2>
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Detail label="Data de nascimento" value={patient.birth_date ? formatDate(patient.birth_date) : '—'} />
@@ -168,10 +195,10 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
           <Detail label="Estado" value={patient.is_active ? 'Ativo' : 'Inativo'} />
         </dl>
         <PatientUpdateForm patient={patient} patientOwnRecord={user?.role === 'patient'} />
-      </section>
+      </section>}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="mb-4 text-lg font-medium">Consultas</h2>
+      {activeSection === 'appointments' && <section id="patient-panel-appointments" role="tabpanel" aria-labelledby="patient-tab-appointments" className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-medium">Consultas</h2><Link to={own ? '/patient/consultas' : '/app/consultas'} className="text-sm font-medium text-teal-700 hover:underline">Abrir agenda</Link></div>
         {appointments.isLoading && <LoadingSpinner />}
         {appointments.isError && (
           <ErrorState message={toUserMessage(appointments.error)} onRetry={() => appointments.refetch()} />
@@ -190,12 +217,11 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
             ))}
           </ul>
         )}
-      </section>
+      </section>}
 
-      {canReadClinical && <MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} />}
-      {canReadClinical && <MedicationsSection patientId={patient.id} canWrite={canWriteClinical} />}
-
-      <ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} />
+      {canReadClinical && activeSection === 'records' && <div id="patient-panel-records" role="tabpanel" aria-labelledby="patient-tab-records"><MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} /></div>}
+      {canReadClinical && activeSection === 'medications' && <div id="patient-panel-medications" role="tabpanel" aria-labelledby="patient-tab-medications"><MedicationsSection patientId={patient.id} canWrite={canWriteClinical} /></div>}
+      {activeSection === 'consents' && <div id="patient-panel-consents" role="tabpanel" aria-labelledby="patient-tab-consents"><ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} /></div>}
     </div>
   )
 }
@@ -272,7 +298,7 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
         {success && <p role="status" className="text-sm text-teal-700 md:col-span-3">{success}</p>}
       </form>}
 
-      {consents.isLoading && <LoadingSpinner />}
+      {consents.isLoading && <LoadingSpinner label="A carregar consentimentos…" />}
       {consents.isError && <ErrorState message={toUserMessage(consents.error)} onRetry={() => consents.refetch()} />}
       {consents.data?.length === 0 && <EmptyState title="Sem consentimentos" description="Ainda não existem decisões registadas." />}
       {consents.data && consents.data.length > 0 && (
@@ -287,6 +313,8 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
                   </span>
                 </div>
                 <p className="text-sm text-slate-600">{consent.purpose}</p>
+                {consent.policy_version && <p className="mt-1 text-xs text-slate-500">Versão do texto: {consent.policy_version}</p>}
+                {consent.policy_text && <details className="mt-2 text-sm text-slate-600"><summary className="cursor-pointer">Texto apresentado</summary><p className="mt-1 whitespace-pre-wrap">{consent.policy_text}</p></details>}
                 <p className="mt-1 text-xs text-slate-500">Concedido em {formatDateTime(consent.granted_at)}{consent.revoked_at ? ` · Revogado em ${formatDateTime(consent.revoked_at)}` : ''}</p>
               </div>
               {canManage && consent.status === 'granted' && (

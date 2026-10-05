@@ -9,6 +9,10 @@ export const patientsService = {
   list: (signal?: AbortSignal) => api.get<PatientSummary[]>('/api/v1/patients', signal),
   listPage: (page: number, pageSize: number, signal?: AbortSignal) =>
     api.getPage<PatientSummary>(`/api/v1/patients?page=${page}&page_size=${pageSize}`, signal),
+  search: (search: string, page: number, pageSize: number, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ search, page: String(page), page_size: String(pageSize) })
+    return api.getPage<PatientSummary>(`/api/v1/patients?${params.toString()}`, signal)
+  },
   detail: (patientId: string, signal?: AbortSignal) =>
     api.get<PatientPublic>(`/api/v1/patients/${patientId}`, signal),
   update: (patientId: string, payload: PatientUpdateRequest) =>

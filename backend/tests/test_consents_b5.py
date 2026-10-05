@@ -95,6 +95,8 @@ def test_authorized_creation_validation_and_audit(client: TestClient):
     assert body["clinic_id"] == tenant["clinic_id"]
     assert body["status"] == "granted"
     assert body["revoked_at"] is None
+    assert body["policy_version"] is None
+    assert body["policy_text"] is None
 
     duplicate = _grant(client, tenant)
     assert duplicate.status_code == 409
@@ -111,6 +113,30 @@ def test_authorized_creation_validation_and_audit(client: TestClient):
         assert audit.event_metadata is None
     finally:
         db.close()
+
+
+def test_consent_preserves_policy_version_and_text_snapshot(client: TestClient):
+    tenant = _tenant(client, "snapshot")
+    response = client.post(
+        f"/api/v1/patients/{tenant['patient_id']}/consents",
+        json={
+            "consent_type": "treatment",
+            "purpose": "Finalidade aprovada para o teste",
+            "policy_version": "pilot-draft-1",
+            "policy_text": "Texto técnico de teste; não é conteúdo jurídico aprovado.",
+        },
+        headers=_use(client, tenant["patient"]),
+    )
+    assert response.status_code == 201
+    assert response.json()["policy_version"] == "pilot-draft-1"
+    assert response.json()["policy_text"].startswith("Texto técnico")
+
+    incomplete = client.post(
+        f"/api/v1/patients/{tenant['patient_id']}/consents",
+        json={"consent_type": "research", "purpose": "Teste", "policy_version": "v1"},
+        headers=_use(client, tenant["patient"]),
+    )
+    assert incomplete.status_code == 422
 
 
 def test_patient_can_view_grant_and_revoke_own_consent(client: TestClient):

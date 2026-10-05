@@ -12,7 +12,11 @@ AND the matching CSRF cookie for each identity — the CSRF token is bound
 to a specific user's session, not shared across identities.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +24,9 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
+from app.models import Appointment
+from app.modules.appointments.schemas import AppointmentCreateRequest
+from app.modules.appointments.service import create_appointment
 from tests.conftest import TEST_DATABASE_URL
 
 
@@ -38,6 +45,7 @@ def client():
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
+        c.test_session_factory = TestSessionLocal
         yield c
 
     app.dependency_overrides.clear()
@@ -125,6 +133,129 @@ def test_staff_can_book_appointment_for_their_clinic(client):
     )
     assert r.status_code == 201
     assert r.json()["status"] == "scheduled"
+
+    _use_identity(client, a["patient"])
+    notifications = client.get("/api/v1/notifications?page=1&page_size=20")
+    assert notifications.status_code == 200
+    assert notifications.headers["X-Total-Count"] == "1"
+    assert notifications.json()[0]["title"] == "Consulta criada"
+
+
+def test_notification_failure_rolls_back_appointment(client, monkeypatch):
+    tenant = _new_clinic_with_staff_and_patient(client, "atomic")
+    headers = _use_identity(client, tenant["admin"])
+
+    def fail_notification(*_args, **_kwargs):
+        raise RuntimeError("synthetic notification failure")
+
+    monkeypatch.setattr(
+        "app.modules.appointments.service._add_patient_notification", fail_notification
+    )
+    with pytest.raises(RuntimeError, match="synthetic notification failure"):
+        client.post(
+            "/api/v1/appointments",
+            json={
+                "patient_id": tenant["patient_id"],
+                "staff_id": tenant["staff_id"],
+                "scheduled_at": "2026-10-01T12:00:00Z",
+            },
+            headers=headers,
+        )
+
+    db = client.test_session_factory()
+    try:
+        assert db.query(Appointment).count() == 0
+    finally:
+        db.close()
+
+
+def test_notification_failure_rolls_back_update_and_cancel(client, monkeypatch):
+    tenant = _new_clinic_with_staff_and_patient(client, "atomic-mutations")
+    headers = _use_identity(client, tenant["admin"])
+    created = client.post(
+        "/api/v1/appointments",
+        json={
+            "patient_id": tenant["patient_id"],
+            "staff_id": tenant["staff_id"],
+            "scheduled_at": "2026-10-01T13:00:00Z",
+        },
+        headers=headers,
+    )
+    appointment_id = created.json()["id"]
+
+    def fail_notification(*_args, **_kwargs):
+        raise RuntimeError("synthetic notification failure")
+
+    monkeypatch.setattr(
+        "app.modules.appointments.service._add_patient_notification", fail_notification
+    )
+    with pytest.raises(RuntimeError, match="synthetic notification failure"):
+        client.patch(
+            f"/api/v1/appointments/{appointment_id}",
+            json={"duration_minutes": 45},
+            headers=headers,
+        )
+    with pytest.raises(RuntimeError, match="synthetic notification failure"):
+        client.post(f"/api/v1/appointments/{appointment_id}/cancel", headers=headers)
+
+    db = client.test_session_factory()
+    try:
+        appointment = db.get(Appointment, appointment_id)
+        assert appointment is not None
+        assert appointment.duration_minutes == 30
+        assert appointment.status.value == "scheduled"
+    finally:
+        db.close()
+
+
+def test_appointment_list_is_paginated_after_tenant_scope(client):
+    a = _new_clinic_with_staff_and_patient(client, "paged")
+    headers = _use_identity(client, a["admin"])
+    for hour in (9, 10, 11):
+        response = client.post(
+            "/api/v1/appointments",
+            json={
+                "patient_id": a["patient_id"],
+                "staff_id": a["staff_id"],
+                "scheduled_at": f"2026-10-02T{hour:02d}:00:00Z",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201
+
+    page = client.get("/api/v1/appointments?page=2&page_size=2")
+    assert page.status_code == 200
+    assert page.headers["X-Total-Count"] == "3"
+    assert len(page.json()) == 1
+
+
+def test_concurrent_overlapping_bookings_allow_only_one(client):
+    tenant = _new_clinic_with_staff_and_patient(client, "concurrent")
+    barrier = Barrier(2)
+    payload = AppointmentCreateRequest(
+        patient_id=tenant["patient_id"],
+        staff_id=tenant["staff_id"],
+        scheduled_at="2026-10-08T10:00:00Z",
+        duration_minutes=30,
+    )
+
+    def book() -> int:
+        db = client.test_session_factory()
+        try:
+            barrier.wait()
+            create_appointment(db, tenant["clinic_id"], payload)
+            return 201
+        except HTTPException as exc:
+            db.rollback()
+            return exc.status_code
+        finally:
+            db.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(book) for _ in range(2)]
+        statuses = sorted(future.result() for future in futures)
+
+    assert statuses == [201, 409]
 
 
 def test_patient_sees_only_their_own_appointment(client):

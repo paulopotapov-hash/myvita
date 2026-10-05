@@ -26,3 +26,7 @@ backups/
 node_modules/
 dist/
 frontend/coverage/
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/

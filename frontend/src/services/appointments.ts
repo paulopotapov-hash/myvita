@@ -8,6 +8,8 @@ export const appointmentsService = {
    * own; staff/admin see their clinic's). Passing a filter here would be
    * meaningless: the backend doesn't accept one, by design. */
   list: (signal?: AbortSignal) => api.get<AppointmentPublic[]>('/api/v1/appointments', signal),
+  listPage: (page: number, pageSize: number, signal?: AbortSignal) =>
+    api.getPage<AppointmentPublic>(`/api/v1/appointments?page=${page}&page_size=${pageSize}`, signal),
   detail: (appointmentId: string, signal?: AbortSignal) =>
     api.get<AppointmentPublic>(`/api/v1/appointments/${appointmentId}`, signal),
   update: (appointmentId: string, payload: AppointmentUpdateRequest) =>

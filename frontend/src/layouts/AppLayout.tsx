@@ -6,6 +6,8 @@ const STAFF_NAV: NavItem[] = [
   { to: '/app/consultas', label: 'Consultas' },
   { to: '/app/pacientes', label: 'Pacientes' },
   { to: '/app/notificacoes', label: 'Notificações' },
+  { to: '/app/perfil', label: 'Perfil' },
+  { to: '/app/seguranca', label: 'Segurança' },
 ]
 
 const ADMIN_NAV: NavItem[] = [
@@ -14,6 +16,8 @@ const ADMIN_NAV: NavItem[] = [
   { to: '/app/pacientes', label: 'Pacientes' },
   { to: '/app/equipa', label: 'Equipa' },
   { to: '/app/notificacoes', label: 'Notificações' },
+  { to: '/app/perfil', label: 'Perfil' },
+  { to: '/app/seguranca', label: 'Segurança' },
 ]
 
 export function AppLayout() {

@@ -84,9 +84,11 @@ describe('PatientDetailPage consent workflow', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
-  it('shows patient data and immutable consent history', () => {
+  it('shows patient data and immutable consent history', async () => {
+    const user = userEvent.setup()
     renderPage()
     expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Consentimentos' }))
     expect(screen.getByText('Cuidados clínicos')).toBeInTheDocument()
     expect(screen.getByText('Concedido')).toBeInTheDocument()
   })
@@ -96,6 +98,7 @@ describe('PatientDetailPage consent workflow', () => {
     sessionState.patient_id = 'patient-1'
     const user = userEvent.setup()
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Consentimentos' }))
     await user.type(screen.getByLabelText('Finalidade'), 'Partilha assistencial')
     await user.click(screen.getByRole('button', { name: 'Conceder' }))
     expect(grantMutate).toHaveBeenCalledWith(

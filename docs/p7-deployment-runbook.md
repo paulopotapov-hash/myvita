@@ -11,7 +11,7 @@ Status: **READY AS A PROCEDURE; EXECUTION BLOCKED BY EXTERNAL INFRASTRUCTURE**.
 5. Inject runtime secrets from the approved manager. Use exact HTTPS CORS/trusted hosts and keep public registration disabled.
 6. Configure private off-site backup and a staffed Alertmanager receiver; prove both before traffic.
 7. Run `scripts/production_preflight.sh`. Render base, monitoring, TLS and registry overlays with `docker compose config --quiet`.
-8. Pull digest-pinned images. Start PostgreSQL, run the one-shot migration service, then start remaining services with `--no-build`. Backend and backup are gated on migration success.
+8. Pull digest-pinned images. Before migration, stop/quiesce application writes and create a checksum-verified backup with the currently deployed backup image; for a new empty database, record that this gate is not applicable. Abort if the backup fails. Then run the one-shot migration service and start remaining services with `--no-build`. Backend and scheduled backup are gated on migration success; backend health gates frontend/proxy. Compose startup alone does not create the required pre-migration backup.
 9. Verify container health, `/health`, `/ready`, Prometheus targets, Grafana authentication, backup freshness and alert delivery.
 10. Run `scripts/production_smoke.sh` against HTTPS. Use only approved synthetic accounts/resources and remove them through the approved application workflow.
 11. Enable traffic only after the release owner signs every P7 checklist gate.

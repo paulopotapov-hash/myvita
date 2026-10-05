@@ -1,5 +1,7 @@
 # Pilot incident response
 
+For loss of account access, first determine whether the account is inactive, an invitation is merely expired, or credentials are lost. A clinic admin may reactivate a deliberately disabled staff account; this does not reset its password and increments `token_epoch`. Replace an unaccepted invitation through the invitation flow. For an accepted account with a lost password, follow controlled support escalation until the recovery identity/delivery design in `p6-mfa-password-recovery.md` is approved — **DECISÃO NECESSÁRIA**. Never send a plaintext password or expose an existing hash/session token.
+
 Named incident lead, privacy contact, infrastructure owner, clinic owner and escalation channels must be supplied before a real pilot. Preserve timestamps, request IDs, audit/log evidence and backups; do not copy clinical payloads into chat or tickets.
 
 ## Compromised account

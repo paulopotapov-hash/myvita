@@ -20,7 +20,7 @@ class MedicalRecordCreateRequest(RequestModel):
 
 
 class MedicalRecordUpdateRequest(MedicalRecordCreateRequest):
-    pass
+    expected_version: int = Field(ge=1)
 
 
 class MedicalRecordPublic(BaseModel):

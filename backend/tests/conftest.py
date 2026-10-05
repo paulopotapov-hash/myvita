@@ -20,6 +20,7 @@ os.environ.setdefault("ALLOW_PUBLIC_PATIENT_REGISTRATION", "true")
 os.environ.setdefault("ALLOW_DIRECT_STAFF_CREATION", "true")
 
 from app.core.database import Base
+from app.core.database import engine as app_engine
 from app.core.rate_limit import limiter
 
 TEST_DATABASE_URL = os.environ.get(
@@ -52,8 +53,17 @@ def _reset_rate_limiter():
     Reset before every test so each one gets a fresh bucket, exactly like a
     real deployment where these limits reset per client per time window.
     """
+    # Clear connections both before and after a test: module-scoped fixtures
+    # may recreate ENUM types during their own teardown, after this fixture's
+    # previous teardown has run.
+    app_engine.dispose()
     limiter.reset()
     yield
+    # Several integration modules deliberately drop/recreate PostgreSQL
+    # ENUM-backed tables. The application audit logger uses its own global
+    # pool, so a pooled connection can otherwise retain stale type OIDs and
+    # fail a later audit insert with "cache lookup failed for type".
+    app_engine.dispose()
 
 
 @pytest.fixture(scope="session")

@@ -2,11 +2,53 @@ import uuid
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.models import Appointment, Patient, Staff, User, UserRole
-from app.models.appointment import AppointmentStatus
-from app.modules.appointments.schemas import AppointmentCreateRequest, AppointmentUpdateRequest
+from app.models import (
+    Appointment,
+    AppointmentStatus,
+    Notification,
+    Patient,
+    Staff,
+    User,
+    UserRole,
+)
+from app.modules.appointments.schemas import (
+    AppointmentCreateRequest,
+    AppointmentUpdateRequest,
+)
+
+_VALID_STATUS_TRANSITIONS: dict[AppointmentStatus, set[AppointmentStatus]] = {
+    AppointmentStatus.SCHEDULED: {AppointmentStatus.CONFIRMED},
+    AppointmentStatus.CONFIRMED: {AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW},
+}
+
+
+def _lock_clinic_schedule(db: Session, clinic_id: str) -> None:
+    """Serialize schedule mutations for one clinic until transaction end.
+
+    PostgreSQL advisory transaction locks close the check-then-insert race
+    without requiring a global lock or an extension. Every create/update/
+    cancel path takes the same clinic-scoped lock before checking conflicts.
+    """
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+        {"lock_key": f"myvita:appointment-schedule:{clinic_id}"},
+    )
+
+
+def _add_patient_notification(
+    db: Session, patient: Patient, *, title: str, message: str
+) -> None:
+    db.add(
+        Notification(
+            clinic_id=patient.clinic_id,
+            user_id=patient.user_id,
+            title=title,
+            message=message,
+        )
+    )
 
 
 def _ensure_no_conflict(
@@ -44,6 +86,7 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
     appointment — otherwise a staff member could pass another clinic's
     patient_id/staff_id and create a cross-tenant appointment (IDOR).
     """
+    _lock_clinic_schedule(db, clinic_id)
     patient = db.get(Patient, payload.patient_id)
     if patient is None or str(patient.clinic_id) != str(clinic_id):
         raise HTTPException(
@@ -75,6 +118,12 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
         reason=payload.reason,
     )
     db.add(appointment)
+    _add_patient_notification(
+        db,
+        patient,
+        title="Consulta criada",
+        message="Foi criada uma consulta na sua agenda.",
+    )
     db.commit()
     db.refresh(appointment)
     return appointment
@@ -94,6 +143,7 @@ def get_appointment_for_clinic(db: Session, appointment_id: uuid.UUID, clinic_id
 def update_appointment(
     db: Session, appointment_id: uuid.UUID, clinic_id: str, payload: AppointmentUpdateRequest
 ) -> Appointment:
+    _lock_clinic_schedule(db, clinic_id)
     appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
     if appointment.status in {
         AppointmentStatus.CANCELLED,
@@ -101,6 +151,14 @@ def update_appointment(
         AppointmentStatus.NO_SHOW,
     }:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Consulta já finalizada.")
+
+    if payload.status is not None and payload.status != appointment.status:
+        allowed = _VALID_STATUS_TRANSITIONS.get(appointment.status, set())
+        if payload.status not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Transição de {appointment.status.value} para {payload.status.value} não permitida.",
+            )
 
     patient_id = payload.patient_id or appointment.patient_id
     staff_id = payload.staff_id or appointment.staff_id
@@ -127,24 +185,46 @@ def update_appointment(
     )
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(appointment, field, value)
+    status_messages = {
+        AppointmentStatus.CONFIRMED: ("Consulta confirmada", "Uma consulta da sua agenda foi confirmada."),
+        AppointmentStatus.COMPLETED: ("Consulta concluída", "Uma consulta da sua agenda foi concluída."),
+        AppointmentStatus.NO_SHOW: ("Falta registada", "Foi registada uma falta numa consulta da sua agenda."),
+    }
+    title, message = status_messages.get(
+        appointment.status,
+        ("Consulta atualizada", "Uma consulta da sua agenda foi atualizada."),
+    )
+    _add_patient_notification(db, patient, title=title, message=message)
     db.commit()
     db.refresh(appointment)
     return appointment
 
 
 def cancel_appointment(db: Session, appointment_id: uuid.UUID, clinic_id: str) -> Appointment:
+    _lock_clinic_schedule(db, clinic_id)
     appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
     if appointment.status == AppointmentStatus.CANCELLED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Consulta já cancelada.")
     if appointment.status in {AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Consulta já finalizada.")
     appointment.status = AppointmentStatus.CANCELLED
+    patient = db.get(Patient, appointment.patient_id)
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Paciente da consulta indisponível.")
+    _add_patient_notification(
+        db,
+        patient,
+        title="Consulta cancelada",
+        message="Uma consulta da sua agenda foi cancelada.",
+    )
     db.commit()
     db.refresh(appointment)
     return appointment
 
 
-def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
+def list_appointments_for_user(
+    db: Session, user: User, *, offset: int = 0, limit: int = 50
+) -> tuple[list[Appointment], int]:
     """
     Patients only ever see their own appointments. Staff/clinic_admin see
     every appointment within their own clinic — never another clinic's,
@@ -155,18 +235,14 @@ def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
     if user.role == UserRole.PATIENT:
         patient = db.query(Patient).filter(Patient.user_id == user.id).first()
         if patient is None:
-            return []
-        return (
-            db.query(Appointment)
-            .filter(Appointment.patient_id == patient.id)
-            .order_by(Appointment.scheduled_at)
-            .all()
-        )
+            return [], 0
+        query = db.query(Appointment).filter(Appointment.patient_id == patient.id)
+        total = query.count()
+        rows = query.order_by(Appointment.scheduled_at, Appointment.id).offset(offset).limit(limit).all()
+        return rows, total
 
     # STAFF / CLINIC_ADMIN
-    return (
-        db.query(Appointment)
-        .filter(Appointment.clinic_id == user.clinic_id)
-        .order_by(Appointment.scheduled_at)
-        .all()
-    )
+    query = db.query(Appointment).filter(Appointment.clinic_id == user.clinic_id)
+    total = query.count()
+    rows = query.order_by(Appointment.scheduled_at, Appointment.id).offset(offset).limit(limit).all()
+    return rows, total

@@ -5,12 +5,13 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppLayout } from './AppLayout'
 import { authService } from '../services/auth'
+import { NetworkError } from '../lib/apiClient'
 import type { UserPublic } from '../types/api'
 
 vi.mock('../services/auth')
-const { logoutMutate } = vi.hoisted(() => ({ logoutMutate: vi.fn() }))
+const { logoutMutate, logoutState } = vi.hoisted(() => ({ logoutMutate: vi.fn(), logoutState: { isPending: false, isError: false, error: null as Error | null } }))
 vi.mock('../hooks/useAuthMutations', () => ({
-  useLogout: () => ({ mutate: logoutMutate, isPending: false }),
+  useLogout: () => ({ mutate: logoutMutate, isPending: logoutState.isPending, isError: logoutState.isError, error: logoutState.error }),
 }))
 
 function renderLayoutAsRole(role: UserPublic['role']) {
@@ -43,6 +44,19 @@ describe('AppLayout navigation', () => {
     renderLayoutAsRole('staff')
     await user.click(await screen.findByRole('button', { name: 'Sair' }))
     expect(logoutMutate).toHaveBeenCalledOnce()
+  })
+
+  it('explains logout failure and offers a retry without pretending the session ended', async () => {
+    logoutState.isError = true
+    logoutState.error = new NetworkError()
+    const user = userEvent.setup()
+    renderLayoutAsRole('staff')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sem ligação ao servidor')
+    expect(screen.getByRole('alert')).toHaveTextContent('A sessão continua ativa')
+    await user.click(screen.getByRole('button', { name: 'Tentar sair novamente' }))
+    expect(logoutMutate).toHaveBeenCalledOnce()
+    logoutState.isError = false
+    logoutState.error = null
   })
 
   it('shows admin-only "Equipa" link only for clinic_admin', async () => {

@@ -78,6 +78,8 @@ export interface ConsentPublic {
   patient_id: string
   consent_type: ConsentType
   purpose: string
+  policy_version: string | null
+  policy_text: string | null
   status: ConsentStatus
   granted_at: string
   revoked_at: string | null
@@ -219,6 +221,8 @@ export interface AppointmentCreateRequest {
 export interface ConsentCreateRequest {
   consent_type: ConsentType
   purpose: string
+  policy_version?: string
+  policy_text?: string
 }
 
 export interface PatientUpdateRequest {
@@ -236,7 +240,8 @@ export interface AppointmentUpdateRequest {
   status?: Exclude<AppointmentStatus, 'cancelled'>
 }
 
-export interface MedicalRecordWriteRequest { title: string; content: string }
+export interface MedicalRecordCreateRequest { title: string; content: string }
+export interface MedicalRecordUpdateRequest extends MedicalRecordCreateRequest { expected_version: number }
 export interface MedicationCreateRequest {
   name: string
   dosage: string
