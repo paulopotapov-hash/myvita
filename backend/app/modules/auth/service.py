@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit_event
 from app.core.metrics import auth_failures_total
+from app.core.privacy import email_fingerprint, mask_email
 from app.core.security import hash_password, verify_password
 from app.models import AuditAction, AuditResult, User
 
@@ -27,7 +28,9 @@ def authenticate(
     ip_address: str | None = None,
     user_agent: str | None = None,
 ) -> User:
-    user = db.query(User).filter(User.email == email).first()
+    """Verify the password step only. The caller audits a successful login,
+    because only it knows whether a second factor is still required."""
+    user = db.query(User).filter(User.email_matches(email)).first()
 
     # Deliberately identical error for "no such user" and "wrong password":
     # a different message would let an attacker enumerate registered emails.
@@ -41,17 +44,26 @@ def authenticate(
         # this branch takes roughly the same time as the "wrong password"
         # branch below — see _DUMMY_HASH comment.
         verify_password(password, _DUMMY_HASH)
-        # Safe to log the reason server-side (unlike the HTTP response,
-        # which must stay generic): this is for security monitoring, not
-        # sent back to whoever made the request.
-        logger.warning("Tentativa de login falhada (email desconhecido ou inativo): %s", email)
+        # The typed address may belong to someone without an account here:
+        # record only a masked form plus a keyed fingerprint for correlation.
+        logger.warning(
+            "Tentativa de login falhada (email desconhecido ou inativo): %s fingerprint=%s",
+            mask_email(email),
+            email_fingerprint(email),
+        )
         auth_failures_total.inc()
         record_audit_event(
             action=AuditAction.LOGIN_FAILURE,
             result=AuditResult.FAILURE,
-            actor_email=email,
+            clinic_id=user.clinic_id if user is not None else None,
+            actor_user_id=user.id if user is not None else None,
             ip_address=ip_address,
             user_agent=user_agent,
+            metadata={
+                "reason": "inactive_account" if user is not None else "unknown_account",
+                "email_masked": mask_email(email),
+                "email_fingerprint": email_fingerprint(email),
+            },
         )
         raise invalid_credentials
 
@@ -66,17 +78,8 @@ def authenticate(
             actor_email=user.email,
             ip_address=ip_address,
             user_agent=user_agent,
+            metadata={"reason": "wrong_password"},
         )
         raise invalid_credentials
 
-    logger.info("Login bem-sucedido: user_id=%s", user.id)
-    record_audit_event(
-        action=AuditAction.LOGIN_SUCCESS,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
     return user

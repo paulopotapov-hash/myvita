@@ -2,9 +2,8 @@
 Phase 3 security regression tests: request ID, CORS, safe logging,
 production config fail-closed behavior, health/readiness.
 
-Uses the same create_all/drop_all client pattern as test_auth_hardening.py.
-Named to sort before test_data_integrity.py alphabetically — see that
-file's fixture docstring for why fixture ordering across files matters here.
+Uses the same HTTP client pattern as test_auth_hardening.py; the schema is
+migrated once and truncated per test by tests/conftest.py.
 """
 
 import logging
@@ -14,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.database import Base, get_db
+from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.request_context import new_request_id
 from app.main import app
@@ -24,7 +23,6 @@ from tests.conftest import TEST_DATABASE_URL, csrf_headers
 @pytest.fixture()
 def client():
     engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
     TestSessionLocal = sessionmaker(bind=engine, future=True)
 
     def override_get_db():
@@ -40,7 +38,6 @@ def client():
         yield c
 
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 

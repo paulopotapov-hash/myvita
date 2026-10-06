@@ -11,6 +11,12 @@ export type ConsentType = 'treatment' | 'data_processing' | 'communications' | '
 export type ConsentStatus = 'granted' | 'revoked'
 export type MedicationStatus = 'active' | 'discontinued' | 'completed'
 
+/** What the account must do before anything else works
+ * (backend/app/core/security.py pending_account_action). While set, every
+ * endpoint except /auth/me, logout, change-password and MFA enrolment
+ * answers 403 with the X-Account-Action-Required header. */
+export type PendingAccountAction = 'password_change' | 'mfa_verification' | 'mfa_setup'
+
 export interface UserPublic {
   id: string
   email: string
@@ -19,6 +25,49 @@ export interface UserPublic {
   clinic_id: string | null
   staff_role: StaffRole | null
   patient_id: string | null
+  // Always sent by the backend; optional here only so older fixtures that
+  // predate account lifecycle still type-check. Absent means "nothing pending".
+  must_change_password?: boolean
+  mfa_enabled?: boolean
+  mfa_required?: boolean
+  pending_action?: PendingAccountAction | null
+}
+
+/** POST /auth/login answers 202 with this when a second factor is needed:
+ * no session exists yet, only a short-lived challenge cookie. */
+export interface MfaChallengeResponse {
+  mfa_required: true
+}
+
+export function isMfaChallenge(value: UserPublic | MfaChallengeResponse): value is MfaChallengeResponse {
+  return 'mfa_required' in value && value.mfa_required === true && !('id' in value)
+}
+
+export interface MfaSetupResponse {
+  secret: string
+  otpauth_uri: string
+}
+
+export interface MfaRecoveryCodesResponse {
+  recovery_codes: string[]
+}
+
+export interface AccountSummary {
+  id: string
+  full_name: string
+  role: UserRole
+  staff_role: StaffRole | null
+  /** Null for patients: administrative roles never see patient contact data. */
+  email: string | null
+  is_active: boolean
+  mfa_enabled: boolean
+  must_change_password: boolean
+}
+
+export interface PasswordResetIssued {
+  user_id: string
+  token: string
+  expires_at: string
 }
 
 export interface ClinicPublic {

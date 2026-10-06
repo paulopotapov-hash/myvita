@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.security import hash_password
 from app.models import Staff, User, UserRole
 from app.modules.staff.schemas import StaffCreateRequest
+from app.modules.users import service as users_service
 
 
 def create_staff_member(db: Session, clinic_id: str, payload: StaffCreateRequest) -> Staff:
-    if db.query(User).filter(User.email == payload.email).first() is not None:
+    if db.query(User).filter(User.email_matches(payload.email)).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Já existe uma conta com este email.",
@@ -21,6 +22,7 @@ def create_staff_member(db: Session, clinic_id: str, payload: StaffCreateRequest
         hashed_password=hash_password(payload.password),
         role=UserRole.STAFF,
         clinic_id=clinic_id,
+        must_change_password=payload.require_password_change,
     )
     db.add(user)
     db.flush()
@@ -38,9 +40,7 @@ def create_staff_member(db: Session, clinic_id: str, payload: StaffCreateRequest
     return staff
 
 
-def deactivate_staff_member(
-    db: Session, staff_id: uuid.UUID, clinic_id: str, actor_user_id: uuid.UUID
-) -> Staff:
+def deactivate_staff_member(db: Session, staff_id: uuid.UUID, clinic_id: str, actor: User) -> Staff:
     staff = (
         db.query(Staff)
         .options(selectinload(Staff.user))
@@ -49,14 +49,7 @@ def deactivate_staff_member(
     )
     if staff is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profissional não encontrado.")
-    if staff.user_id == actor_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Não pode desativar a própria conta administrativa.",
-        )
-    if staff.user.is_active:
-        staff.user.is_active = False
-        staff.user.token_epoch += 1
-        db.commit()
-        db.refresh(staff)
+    # Shared lifecycle rules: revoke sessions and outstanding reset links.
+    users_service.deactivate(db, staff.user, actor)
+    db.refresh(staff)
     return staff

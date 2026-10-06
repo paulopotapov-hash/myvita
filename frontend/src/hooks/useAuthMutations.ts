@@ -3,15 +3,28 @@ import { authService } from '../services/auth'
 import { clinicsService } from '../services/clinics'
 import { patientsService } from '../services/patients'
 import { SESSION_QUERY_KEY } from './useSession'
+import { isMfaChallenge } from '../types/api'
 import type { ClinicOnboardingRequest, LoginRequest, PatientRegisterRequest } from '../types/api'
 
 export function useLogin() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: LoginRequest) => authService.login(payload),
-    onSuccess: (user) => {
+    onSuccess: (result) => {
       // A successful login may replace an expired or different identity.
       // Never let tenant-scoped data survive that identity boundary.
+      queryClient.clear()
+      // A challenge is not a session yet: the second factor comes next.
+      if (!isMfaChallenge(result)) queryClient.setQueryData(SESSION_QUERY_KEY, result)
+    },
+  })
+}
+
+export function useVerifyMfa() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => authService.verifyMfa(code),
+    onSuccess: (user) => {
       queryClient.clear()
       queryClient.setQueryData(SESSION_QUERY_KEY, user)
     },

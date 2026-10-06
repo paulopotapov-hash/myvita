@@ -1,10 +1,10 @@
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.schemas import RequestModel
-from app.core.validators import validate_password_strength
+from app.core.validators import NormalizedEmail, validate_password_strength
 
 
 class PatientRegisterRequest(RequestModel):
@@ -12,7 +12,7 @@ class PatientRegisterRequest(RequestModel):
 
     clinic_id: uuid.UUID
     full_name: str = Field(min_length=2, max_length=255)
-    email: EmailStr = Field(max_length=255)
+    email: NormalizedEmail
     password: str = Field(min_length=8, max_length=128)
     birth_date: date | None = None
     phone: str | None = Field(default=None, max_length=30)

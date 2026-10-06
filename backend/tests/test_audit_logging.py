@@ -4,8 +4,8 @@ Audit logging tests.
 Deliberately does NOT use the `db_session` fixture (savepoint + rollback):
 record_audit_event() writes through its own independent session (see
 app/core/audit.py's docstring for why), so it bypasses that fixture's
-rollback entirely. These tests use the same create_all/drop_all HTTP-client
-pattern as test_auth_hardening.py instead, and read the audit_logs table
+rollback entirely. These tests use the full HTTP client (the
+schema is migrated and truncated by tests/conftest.py), and read the audit_logs table
 back through app.core.database.SessionLocal — the same session factory the
 app itself writes through.
 """
@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.database import Base, SessionLocal, get_db
+from app.core.database import SessionLocal, get_db
 from app.core.rate_limit import limiter
 from app.main import app
 from app.models import AuditAction, AuditLog, AuditResult
@@ -24,7 +24,6 @@ from tests.conftest import TEST_DATABASE_URL, csrf_headers
 @pytest.fixture()
 def client():
     engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
     TestSessionLocal = sessionmaker(bind=engine, future=True)
 
     def override_get_db():
@@ -40,7 +39,6 @@ def client():
         yield c
 
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -93,8 +91,15 @@ def test_login_success_and_failure_both_logged(client):
     assert len(failures) == 2
     # Failed attempt against a real account still resolves clinic/actor...
     assert any(f.actor_email == "admin@clinica.pt" and f.clinic_id is not None for f in failures)
-    # ...while an unknown email has no user/clinic to attach, but is still logged.
-    assert any(f.actor_email == "ninguem@example.com" and f.actor_user_id is None for f in failures)
+    # ...while an unknown email has no user/clinic to attach. It is still
+    # logged, but only masked + fingerprinted: the typed address may belong to
+    # someone with no account here.
+    unknown = [f for f in failures if f.actor_user_id is None]
+    assert len(unknown) == 1
+    assert unknown[0].actor_email is None
+    assert unknown[0].event_metadata["email_masked"] == "n***@example.com"
+    assert len(unknown[0].event_metadata["email_fingerprint"]) == 16
+    assert "ninguem@example.com" not in str(unknown[0].event_metadata)
 
 
 def test_patient_and_staff_creation_logged_with_correct_clinic(client):

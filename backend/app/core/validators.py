@@ -6,7 +6,23 @@ staff creation, clinic onboarding, and any future "change password" endpoint)
 enforces the exact same minimum bar — previously this check only existed on
 the clinic onboarding schema, so patient and staff accounts could be created
 with trivially weak passwords.
+
+Emails are normalised the same way everywhere they enter the system
+(`NormalizedEmail`): trimmed and lower-cased, so "Ana@Clinica.pt" and
+"ana@clinica.pt" are one identity at registration, invitation and login.
 """
+
+from typing import Annotated
+
+from pydantic import AfterValidator, EmailStr, Field
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
+NormalizedEmail = Annotated[EmailStr, Field(max_length=255), AfterValidator(normalize_email)]
+
 COMMON_WEAK_PASSWORDS = {
     "password",
     "password1",

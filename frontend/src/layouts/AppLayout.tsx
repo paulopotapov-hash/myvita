@@ -31,6 +31,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app/consultas', label: 'Consultas' },
     { to: '/app/pacientes', label: 'Pacientes' },
     { to: '/app/equipa', label: 'Equipa' },
+    { to: '/app/contas', label: 'Contas' },
     { to: '/app/notificacoes', label: 'Notificações' },
     { to: '/app/seguranca', label: 'Segurança' },
   ],

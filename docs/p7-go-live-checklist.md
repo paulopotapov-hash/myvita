@@ -16,8 +16,9 @@ Every PASS requires evidence from the exact release and target environment.
 | Restore | timed restore from real provider | BLOCKED — real drill required |
 | Monitoring | all targets up, retention/capacity, protected admin | PARTIAL — config ready; deployment absent |
 | Alerting | staffed receiver, ack and resolved-message exercise | BLOCKED — human destination required |
-| MFA | mandatory privileged-user factor | BLOCKED — implementation/provider/policy absent |
-| Recovery | verified delivery/identity flow and support policy | BLOCKED — implementation/provider absent |
+| MFA | mandatory privileged-user factor | PARTIAL — TOTP mandatory for staff/admins implemented and tested; enrolment of real staff and the WebAuthn decision pending |
+| Recovery | verified delivery/identity flow and support policy | PARTIAL — admin-issued reset links and operator recovery for clinic admins implemented (`security/account-lifecycle.md`); self-service delivery provider and approved identity-verification policy pending |
+| Database roles | backend runs as provisioned least-privilege role; audit log append-only | PARTIAL — provisioning and privilege tests pass locally; production instance absent |
 | Operations | named release/on-call/security/backup/privacy owners | BLOCKED — assignments required |
 | Privacy/legal | DPIA, basis, retention, notices and contracts | BLOCKED — human review required |
 | Smoke | HTTPS and approved synthetic authenticated run | BLOCKED — environment/account required |

@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.core.database import Base, get_db
+from app.core.database import get_db
 from app.main import app
 from app.models import Notification, User
 from tests.conftest import TEST_DATABASE_URL
@@ -15,7 +15,6 @@ from tests.conftest import TEST_DATABASE_URL
 @pytest.fixture()
 def client():
     engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
     test_session = sessionmaker(bind=engine, future=True)
 
     def override_get_db():
@@ -30,7 +29,6 @@ def client():
         test_client.test_session = test_session
         yield test_client
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -68,6 +66,7 @@ def _tenant(client: TestClient, suffix: str) -> dict:
             "email": f"b6-doctor-{suffix}@example.pt",
             "password": "SenhaForte123!",
             "staff_role": "doctor",
+            "require_password_change": False,
         },
     )
     assert response.status_code == 201

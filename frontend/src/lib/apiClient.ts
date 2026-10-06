@@ -21,6 +21,10 @@ const CSRF_HEADER_NAME = 'X-CSRF-Token'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 export const SESSION_EXPIRED_EVENT = 'myvita:session-expired'
+/** The session is valid but the account has a pending obligation (forced
+ * password change, MFA enrolment) — backend/app/core/security.py. */
+export const ACCOUNT_ACTION_HEADER = 'X-Account-Action-Required'
+export const ACCOUNT_ACTION_REQUIRED_EVENT = 'myvita:account-action-required'
 
 /**
  * API base path. Empty string in both dev (Vite proxies /api, see
@@ -158,6 +162,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         : null
     if (response.status === 401 && path !== '/api/v1/auth/me' && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { path } }))
+    }
+    const accountAction = response.headers.get(ACCOUNT_ACTION_HEADER)
+    if (response.status === 403 && accountAction && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(ACCOUNT_ACTION_REQUIRED_EVENT, { detail: { action: accountAction } }))
     }
     throw new ApiError(response.status, detail ?? `HTTP ${response.status}`, {
       requestId,

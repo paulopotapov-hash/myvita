@@ -19,6 +19,11 @@ tokens, or full request/response bodies in `metadata`. Only identifiers
 This table is written to by app.core.audit.record_audit_event — write
 through that helper, not directly, so the "no full session available"
 requirement in its docstring is respected everywhere.
+
+The database enforces append-only semantics (migration f6a7b8c9d0e1):
+UPDATE/DELETE/TRUNCATE are rejected by triggers, except the referential
+ON DELETE SET NULL of clinic_id/actor_user_id, and the runtime role is
+granted INSERT/SELECT only (app/db_provisioning.py).
 """
 
 import enum
@@ -38,10 +43,22 @@ class AuditAction(str, enum.Enum):
     LOGIN_FAILURE = "login_failure"
     LOGOUT = "logout"
     PASSWORD_CHANGE = "password_change"
+    PASSWORD_CHANGE_REQUIRED = "password_change_required"
+    PASSWORD_RESET_REQUESTED = "password_reset_requested"
+    PASSWORD_RESET_ISSUED = "password_reset_issued"
+    PASSWORD_RESET_COMPLETED = "password_reset_completed"
+    LOGIN_MFA_CHALLENGE = "login_mfa_challenge"
+    MFA_ENABLED = "mfa_enabled"
+    MFA_DISABLED = "mfa_disabled"
+    MFA_RESET = "mfa_reset"
+    MFA_FAILURE = "mfa_failure"
+    MFA_RECOVERY_CODE_USED = "mfa_recovery_code_used"
+    MFA_RECOVERY_CODES_REGENERATED = "mfa_recovery_codes_regenerated"
     INVITATION_CREATED = "invitation_created"
     INVITATION_ACCEPTED = "invitation_accepted"
     USER_CREATED = "user_created"
     USER_DISABLED = "user_disabled"
+    USER_ENABLED = "user_enabled"
     PATIENT_CREATED = "patient_created"
     PATIENT_UPDATED = "patient_updated"
     PATIENT_DELETED = "patient_deleted"

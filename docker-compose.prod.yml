@@ -90,11 +90,17 @@ services:
       ALLOW_PUBLIC_PATIENT_REGISTRATION: ${ALLOW_PUBLIC_PATIENT_REGISTRATION:-false}
       ALLOW_DIRECT_STAFF_CREATION: "false"
       INVITATION_EXPIRE_HOURS: ${INVITATION_EXPIRE_HOURS:-24}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Least-privilege runtime role provisioned by the migrate service
+      # (backend/app/db_provisioning.py) — never the schema owner.
+      DATABASE_URL: postgresql+psycopg://${APP_DB_ROLE:?Set APP_DB_ROLE (runtime database role, not the owner)}:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY (urlsafe base64 of 32 random bytes)}
+      MFA_REQUIRED_FOR_STAFF: "true"
+      PRIVACY_FINGERPRINT_KEY: ${PRIVACY_FINGERPRINT_KEY:?Set PRIVACY_FINGERPRINT_KEY (dedicated random key, >=32 chars)}
+      PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-60}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
       TRUSTED_PROXIES: '["172.30.0.10"]'
@@ -128,13 +134,20 @@ services:
   migrate:
     build: ./backend
     restart: "no"
-    command: ["alembic", "upgrade", "head"]
+    # Runs as the schema owner: migrate, then (re)provision the
+    # least-privilege runtime role the backend connects with.
+    command: ["sh", "-c", "alembic upgrade head && python -m app.db_provisioning"]
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
       COOKIE_SECURE: "true"
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      APP_DB_ROLE: ${APP_DB_ROLE:?Set APP_DB_ROLE (runtime database role, not the owner)}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY (urlsafe base64 of 32 random bytes)}
+      PRIVACY_FINGERPRINT_KEY: ${PRIVACY_FINGERPRINT_KEY:?Set PRIVACY_FINGERPRINT_KEY (dedicated random key, >=32 chars)}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
     depends_on:

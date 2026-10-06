@@ -2,11 +2,12 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, ColumnElement, DateTime, Enum, ForeignKey, Index, Integer, String, false, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.validators import normalize_email
 
 
 class UserRole(str, enum.Enum):
@@ -46,6 +47,13 @@ class User(Base):
     # previously issued JWTs immediately (see core/security.py).
     token_epoch: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Set by a clinic admin (or on admin-assigned initial passwords). While
+    # true, the session only allows changing the password — see
+    # app/core/security.get_current_user.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -54,3 +62,15 @@ class User(Base):
     clinic = relationship("Clinic", back_populates="users")
     patient_profile = relationship("Patient", back_populates="user", uselist=False, cascade="all, delete-orphan")
     staff_profile = relationship("Staff", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+    @staticmethod
+    def email_matches(email: str) -> ColumnElement[bool]:
+        """Case-insensitive lookup that also matches rows stored before normalisation."""
+        return func.lower(User.email) == normalize_email(email)
+
+
+# Emails are compared case-insensitively everywhere (see
+# app/core/validators.normalize_email); this keeps "Ana@x.pt" and "ana@x.pt"
+# from ever becoming two accounts, even for rows written before
+# normalisation existed.
+Index("uq_users_email_lower", func.lower(User.email), unique=True)

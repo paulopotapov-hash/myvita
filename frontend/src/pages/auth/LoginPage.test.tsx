@@ -95,4 +95,58 @@ describe('LoginPage', () => {
     await waitFor(() => expect(screen.getByText('Área autenticada')).toBeInTheDocument())
     expect(queryClient.getQueryData(['patients'])).toBeUndefined()
   })
+
+  it('asks for the second factor when login answers with an MFA challenge', async () => {
+    vi.mocked(authService.login).mockResolvedValue({ mfa_required: true })
+    vi.mocked(authService.verifyMfa).mockResolvedValue({
+      id: '2',
+      email: 'medica@example.com',
+      full_name: 'Médica',
+      role: 'staff',
+      clinic_id: 'c1',
+      staff_role: 'doctor',
+      patient_id: null,
+      pending_action: null,
+    })
+    const user = userEvent.setup()
+    renderLoginPage()
+
+    await user.type(screen.getByLabelText('Email'), 'medica@example.com')
+    await user.type(screen.getByLabelText('Palavra-passe'), 'senha-correta')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+
+    // No session yet: still on the login flow, now asking for the code.
+    const codeField = await screen.findByLabelText('Código de verificação')
+    expect(screen.queryByText('Área autenticada')).not.toBeInTheDocument()
+    await user.type(codeField, '123456')
+    await user.click(screen.getByRole('button', { name: 'Verificar' }))
+
+    expect(authService.verifyMfa).toHaveBeenCalledWith('123456')
+    await waitFor(() => expect(screen.getByText('Área autenticada')).toBeInTheDocument())
+  })
+
+  it('shows the backend error for a wrong second-factor code and stays on the code step', async () => {
+    vi.mocked(authService.login).mockResolvedValue({ mfa_required: true })
+    vi.mocked(authService.verifyMfa).mockRejectedValue(
+      new ApiError(401, 'Código de verificação inválido.', { detail: 'Código de verificação inválido.' }),
+    )
+    const user = userEvent.setup()
+    renderLoginPage()
+    await user.type(screen.getByLabelText('Email'), 'medica@example.com')
+    await user.type(screen.getByLabelText('Palavra-passe'), 'senha-correta')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    await user.type(await screen.findByLabelText('Código de verificação'), '000000')
+    await user.click(screen.getByRole('button', { name: 'Verificar' }))
+
+    expect(await screen.findByText('Código de verificação inválido.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Código de verificação')).toBeInTheDocument()
+  })
+
+  it('offers the access recovery page', async () => {
+    renderLoginPage()
+    expect(await screen.findByRole('link', { name: 'Esqueceste-te da palavra-passe?' })).toHaveAttribute(
+      'href',
+      '/recuperar-acesso',
+    )
+  })
 })

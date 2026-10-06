@@ -15,15 +15,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.database import Base, get_db
+from app.core.database import get_db
 from app.main import app
 from tests.conftest import TEST_DATABASE_URL, csrf_headers
+
+TEST_MFA_KEY = "dGVzdC1vbmx5LW1mYS1rZXktMzItYnl0ZXMtbG9uZyE="  # 32 bytes, tests only
+TEST_FINGERPRINT_KEY = "test-only-privacy-fingerprint-key-0123456789"
 
 
 @pytest.fixture()
 def client():
     engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
     TestSessionLocal = sessionmaker(bind=engine, future=True)
 
     def override_get_db():
@@ -38,7 +40,6 @@ def client():
         yield c
 
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -242,6 +243,9 @@ def test_production_with_cookie_secure_is_accepted():
         ALLOWED_HOSTS=["app.myvita.pt"],
         DATABASE_URL="postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
         ALLOW_DIRECT_STAFF_CREATION=False,
+        MFA_REQUIRED_FOR_STAFF=True,
+        MFA_ENCRYPTION_KEY=TEST_MFA_KEY,
+        PRIVACY_FINGERPRINT_KEY=TEST_FINGERPRINT_KEY,
     )
     assert settings.is_production
 
@@ -277,6 +281,9 @@ def test_production_rejects_obviously_insecure_configuration(overrides, message)
         "CORS_ORIGINS": ["https://app.myvita.pt"],
         "ALLOWED_HOSTS": ["app.myvita.pt"],
         "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/myvita_prod",
+        "MFA_REQUIRED_FOR_STAFF": True,
+        "MFA_ENCRYPTION_KEY": TEST_MFA_KEY,
+        "PRIVACY_FINGERPRINT_KEY": TEST_FINGERPRINT_KEY,
     }
     values.update(overrides)
     with pytest.raises(ValidationError, match=message):
@@ -296,6 +303,9 @@ def test_production_disables_interactive_and_openapi_documentation():
         "ALLOW_PUBLIC_CLINIC_ONBOARDING": "false",
         "ALLOW_PUBLIC_PATIENT_REGISTRATION": "false",
         "ALLOW_DIRECT_STAFF_CREATION": "false",
+        "MFA_REQUIRED_FOR_STAFF": "true",
+        "MFA_ENCRYPTION_KEY": TEST_MFA_KEY,
+        "PRIVACY_FINGERPRINT_KEY": TEST_FINGERPRINT_KEY,
     }
     result = subprocess.run(
         [

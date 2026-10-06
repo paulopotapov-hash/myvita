@@ -45,6 +45,7 @@ from app.modules.medications.router import router as medications_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
 from app.modules.staff.router import router as staff_router
+from app.modules.users.router import router as users_router
 
 # JSON in anything that isn't plain local development — staging logs get
 # shipped/ingested the same way production's do, so they need the same
@@ -258,6 +259,7 @@ app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(clinics_router, prefix="/api/v1/clinics", tags=["clinics"])
 app.include_router(patients_router, prefix="/api/v1/patients", tags=["patients"])
 app.include_router(staff_router, prefix="/api/v1/staff", tags=["staff"])
+app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["appointments"])
 app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])

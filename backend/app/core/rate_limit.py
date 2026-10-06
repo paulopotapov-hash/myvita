@@ -35,3 +35,6 @@ REGISTRATION_RATE_LIMIT = "5/minute"
 # radius of a compromised/malicious admin session, not brute force.
 AUTHENTICATED_WRITE_RATE_LIMIT = "20/minute"
 INVITATION_PUBLIC_RATE_LIMIT = "10/minute"
+# Unauthenticated password-reset endpoints: enough for a person retrying a
+# link, too few to brute-force tokens or spray reset requests.
+PASSWORD_RESET_RATE_LIMIT = "5/minute"

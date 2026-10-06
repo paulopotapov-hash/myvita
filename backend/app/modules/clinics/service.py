@@ -7,7 +7,7 @@ from app.modules.clinics.schemas import ClinicOnboardingRequest
 
 
 def onboard_clinic(db: Session, payload: ClinicOnboardingRequest) -> tuple[Clinic, User]:
-    if db.query(User).filter(User.email == payload.admin_email).first() is not None:
+    if db.query(User).filter(User.email_matches(payload.admin_email)).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Já existe uma conta com este email.",

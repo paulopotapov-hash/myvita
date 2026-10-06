@@ -6,7 +6,10 @@ The repository is provider-neutral. AWS Secrets Manager, GCP Secret Manager, Azu
 
 | Secret | Requirement | Scope | Rotation |
 |---|---|---|---|
-| PostgreSQL user/password | mandatory | db/backend/migrate/backup/exporter | scheduled, incident, staff change |
+| PostgreSQL owner user/password (`POSTGRES_USER`/`POSTGRES_PASSWORD`) | mandatory | db/migrate/backup/exporter — **never the backend** | scheduled, incident, staff change |
+| Runtime database role (`APP_DB_ROLE`/`APP_DB_PASSWORD`, ≥16 chars, role ≠ owner) | mandatory | backend (connects as it), migrate (provisions it) | scheduled/incident; re-run migrate to apply |
+| MFA encryption key (`MFA_ENCRYPTION_KEY`, urlsafe base64 of 32 bytes) | mandatory | backend/migrate | **do not rotate casually**: changing it invalidates every MFA enrolment (mass re-enrolment). Back it up in the secret manager |
+| Privacy fingerprint key (`PRIVACY_FINGERPRINT_KEY`, ≥32 chars) | mandatory | backend/migrate | scheduled/incident; only breaks correlation of older log fingerprints |
 | JWT signing material | mandatory | backend/migrate | scheduled/incident; revokes sessions |
 | Metrics token | mandatory with monitoring | backend/metrics proxy | scheduled/incident |
 | Grafana bootstrap password | mandatory | Grafana only | immediately after bootstrap/incident |

@@ -62,4 +62,40 @@ describe('ProtectedRoute', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(screen.queryByText('Página de login')).not.toBeInTheDocument()
   })
+
+  it('replaces the app with the account-setup gate while an obligation is pending', async () => {
+    vi.mocked(authService.me).mockResolvedValue({
+      id: '1',
+      email: 'a@b.pt',
+      full_name: 'Ana',
+      role: 'staff',
+      clinic_id: 'c1',
+      staff_role: 'nurse',
+      patient_id: null,
+      must_change_password: true,
+      pending_action: 'password_change',
+    })
+    renderProtected()
+    expect(await screen.findByRole('heading', { name: 'Alterar palavra-passe' })).toBeInTheDocument()
+    expect(screen.queryByText('Conteúdo protegido')).not.toBeInTheDocument()
+    // Leaving is always possible — nobody gets stuck on the gate.
+    expect(screen.getByRole('button', { name: 'Terminar sessão' })).toBeInTheDocument()
+  })
+
+  it('shows MFA enrolment when the role requires it', async () => {
+    vi.mocked(authService.me).mockResolvedValue({
+      id: '1',
+      email: 'a@b.pt',
+      full_name: 'Ana',
+      role: 'clinic_admin',
+      clinic_id: 'c1',
+      staff_role: null,
+      patient_id: null,
+      mfa_required: true,
+      pending_action: 'mfa_setup',
+    })
+    renderProtected()
+    expect(await screen.findByRole('button', { name: 'Configurar autenticação de dois fatores' })).toBeInTheDocument()
+    expect(screen.queryByText('Conteúdo protegido')).not.toBeInTheDocument()
+  })
 })

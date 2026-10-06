@@ -12,6 +12,12 @@ Design decisions (do not change without discussion):
   a token blocklist.
 - CSRF: double-submit cookie, HMAC-signed and bound to (user_id, token_epoch).
   See the "CSRF protection" section below for the full rationale.
+- Each session records whether it was established with a second factor
+  (`mfa` claim). While an account has a pending obligation — an
+  admin-required password change, or MFA enrolment for roles that require
+  it — `get_current_user` refuses every endpoint; only the account-setup
+  endpoints use `get_current_user_allow_pending`. Secure by default: a new
+  endpoint is restricted unless it explicitly opts out.
 """
 import hashlib
 import hmac
@@ -27,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.account_security import UserMfa
 from app.models.user import User, UserRole
 
 password_hasher = PasswordHasher()
@@ -34,6 +41,9 @@ password_hasher = PasswordHasher()
 # Methods that never require a CSRF token, per RFC 7231 they must not have
 # side effects. OPTIONS is included so CORS preflight always succeeds.
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+ACCOUNT_ACTION_HEADER = "X-Account-Action-Required"
+MFA_REQUIRED_ROLES = frozenset({UserRole.STAFF, UserRole.CLINIC_ADMIN})
 
 
 def hash_password(plain_password: str) -> str:
@@ -47,13 +57,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user: User) -> str:
+def create_access_token(user: User, *, mfa_verified: bool = False) -> str:
     now = datetime.now(UTC)
     payload = {
         "sub": str(user.id),
         "clinic_id": str(user.clinic_id) if user.clinic_id else None,
         "role": user.role.value,
         "epoch": user.token_epoch,
+        "mfa": mfa_verified,
         "iat": now,
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     }
@@ -66,7 +77,7 @@ def decode_access_token(token: str) -> dict:
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"require": ["sub", "clinic_id", "role", "epoch", "iat", "exp"]},
+            options={"require": ["sub", "clinic_id", "role", "epoch", "mfa", "iat", "exp"]},
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(
@@ -206,8 +217,8 @@ def _origin_is_allowed(request: Request) -> bool:
     return origin in settings.CORS_ORIGINS
 
 
-def set_session_cookie(response: Response, user: User) -> None:
-    token = create_access_token(user)
+def set_session_cookie(response: Response, user: User, *, mfa_verified: bool = False) -> None:
+    token = create_access_token(user, mfa_verified=mfa_verified)
     response.set_cookie(
         key=settings.COOKIE_NAME,
         value=token,
@@ -235,11 +246,7 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(key=settings.CSRF_COOKIE_NAME, path="/")
 
 
-def get_current_user(
-    request: Request,
-    session_token: str | None = Cookie(default=None, alias=settings.COOKIE_NAME),
-    db: Session = Depends(get_db),
-) -> User:
+def _authenticate_session(request: Request, session_token: str | None, db: Session) -> User:
     """
     Resolves the authenticated user from the httpOnly session cookie.
     Rejects the request if the token is missing, invalid, expired,
@@ -247,7 +254,7 @@ def get_current_user(
 
     For any unsafe HTTP method (everything except GET/HEAD/OPTIONS), this
     ALSO enforces CSRF protection. Every endpoint that authenticates via
-    this dependency (directly, or via require_roles/get_current_clinic_id)
+    get_current_user* (directly, or via require_roles/get_current_clinic_id)
     is automatically covered — no per-endpoint CSRF code needed.
     """
     if not session_token:
@@ -280,6 +287,70 @@ def get_current_user(
             )
         _enforce_csrf(request, user)
 
+    request.state.session_mfa_verified = payload.get("mfa") is True
+    return user
+
+
+def mfa_required_for(user: User) -> bool:
+    return settings.MFA_REQUIRED_FOR_STAFF and user.role in MFA_REQUIRED_ROLES
+
+
+def mfa_enabled_for(db: Session, user: User) -> bool:
+    return (
+        db.query(UserMfa.user_id)
+        .filter(UserMfa.user_id == user.id, UserMfa.enabled_at.is_not(None))
+        .first()
+        is not None
+    )
+
+
+def pending_account_action(db: Session, user: User, *, session_mfa_verified: bool) -> str | None:
+    """The obligation that must be met before normal use, if any."""
+    if user.must_change_password:
+        return "password_change"
+    enabled = mfa_enabled_for(db, user)
+    if enabled and not session_mfa_verified:
+        return "mfa_verification"
+    if not enabled and mfa_required_for(user):
+        return "mfa_setup"
+    return None
+
+
+_PENDING_ACTION_MESSAGES = {
+    "password_change": "É necessário alterar a palavra-passe antes de continuar.",
+    "mfa_verification": "É necessário validar o segundo fator de autenticação.",
+    "mfa_setup": "É necessário configurar a autenticação de dois fatores antes de continuar.",
+}
+
+
+def get_current_user_allow_pending(
+    request: Request,
+    session_token: str | None = Cookie(default=None, alias=settings.COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authenticated user even while an account obligation is pending.
+
+    Only for the endpoints that let the user meet that obligation (or see
+    it / leave): /auth/me, /auth/logout, /auth/change-password and MFA
+    enrolment.
+    """
+    return _authenticate_session(request, session_token, db)
+
+
+def get_current_user(
+    request: Request,
+    session_token: str | None = Cookie(default=None, alias=settings.COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authenticated user with no pending account obligation (the default)."""
+    user = _authenticate_session(request, session_token, db)
+    action = pending_account_action(db, user, session_mfa_verified=request.state.session_mfa_verified)
+    if action is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_PENDING_ACTION_MESSAGES[action],
+            headers={ACCOUNT_ACTION_HEADER: action},
+        )
     return user
 
 

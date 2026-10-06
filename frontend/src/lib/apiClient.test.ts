@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, NetworkError, api, apiRequest } from '../lib/apiClient'
+import { ACCOUNT_ACTION_REQUIRED_EVENT, ApiError, NetworkError, api, apiRequest } from '../lib/apiClient'
 
 function mockFetchOnce(response: Partial<Response> & { jsonBody?: unknown }) {
   const { jsonBody, ...rest } = response
@@ -113,5 +113,34 @@ describe('apiClient', () => {
       items: [{ id: 'patient-1' }],
       total: 27,
     })
+  })
+
+  it('announces a pending account action from a 403 with X-Account-Action-Required', async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 403,
+      jsonBody: { detail: 'É necessário alterar a palavra-passe antes de continuar.' },
+      headers: new Headers({ 'content-type': 'application/json', 'X-Account-Action-Required': 'password_change' }),
+    })
+    const listener = vi.fn()
+    window.addEventListener(ACCOUNT_ACTION_REQUIRED_EVENT, listener)
+    await expect(apiRequest('/api/v1/patients')).rejects.toBeInstanceOf(ApiError)
+    window.removeEventListener(ACCOUNT_ACTION_REQUIRED_EVENT, listener)
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ action: 'password_change' })
+  })
+
+  it('does not announce an account action for an ordinary 403', async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 403,
+      jsonBody: { detail: 'Sem permissão.' },
+      headers: new Headers({ 'content-type': 'application/json' }),
+    })
+    const listener = vi.fn()
+    window.addEventListener(ACCOUNT_ACTION_REQUIRED_EVENT, listener)
+    await expect(apiRequest('/api/v1/patients')).rejects.toBeInstanceOf(ApiError)
+    window.removeEventListener(ACCOUNT_ACTION_REQUIRED_EVENT, listener)
+    expect(listener).not.toHaveBeenCalled()
   })
 })

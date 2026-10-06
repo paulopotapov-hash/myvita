@@ -27,7 +27,7 @@ def create_invitation(
     specialty: str | None = None,
 ) -> tuple[Invitation, str]:
     normalized_email = email.strip().lower()
-    if db.query(User).filter(User.email == normalized_email).first() is not None:
+    if db.query(User).filter(User.email_matches(normalized_email)).first() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Já existe uma conta com este email.")
     if role == UserRole.STAFF and staff_role is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Função profissional em falta.")
@@ -75,7 +75,7 @@ def get_pending_invitation(db: Session, token: str, *, lock: bool = False) -> In
 
 def accept_invitation(db: Session, token: str, password: str) -> tuple[Invitation, User]:
     invitation = get_pending_invitation(db, token, lock=True)
-    if db.query(User).filter(User.email == invitation.email).first() is not None:
+    if db.query(User).filter(User.email_matches(invitation.email)).first() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Já existe uma conta com este email.")
 
     user = User(

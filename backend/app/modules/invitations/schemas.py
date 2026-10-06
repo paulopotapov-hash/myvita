@@ -4,19 +4,19 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.core.schemas import RequestModel
-from app.core.validators import validate_password_strength
+from app.core.validators import NormalizedEmail, validate_password_strength
 from app.models import InvitationStatus, StaffRole, UserRole
 
 
 class StaffInvitationCreateRequest(RequestModel):
-    email: EmailStr = Field(max_length=255)
+    email: NormalizedEmail
     full_name: str = Field(min_length=2, max_length=255)
     staff_role: StaffRole
     specialty: str | None = Field(default=None, max_length=255)
 
 
 class PatientInvitationCreateRequest(RequestModel):
-    email: EmailStr = Field(max_length=255)
+    email: NormalizedEmail
     full_name: str = Field(min_length=2, max_length=255)
 
 

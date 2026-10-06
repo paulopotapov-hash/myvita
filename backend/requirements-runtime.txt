@@ -8,4 +8,6 @@ pydantic[email]==2.10.3
 pydantic-settings==2.7.0
 argon2-cffi==25.1.0
 pyjwt==2.13.0
+# AES-GCM encryption of staff TOTP seeds at rest (app/core/mfa.py).
+cryptography==50.0.2
 slowapi==0.1.10

@@ -176,7 +176,7 @@ def deactivate(
     clinic_id: str = Depends(get_current_clinic_id),
     admin: User = Depends(_admin_only),
 ) -> PatientSummary:
-    patient = deactivate_patient(db, patient_id, clinic_id)
+    patient = deactivate_patient(db, patient_id, clinic_id, admin)
     record_audit_event(
         action=AuditAction.USER_DISABLED,
         result=AuditResult.SUCCESS,

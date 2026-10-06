@@ -1,6 +1,8 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '../components/Button'
+import { MfaEnrolment } from '../components/MfaEnrolment'
+import { SESSION_QUERY_KEY, useSession } from '../hooks/useSession'
 import { TextField } from '../components/TextField'
 import { toUserMessage } from '../lib/errorMessages'
 import { passwordChangeSchema, zodErrorsToRecord } from '../lib/validation'
@@ -12,6 +14,8 @@ export function AccountSecurityPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const change = useMutation({ mutationFn: authService.changePassword })
+  const { user } = useSession()
+  const queryClient = useQueryClient()
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -51,6 +55,14 @@ export function AccountSecurityPage() {
           {change.isSuccess && <p className="text-sm text-teal-700">Palavra-passe alterada e sessões anteriores revogadas.</p>}
           <Button type="submit" isLoading={change.isPending}>Alterar palavra-passe</Button>
         </form>
+      </section>
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+        <h2 className="mb-4 text-lg font-medium">Autenticação de dois fatores</h2>
+        {user?.mfa_enabled ? (
+          <p className="text-sm text-teal-700">Ativa. Se perderes o dispositivo, usa um código de recuperação ou pede ao administrador da clínica para a repor.</p>
+        ) : (
+          <MfaEnrolment onDone={() => queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY })} />
+        )}
       </section>
     </div>
   )

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.database import Base, get_db
+from app.core.database import get_db
 from app.main import app
 from tests.conftest import TEST_DATABASE_URL, csrf_headers
 
@@ -17,12 +17,11 @@ from tests.conftest import TEST_DATABASE_URL, csrf_headers
 def client():
     """
     Full-stack client against a real, temporary schema on the test Postgres
-    instance. Each test gets a clean slate via create_all/drop_all, since
+    instance. Each test gets a clean slate (tests/conftest.py truncates every table), since
     HTTP requests run their own independent DB sessions/transactions that
     a single outer-transaction fixture can't wrap.
     """
     engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
     TestSessionLocal = sessionmaker(bind=engine, future=True)
 
     def override_get_db():
@@ -37,7 +36,6 @@ def client():
         yield c
 
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 

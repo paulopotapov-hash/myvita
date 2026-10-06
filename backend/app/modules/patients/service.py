@@ -7,6 +7,7 @@ from app.core.clinical_access import accessible_patient, is_clinical_staff
 from app.core.security import hash_password
 from app.models import Clinic, Patient, User, UserRole
 from app.modules.patients.schemas import PatientRegisterRequest, PatientUpdateRequest
+from app.modules.users import service as users_service
 
 
 def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Patient, User]:
@@ -17,7 +18,7 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
             detail="Clínica não encontrada.",
         )
 
-    if db.query(User).filter(User.email == payload.email).first() is not None:
+    if db.query(User).filter(User.email_matches(payload.email)).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Já existe uma conta com este email.",
@@ -100,7 +101,7 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateReq
     return patient
 
 
-def deactivate_patient(db: Session, patient_id: uuid.UUID, clinic_id: str) -> Patient:
+def deactivate_patient(db: Session, patient_id: uuid.UUID, clinic_id: str, actor: User) -> Patient:
     patient = (
         db.query(Patient)
         .options(selectinload(Patient.user))
@@ -109,9 +110,7 @@ def deactivate_patient(db: Session, patient_id: uuid.UUID, clinic_id: str) -> Pa
     )
     if patient is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
-    if patient.user.is_active:
-        patient.user.is_active = False
-        patient.user.token_epoch += 1
-        db.commit()
-        db.refresh(patient)
+    # Shared lifecycle rules: revoke sessions and outstanding reset links.
+    users_service.deactivate(db, patient.user, actor)
+    db.refresh(patient)
     return patient

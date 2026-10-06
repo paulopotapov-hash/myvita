@@ -16,6 +16,8 @@ import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
+import { AccountsPage } from './pages/admin/AccountsPage'
+import { PasswordResetConfirmPage, PasswordResetRequestPage } from './pages/auth/PasswordResetPages'
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
       <Route path="/registo" element={<PatientRegisterPage />} />
       <Route path="/nova-clinica" element={<ClinicOnboardingPage />} />
       <Route path="/convite" element={<InvitationAcceptPage />} />
+      <Route path="/recuperar-acesso" element={<PasswordResetRequestPage />} />
+      <Route path="/redefinir-palavra-passe" element={<PasswordResetConfirmPage />} />
 
       <Route
         path="/app"
@@ -75,6 +79,14 @@ export default function App() {
           element={
             <RoleRoute allow={['clinic_admin']}>
               <StaffManagementPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="contas"
+          element={
+            <RoleRoute allow={['clinic_admin']}>
+              <AccountsPage />
             </RoleRoute>
           }
         />

@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.core.database import Base, get_db
+from app.core.database import get_db
 from app.main import app
 from tests.conftest import TEST_DATABASE_URL
 
@@ -26,7 +26,6 @@ from tests.conftest import TEST_DATABASE_URL
 @pytest.fixture()
 def client():
     engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
     TestSessionLocal = sessionmaker(bind=engine, future=True)
 
     def override_get_db():
@@ -41,7 +40,6 @@ def client():
         yield c
 
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 

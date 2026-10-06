@@ -4,22 +4,10 @@
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.core.database import Base
 from app.models import AuditAction, AuditLog, Medication, MedicationStatus
-from tests.conftest import TEST_DATABASE_URL
 from tests.test_clinical_contracts_b6 import _tenant, _use, client
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _restore_schema_after_module():
-    """The shared B6 client drops all tables; restore them for later test modules."""
-    yield
-    engine = create_engine(TEST_DATABASE_URL, future=True)
-    Base.metadata.create_all(engine)
-    engine.dispose()
 
 
 def _payload() -> dict:

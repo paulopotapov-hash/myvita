@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useSession } from '../hooks/useSession'
+import { AccountSetupPage } from '../pages/auth/AccountSetupPage'
 
 /**
  * Frontend route protection is UX protection, not authorization — the
@@ -14,7 +15,7 @@ import { useSession } from '../hooks/useSession'
  */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const { isLoading, isAuthenticated, isUnauthenticated, isServerError, refetch } = useSession()
+  const { user, isLoading, isAuthenticated, isUnauthenticated, isServerError, refetch } = useSession()
 
   if (isLoading) {
     return <LoadingSpinner label="A verificar sessão…" />
@@ -33,6 +34,12 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (isUnauthenticated) {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />
+  }
+
+  // A pending account obligation (forced password change, MFA enrolment)
+  // replaces the whole app: the backend refuses everything else anyway.
+  if (isAuthenticated && user?.pending_action) {
+    return <AccountSetupPage action={user.pending_action} />
   }
 
   if (isAuthenticated) {

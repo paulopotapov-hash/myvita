@@ -5,6 +5,8 @@ All settings are loaded from environment variables (see .env.example).
 Nothing sensitive is hardcoded here.
 """
 
+import base64
+import binascii
 from functools import lru_cache
 from typing import Literal
 
@@ -17,6 +19,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # picking "none") and the classic "alg confusion" class of JWT bugs.
 _ALLOWED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
 _DEVELOPMENT_DATABASE_URL = "postgresql+psycopg://myvita:myvita@db:5432/myvita"
+
+
+def _is_32_byte_urlsafe_key(value: str) -> bool:
+    try:
+        return len(base64.urlsafe_b64decode(value.encode())) == 32
+    except (ValueError, binascii.Error):
+        return False
 
 
 class Settings(BaseSettings):
@@ -58,6 +67,29 @@ class Settings(BaseSettings):
     ALLOW_PUBLIC_PATIENT_REGISTRATION: bool = False
     ALLOW_DIRECT_STAFF_CREATION: bool = False
     INVITATION_EXPIRE_HOURS: int = Field(default=24, ge=1, le=168)
+
+    # Account lifecycle. Reset links are issued by a clinic admin and handed
+    # over out of band; self-service delivery (e-mail/SMS) is deliberately
+    # not implemented until a provider and identity-verification policy are
+    # approved (docs/security/account-lifecycle.md).
+    PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=60, ge=5, le=1440)
+
+    # Staff MFA (TOTP). When true, staff and clinic admins can do nothing
+    # except enrol MFA until they have done so. Must stay true in production.
+    MFA_REQUIRED_FOR_STAFF: bool = True
+    MFA_ISSUER: str = Field(default="myVita", min_length=1, max_length=64)
+    # urlsafe-base64 encoding of 32 random bytes. Encrypts TOTP seeds at rest
+    # and keys recovery-code hashes. Required (and distinct from
+    # JWT_SECRET_KEY) in production; derived from JWT_SECRET_KEY elsewhere so
+    # local development needs no extra secret.
+    MFA_ENCRYPTION_KEY: str | None = None
+
+    # Keys the fingerprints that let repeated attempts against one typed
+    # e-mail address be correlated in logs/audit without storing it
+    # (app/core/privacy.py). Dedicated so that rotating the session or MFA
+    # keys never breaks correlation and no key serves two purposes. Required
+    # in production; derived from a fixed development label elsewhere.
+    PRIVACY_FINGERPRINT_KEY: str | None = Field(default=None, min_length=32)
 
     # CSRF (double-submit cookie, HMAC-bound to the session)
     CSRF_COOKIE_NAME: str = "myvita_csrf"
@@ -128,6 +160,18 @@ class Settings(BaseSettings):
             raise ValueError("METRICS_TOKEN is obviously unsuitable for production.")
         if self.ALLOW_DIRECT_STAFF_CREATION:
             raise ValueError("Direct staff creation is forbidden in production; use invitations.")
+        if not self.MFA_REQUIRED_FOR_STAFF:
+            raise ValueError("MFA_REQUIRED_FOR_STAFF must be true when ENVIRONMENT=production.")
+        if not self.MFA_ENCRYPTION_KEY:
+            raise ValueError("MFA_ENCRYPTION_KEY must be set explicitly when ENVIRONMENT=production.")
+        if not _is_32_byte_urlsafe_key(self.MFA_ENCRYPTION_KEY):
+            raise ValueError("MFA_ENCRYPTION_KEY must be the urlsafe-base64 encoding of exactly 32 bytes.")
+        if self.MFA_ENCRYPTION_KEY == self.JWT_SECRET_KEY:
+            raise ValueError("MFA_ENCRYPTION_KEY must differ from JWT_SECRET_KEY.")
+        if not self.PRIVACY_FINGERPRINT_KEY:
+            raise ValueError("PRIVACY_FINGERPRINT_KEY must be set explicitly when ENVIRONMENT=production.")
+        if self.PRIVACY_FINGERPRINT_KEY in {self.JWT_SECRET_KEY, self.MFA_ENCRYPTION_KEY}:
+            raise ValueError("PRIVACY_FINGERPRINT_KEY must differ from JWT_SECRET_KEY and MFA_ENCRYPTION_KEY.")
         return self
 
     @property

@@ -1,6 +1,6 @@
 # P6 MFA and password-recovery architecture
 
-Status: **POST-P6 / BLOCKED BY IDENTITY AND DELIVERY INFRASTRUCTURE**. No insecure local substitute is implemented.
+Status: **TOTP MFA and admin-mediated recovery implemented in Phase 1** (see `security/account-lifecycle.md`). Self-service delivery (e-mail/SMS) and WebAuthn remain **BLOCKED BY IDENTITY AND DELIVERY INFRASTRUCTURE**; no insecure local substitute is implemented.
 
 ## MFA decision
 
