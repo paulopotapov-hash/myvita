@@ -2,6 +2,13 @@
 useDefault = true
 
 [[allowlists]]
+description = "False positive: random 32-byte MFA key generated per test run; historical value was test-only"
+commits = ["7fb36c9bc55090ff7c19a13763edf4475fc8f162"]
+paths = ['''backend/tests/test_auth_hardening\.py''']
+regexTarget = "match"
+regexes = ['''TEST_MFA_KEY = "dGVzdC1vbmx5LW1mYS1rZXktMzItYnl0ZXMtbG9uZyE="''']
+
+[[allowlists]]
 description = "Documented Portuguese placeholder used in README production examples"
 regexTarget = "match"
 regexes = ['''gera-um-valor-com-pelo-menos-32-bytes''']

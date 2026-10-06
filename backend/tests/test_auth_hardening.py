@@ -6,6 +6,7 @@ Tests for Phase 1 foundation hardening:
 - fail-closed settings validation (JWT algorithm allowlist, prod cookie flag)
 """
 
+import base64
 import os
 import subprocess
 import sys
@@ -19,7 +20,7 @@ from app.core.database import get_db
 from app.main import app
 from tests.conftest import TEST_DATABASE_URL, csrf_headers
 
-TEST_MFA_KEY = "dGVzdC1vbmx5LW1mYS1rZXktMzItYnl0ZXMtbG9uZyE="  # 32 bytes, tests only
+TEST_MFA_KEY = base64.urlsafe_b64encode(os.urandom(32)).decode()
 TEST_FINGERPRINT_KEY = "test-only-privacy-fingerprint-key-0123456789"
 
 
