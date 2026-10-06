@@ -1,0 +1,168 @@
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
+
+from app.core.audit import client_ip, record_audit_event
+from app.core.database import get_db
+from app.core.security import get_current_clinic_id, get_current_user, require_roles
+from app.models import Appointment, AuditAction, AuditResult, Patient, User, UserRole
+from app.modules.appointments.schemas import (
+    AppointmentCreateRequest,
+    AppointmentPublic,
+    AppointmentUpdateRequest,
+)
+from app.modules.appointments.service import (
+    cancel_appointment,
+    create_appointment,
+    get_appointment_for_clinic,
+    list_appointments_for_user,
+    update_appointment,
+)
+
+router = APIRouter()
+
+# require_roles(...) is called once here, at import time (a dependency
+# factory returning a closure) — never per-request. Named module-level so
+# the linter (and readers) don't mistake it for a mutable default re-evaluated
+# on every call, which is the actual footgun B008 exists to catch.
+_staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
+
+
+@router.post(
+    "",
+    response_model=AppointmentPublic,
+    status_code=201,
+    dependencies=[],
+)
+def create(
+    request: Request,
+    payload: AppointmentCreateRequest,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    _staff_user: User = Depends(_staff_or_admin_only),
+) -> Appointment:
+    appointment = create_appointment(db, clinic_id, payload)
+    record_audit_event(
+        action=AuditAction.APPOINTMENT_CREATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=_staff_user.id,
+        actor_email=_staff_user.email,
+        resource_type="appointment",
+        resource_id=appointment.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return appointment
+
+
+@router.get("", response_model=list[AppointmentPublic])
+def list_mine(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> list[Appointment]:
+    """
+    Patients get their own appointments; staff/clinic_admin get every
+    appointment in their own clinic. Scoping happens entirely server-side
+    based on the authenticated session — see service.list_appointments_for_user.
+    """
+    appointments = list_appointments_for_user(db, user)
+    # Clinical access log: who looked at appointment data, and whose.
+    # One row per request (not per appointment) — the "resource" for this
+    # event is "the appointment list this user is entitled to see", not
+    # each individual row, which would flood the table for no
+    # investigative benefit.
+    record_audit_event(
+        action=(
+            AuditAction.PATIENT_VIEWED_OWN_RECORD
+            if user.role == UserRole.PATIENT
+            else AuditAction.STAFF_VIEWED_APPOINTMENT
+        ),
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="appointment_list",
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"count": len(appointments)},
+    )
+    return appointments
+
+
+@router.get("/{appointment_id}", response_model=AppointmentPublic)
+def detail(
+    appointment_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    _user: User = Depends(get_current_user),
+) -> Appointment:
+    appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
+    if _user.role == UserRole.PATIENT:
+        patient = db.query(Patient).filter(Patient.user_id == _user.id).first()
+        if patient is None or appointment.patient_id != patient.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consulta não encontrada.")
+    record_audit_event(
+        action=(
+            AuditAction.PATIENT_VIEWED_OWN_RECORD
+            if _user.role == UserRole.PATIENT
+            else AuditAction.STAFF_VIEWED_APPOINTMENT
+        ),
+        result=AuditResult.SUCCESS,
+        clinic_id=_user.clinic_id,
+        actor_user_id=_user.id,
+        actor_email=_user.email,
+        resource_type="appointment",
+        resource_id=appointment.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return appointment
+
+
+@router.patch("/{appointment_id}", response_model=AppointmentPublic)
+def update(
+    appointment_id: uuid.UUID,
+    payload: AppointmentUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    staff_user: User = Depends(_staff_or_admin_only),
+) -> Appointment:
+    appointment = update_appointment(db, appointment_id, clinic_id, payload)
+    record_audit_event(
+        action=AuditAction.APPOINTMENT_UPDATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=staff_user.id,
+        actor_email=staff_user.email,
+        resource_type="appointment",
+        resource_id=appointment.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return appointment
+
+
+@router.post("/{appointment_id}/cancel", response_model=AppointmentPublic)
+def cancel(
+    appointment_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    staff_user: User = Depends(_staff_or_admin_only),
+) -> Appointment:
+    appointment = cancel_appointment(db, appointment_id, clinic_id)
+    record_audit_event(
+        action=AuditAction.APPOINTMENT_CANCELLED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=staff_user.id,
+        actor_email=staff_user.email,
+        resource_type="appointment",
+        resource_id=appointment.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return appointment
