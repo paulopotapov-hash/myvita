@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import AuditAction, AuditResult, Consent, User
@@ -34,7 +34,8 @@ def list_patient_consents(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Consent]:
-    consents = list_consents(db, patient_id, user)
+    with audit_denials(request, user, "consent", patient_id):
+        consents = list_consents(db, patient_id, user)
     record_audit_event(
         action=AuditAction.CONSENT_VIEWED,
         result=AuditResult.SUCCESS,
@@ -58,7 +59,8 @@ def create_consent(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Consent:
-    consent = grant_consent(db, patient_id, payload, user)
+    with audit_denials(request, user, "consent", patient_id):
+        consent = grant_consent(db, patient_id, payload, user)
     _audit(request, user, AuditAction.CONSENT_GRANTED, consent)
     return consent
 
@@ -70,7 +72,8 @@ def consent_detail(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Consent:
-    consent = get_consent(db, consent_id, user)
+    with audit_denials(request, user, "consent", consent_id):
+        consent = get_consent(db, consent_id, user)
     _audit(request, user, AuditAction.CONSENT_VIEWED, consent)
     return consent
 
@@ -82,6 +85,7 @@ def revoke(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Consent:
-    consent = revoke_consent(db, consent_id, user)
+    with audit_denials(request, user, "consent", consent_id):
+        consent = revoke_consent(db, consent_id, user)
     _audit(request, user, AuditAction.CONSENT_REVOKED, consent)
     return consent

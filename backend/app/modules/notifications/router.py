@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import AuditAction, AuditResult, Notification, User
@@ -33,7 +33,8 @@ def mark_read(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Notification:
-    notification = mark_notification_read(db, notification_id, user)
+    with audit_denials(request, user, "notification", notification_id):
+        notification = mark_notification_read(db, notification_id, user)
     record_audit_event(
         action=AuditAction.NOTIFICATION_READ,
         result=AuditResult.SUCCESS,

@@ -75,7 +75,7 @@ def update_medication(
     changes = payload.model_dump(exclude_unset=True)
     if (
         changes.get("status") in {MedicationStatus.COMPLETED, MedicationStatus.DISCONTINUED}
-        and "end_date" not in changes
+        and changes.get("end_date") is None
     ):
         changes["end_date"] = date.today()
     for field, value in changes.items():

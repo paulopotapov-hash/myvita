@@ -61,6 +61,9 @@ class AppointmentUpdateRequest(RequestModel):
     def at_least_one_field_and_no_direct_cancel(self) -> "AppointmentUpdateRequest":
         if not self.model_fields_set:
             raise ValueError("At least one field is required.")
+        for name in ("patient_id", "staff_id", "scheduled_at", "duration_minutes", "status"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} must not be null")
         if self.status == AppointmentStatus.CANCELLED:
             raise ValueError("Use the cancellation endpoint.")
         return self

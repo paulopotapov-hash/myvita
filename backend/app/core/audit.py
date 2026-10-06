@@ -5,13 +5,18 @@ else should construct an AuditLog row directly.
 """
 import logging
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
+
+from fastapi import HTTPException, Request
 
 from app.core.client_ip import get_client_ip as client_ip  # re-exported: see app/core/client_ip.py
 from app.core.database import SessionLocal
 from app.models.audit_log import AuditAction, AuditLog, AuditResult
+from app.models.user import User
 
-__all__ = ["record_audit_event", "client_ip"]
+__all__ = ["record_audit_event", "record_denied_access", "audit_denials", "client_ip"]
 
 logger = logging.getLogger("myvita.audit")
 
@@ -73,3 +78,34 @@ def record_audit_event(
         session.rollback()
     finally:
         session.close()
+
+
+def record_denied_access(
+    request: Request, user: User, resource_type: str, resource_id: uuid.UUID | str
+) -> None:
+    """Audit a 403/404 on a clinical resource under the ACTOR's clinic, never the target's."""
+    record_audit_event(
+        action=AuditAction.PERMISSION_DENIED,
+        result=AuditResult.DENIED,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"path": request.url.path},
+    )
+
+
+@contextmanager
+def audit_denials(
+    request: Request, user: User, resource_type: str, resource_id: uuid.UUID | str
+) -> Iterator[None]:
+    """Audit any 403/404 raised inside the block, then let it propagate unchanged."""
+    try:
+        yield
+    except HTTPException as exc:
+        if exc.status_code in {403, 404}:
+            record_denied_access(request, user, resource_type, resource_id)
+        raise

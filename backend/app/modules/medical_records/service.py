@@ -65,6 +65,8 @@ def update_record(
     record = get_record(db, record_id, user)
     accessible_patient(db, record.patient_id, user, write=True)
     staff = clinical_staff(db, user)
+    # Lock + reload so concurrent edits get distinct, gapless versions.
+    db.refresh(record, with_for_update=True)
     record.version += 1
     record.title = payload.title
     record.content = payload.content

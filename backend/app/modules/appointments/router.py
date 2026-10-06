@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.clinical_access import is_clinical_staff
 from app.core.database import get_db
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
@@ -80,9 +80,10 @@ def create(
     clinic_id: str = Depends(get_current_clinic_id),
     _staff_user: User = Depends(_staff_or_admin_only),
 ) -> AppointmentPublic:
-    _hide_cross_tenant_targets(payload, clinic_id, db)
-    _reject_admin_reason(payload, _staff_user, db)
-    appointment = create_appointment(db, clinic_id, payload)
+    with audit_denials(request, _staff_user, "appointment", payload.patient_id):
+        _hide_cross_tenant_targets(payload, clinic_id, db)
+        _reject_admin_reason(payload, _staff_user, db)
+        appointment = create_appointment(db, clinic_id, payload)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CREATED,
         result=AuditResult.SUCCESS,
@@ -138,11 +139,12 @@ def detail(
     clinic_id: str = Depends(get_current_clinic_id),
     _user: User = Depends(get_current_user),
 ) -> AppointmentPublic:
-    appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
-    if _user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == _user.id).first()
-        if patient is None or appointment.patient_id != patient.id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consulta não encontrada.")
+    with audit_denials(request, _user, "appointment", appointment_id):
+        appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
+        if _user.role == UserRole.PATIENT:
+            patient = db.query(Patient).filter(Patient.user_id == _user.id).first()
+            if patient is None or appointment.patient_id != patient.id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consulta não encontrada.")
     record_audit_event(
         action=(
             AuditAction.PATIENT_VIEWED_OWN_RECORD
@@ -170,9 +172,10 @@ def update(
     clinic_id: str = Depends(get_current_clinic_id),
     staff_user: User = Depends(_staff_or_admin_only),
 ) -> AppointmentPublic:
-    get_appointment_for_clinic(db, appointment_id, clinic_id)
-    _reject_admin_reason(payload, staff_user, db)
-    appointment = update_appointment(db, appointment_id, clinic_id, payload)
+    with audit_denials(request, staff_user, "appointment", appointment_id):
+        get_appointment_for_clinic(db, appointment_id, clinic_id)
+        _reject_admin_reason(payload, staff_user, db)
+        appointment = update_appointment(db, appointment_id, clinic_id, payload)
     record_audit_event(
         action=AuditAction.APPOINTMENT_UPDATED,
         result=AuditResult.SUCCESS,
@@ -195,7 +198,8 @@ def cancel(
     clinic_id: str = Depends(get_current_clinic_id),
     staff_user: User = Depends(_staff_or_admin_only),
 ) -> AppointmentPublic:
-    appointment = cancel_appointment(db, appointment_id, clinic_id)
+    with audit_denials(request, staff_user, "appointment", appointment_id):
+        appointment = cancel_appointment(db, appointment_id, clinic_id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CANCELLED,
         result=AuditResult.SUCCESS,

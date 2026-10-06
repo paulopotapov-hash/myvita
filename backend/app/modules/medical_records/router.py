@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import AuditAction, AuditResult, MedicalRecord, MedicalRecordRevision, User
@@ -39,7 +39,8 @@ def list_for_patient(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[MedicalRecord]:
-    records = list_records(db, patient_id, user)
+    with audit_denials(request, user, "medical_record", patient_id):
+        records = list_records(db, patient_id, user)
     record_audit_event(
         action=AuditAction.MEDICAL_RECORD_VIEWED,
         result=AuditResult.SUCCESS,
@@ -63,7 +64,8 @@ def create(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MedicalRecord:
-    record = create_record(db, patient_id, payload, user)
+    with audit_denials(request, user, "medical_record", patient_id):
+        record = create_record(db, patient_id, payload, user)
     _audit(request, user, AuditAction.MEDICAL_RECORD_CREATED, record)
     return record
 
@@ -75,7 +77,8 @@ def detail(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MedicalRecord:
-    record = get_record(db, record_id, user)
+    with audit_denials(request, user, "medical_record", record_id):
+        record = get_record(db, record_id, user)
     _audit(request, user, AuditAction.MEDICAL_RECORD_VIEWED, record)
     return record
 
@@ -88,7 +91,8 @@ def update(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MedicalRecord:
-    record = update_record(db, record_id, payload, user)
+    with audit_denials(request, user, "medical_record", record_id):
+        record = update_record(db, record_id, payload, user)
     _audit(request, user, AuditAction.MEDICAL_RECORD_UPDATED, record)
     return record
 
@@ -100,7 +104,8 @@ def revisions(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[MedicalRecordRevision]:
-    record = get_record(db, record_id, user)
+    with audit_denials(request, user, "medical_record", record_id):
+        record = get_record(db, record_id, user)
     _audit(request, user, AuditAction.MEDICAL_RECORD_VIEWED, record)
     return (
         db.query(MedicalRecordRevision)

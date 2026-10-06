@@ -51,7 +51,9 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
             detail="Paciente não encontrado nesta clínica.",
         )
 
-    staff = db.get(Staff, payload.staff_id)
+    # Row lock serialises bookings per professional so the overlap check below
+    # cannot race with a concurrent booking.
+    staff = db.get(Staff, payload.staff_id, with_for_update=True)
     if staff is None or str(staff.clinic_id) != str(clinic_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -105,7 +107,7 @@ def update_appointment(
     patient_id = payload.patient_id or appointment.patient_id
     staff_id = payload.staff_id or appointment.staff_id
     patient = db.get(Patient, patient_id)
-    staff = db.get(Staff, staff_id)
+    staff = db.get(Staff, staff_id, with_for_update=True)
     if patient is None or str(patient.clinic_id) != str(clinic_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado nesta clínica."

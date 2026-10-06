@@ -58,6 +58,9 @@ class MedicationUpdateRequest(RequestModel):
     def at_least_one_field(self) -> "MedicationUpdateRequest":
         if not self.model_fields_set:
             raise ValueError("At least one field is required.")
+        for name in ("name", "dosage", "status", "start_date"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} must not be null")
         return self
 
 

@@ -4,7 +4,7 @@ from typing import Never
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import client_ip, record_audit_event, record_denied_access
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import AuditAction, AuditResult, Medication, MedicationStatus, User
@@ -39,24 +39,9 @@ def _audit(request: Request, user: User, action: AuditAction, medication: Medica
     )
 
 
-def _audit_denied(request: Request, user: User, resource_id: uuid.UUID) -> None:
-    record_audit_event(
-        action=AuditAction.PERMISSION_DENIED,
-        result=AuditResult.DENIED,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="medication",
-        resource_id=resource_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={"path": request.url.path},
-    )
-
-
 def _audit_and_raise(request: Request, user: User, resource_id: uuid.UUID, exc: HTTPException) -> Never:
     if exc.status_code in {403, 404}:
-        _audit_denied(request, user, resource_id)
+        record_denied_access(request, user, "medication", resource_id)
     raise exc
 
 
