@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import {
   ArrowRight, Calendar, Check, CheckCircle2, ChevronRight, Clock,
-  FileText, MessageCircle, Menu, Send, ShieldCheck, User, X, Zap
+  FileText, MessageCircle, Send, ShieldCheck, User
 } from "lucide-react";
 import Prototype from "./pages/Prototype.jsx";
 import PilotClinic from "./pages/PilotClinic.jsx";

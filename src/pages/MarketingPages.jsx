@@ -62,6 +62,26 @@ export function ContactPage() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const submit = async event => { event.preventDefault(); setError(""); try { const response = await fetch(endpoint, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify({ ...form, _subject: "MyVita — Contacto" }) }); if (!response.ok) throw new Error(); setSent(true); setForm({ name: "", email: "", message: "" }); } catch { setError("Não foi possível enviar a mensagem. Tente novamente ou contacte PRTLABS.OFFICIAL@GMAIL.COM."); } };
-  return <SiteLayout><PageHero eyebrow="Falar connosco" title="Vamos validar a próxima fase juntos." intro="Se representa uma clínica, um parceiro ou um investidor, estamos disponíveis para apresentar o protótipo e ouvir os desafios da sua operação." /><section className="section"><div className="container contact-grid"><div><div className="contact-details"><p><strong>Email</strong><a href="mailto:PRTLABS.OFFICIAL@GMAIL.COM">PRTLABS.OFFICIAL@GMAIL.COM</a></p><p><strong>Sede</strong>Coimbra, Portugal</p><p><strong>Fase</strong>Protótipo funcional · Em validação</p></div></div><form className="contact-form" onSubmit={submit}><label>Nome<input required value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label><label>Email profissional<input required type="email" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} /></label><label>Mensagem<textarea required rows="6" value={form.message} onChange={event => setForm({ ...form, message: event.target.value })} /></label><button className="btn btn-primary" type="submit">Enviar mensagem <ArrowRight size={16} /></button>{sent && <p className="form-note success">Obrigado. Recebemos a sua mensagem.</p>}{error && <p className="form-note error" role="alert">{error}</p>}</form></div></section></SiteLayout>;
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async event => {
+    event.preventDefault();
+    setSent(false);
+    setError("");
+    if (!form.name.trim() || !form.message.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError("Preencha o nome, um email válido e a mensagem.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch(endpoint, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify({ ...form, _subject: "MyVita — Contacto" }) });
+      if (!response.ok) throw new Error();
+      setSent(true);
+      setForm({ name: "", email: "", message: "" });
+    } catch {
+      setError("Não foi possível enviar a mensagem. Tente novamente ou contacte PRTLABS.OFFICIAL@GMAIL.COM.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return <SiteLayout><PageHero eyebrow="Falar connosco" title="Vamos validar a próxima fase juntos." intro="Se representa uma clínica, um parceiro ou um investidor, estamos disponíveis para apresentar o protótipo e ouvir os desafios da sua operação." /><section className="section"><div className="container contact-grid"><div><div className="contact-details"><p><strong>Email</strong><a href="mailto:PRTLABS.OFFICIAL@GMAIL.COM">PRTLABS.OFFICIAL@GMAIL.COM</a></p><p><strong>Sede</strong>Coimbra, Portugal</p><p><strong>Fase</strong>Protótipo funcional · Em validação</p></div></div><form className="contact-form" onSubmit={submit} noValidate><label>Nome<input name="name" required value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label><label>Email profissional<input name="email" required type="email" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} /></label><label>Mensagem<textarea name="message" required rows="6" value={form.message} onChange={event => setForm({ ...form, message: event.target.value })} /></label><button className="btn btn-primary" type="submit" disabled={submitting}>{submitting ? "A enviar..." : "Enviar mensagem"} {!submitting && <ArrowRight size={16} />}</button>{sent && <p className="form-note success" role="status">Obrigado. Recebemos a sua mensagem.</p>}{error && <p className="form-note error" role="alert">{error}</p>}</form></div></section></SiteLayout>;
 }
