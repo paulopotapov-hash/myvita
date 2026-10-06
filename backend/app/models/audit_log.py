@@ -88,6 +88,10 @@ class AuditAction(str, enum.Enum):
     MEDICATION_VIEWED = "medication_viewed"
     CARE_ASSIGNMENT_CREATED = "care_assignment_created"
     CARE_ASSIGNMENT_ENDED = "care_assignment_ended"
+    DOCUMENT_CREATED = "document_created"
+    DOCUMENT_UPDATED = "document_updated"
+    DOCUMENT_VIEWED = "document_viewed"
+    DOCUMENT_DOWNLOADED = "document_downloaded"
 
 
 class AuditResult(str, enum.Enum):

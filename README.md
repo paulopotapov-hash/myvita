@@ -26,6 +26,8 @@ Para parar: `Ctrl+C`, depois `docker compose down` (ou `docker compose down -v` 
 
 Documentação específica do frontend (stack, variáveis de ambiente, decisões de segurança, recomendação de produção): `frontend/README.md`.
 
+Documentos clínicos (ficheiros PDF e notas versionadas), autorização, armazenamento e limitações operacionais: `docs/clinical-documents.md`.
+
 ## Correr sem Docker (dev local)
 
 ```bash

@@ -26,3 +26,4 @@ backups/
 node_modules/
 dist/
 frontend/coverage/
+backend/var/documents/

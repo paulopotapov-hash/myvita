@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = True  # False only for local http dev
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
     MAX_REQUEST_BODY_BYTES: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
+    DOCUMENT_STORAGE_DIR: str = "./var/documents"
+    DOCUMENT_MAX_FILE_BYTES: int = Field(default=5_242_880, ge=1_024, le=10_485_760)
 
     # Public account creation is useful during local development, but must
     # be an explicit operational decision for a controlled clinic rollout.
@@ -171,7 +173,9 @@ class Settings(BaseSettings):
         if not self.PRIVACY_FINGERPRINT_KEY:
             raise ValueError("PRIVACY_FINGERPRINT_KEY must be set explicitly when ENVIRONMENT=production.")
         if self.PRIVACY_FINGERPRINT_KEY in {self.JWT_SECRET_KEY, self.MFA_ENCRYPTION_KEY}:
-            raise ValueError("PRIVACY_FINGERPRINT_KEY must differ from JWT_SECRET_KEY and MFA_ENCRYPTION_KEY.")
+            raise ValueError(
+                "PRIVACY_FINGERPRINT_KEY must differ from JWT_SECRET_KEY and MFA_ENCRYPTION_KEY."
+            )
         return self
 
     @property

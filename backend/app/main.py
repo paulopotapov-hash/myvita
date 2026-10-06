@@ -39,6 +39,7 @@ from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
 from app.modules.clinics.router import router as clinics_router
 from app.modules.consents.router import router as consents_router
+from app.modules.documents.router import router as documents_router
 from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
@@ -174,9 +175,20 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 declared_size = int(content_length)
             except ValueError:
                 declared_size = -1
+            is_document_upload = (
+                request.url.path.startswith("/api/v1/patients/")
+                and request.url.path.endswith("/documents/files")
+                or request.url.path.startswith("/api/v1/documents/")
+                and request.url.path.endswith("/files/versions")
+            )
+            body_limit = (
+                settings.DOCUMENT_MAX_FILE_BYTES + 2 * 1024 * 1024
+                if is_document_upload
+                else settings.MAX_REQUEST_BODY_BYTES
+            )
             if declared_size < 0:
                 response = JSONResponse(status_code=400, content={"detail": "Content-Length inválido."})
-            elif declared_size > settings.MAX_REQUEST_BODY_BYTES:
+            elif declared_size > body_limit:
                 response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
             else:
                 response = await call_next(request)
@@ -264,5 +276,6 @@ app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["ap
 app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
+app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])

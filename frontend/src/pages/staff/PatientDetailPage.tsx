@@ -17,6 +17,7 @@ import { consentCreateSchema, patientUpdateSchema, zodErrorsToRecord } from '../
 import type { ConsentType, PatientPublic } from '../../types/api'
 import { MedicalRecordsSection } from './MedicalRecordsSection'
 import { MedicationsSection } from './MedicationsSection'
+import { ClinicalDocumentsSection } from '../shared/ClinicalDocumentsSection'
 
 const CONSENT_LABELS: Record<ConsentType, string> = {
   treatment: 'Tratamento',
@@ -137,6 +138,7 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
 
       {canReadClinical && <MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} />}
       {canReadClinical && <MedicationsSection patientId={patient.id} canWrite={canWriteClinical} />}
+      {canReadClinical && <ClinicalDocumentsSection patientId={patient.id} canWrite={canWriteClinical} />}
 
       {/* The backend answers 403 on consents to administrative roles, so the section is not offered to them. */}
       {canReadClinical && <ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} />}

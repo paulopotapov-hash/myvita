@@ -42,9 +42,13 @@ def test_upgrade_stops_on_case_duplicates_and_changes_nothing():
 
         with engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == PREVIOUS
-            columns = connection.execute(
-                text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
-            ).scalars().all()
+            columns = (
+                connection.execute(
+                    text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+                )
+                .scalars()
+                .all()
+            )
             assert "must_change_password" not in columns
             assert connection.execute(text("SELECT count(*) FROM users")).scalar() == 2
 
@@ -55,9 +59,15 @@ def test_upgrade_stops_on_case_duplicates_and_changes_nothing():
         engine.dispose()
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "ab12cd34ef56"
-        triggers = connection.execute(
-            text("SELECT tgname FROM pg_trigger WHERE tgrelid = 'audit_logs'::regclass AND NOT tgisinternal")
-        ).scalars().all()
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c7d8e9f0a1b2"
+        triggers = (
+            connection.execute(
+                text(
+                    "SELECT tgname FROM pg_trigger WHERE tgrelid = 'audit_logs'::regclass AND NOT tgisinternal"
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert set(triggers) == {"audit_logs_append_only", "audit_logs_no_truncate"}
     engine.dispose()

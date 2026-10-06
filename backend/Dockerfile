@@ -11,6 +11,9 @@ COPY . .
 
 # Never run the app as root.
 RUN groupadd -r myvita && useradd -r -g myvita myvita \
+    && mkdir -p /var/lib/myvita/documents \
+    && chown myvita:myvita /var/lib/myvita/documents \
+    && chmod 0700 /var/lib/myvita/documents \
     && chown -R myvita:myvita /app \
     && find /app -type d -exec chmod 0555 {} + \
     && find /app -type f -exec chmod 0444 {} +

@@ -29,7 +29,7 @@ ignore = [
 # request-scoped dependencies, not an accidental mutable-default bug.
 # Without this, B008 fires on every single endpoint in the app.
 extend-immutable-calls = [
-    "fastapi.Depends", "fastapi.Cookie", "fastapi.Header", "fastapi.Query", "fastapi.Path", "fastapi.Body",
+    "fastapi.Depends", "fastapi.Cookie", "fastapi.Header", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.File", "fastapi.Form",
 ]
 
 [tool.ruff.lint.isort]

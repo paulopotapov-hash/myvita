@@ -26,6 +26,8 @@ class ClinicalAction(str, enum.Enum):
     EDIT_APPOINTMENTS = "appointments.edit"
     VIEW_APPOINTMENT_REASON = "appointments.reason.view"
     INVITE_PATIENT = "patient.invite"
+    VIEW_DOCUMENTS = "documents.view"
+    EDIT_DOCUMENTS = "documents.edit"
 
 
 # Explicit policy, not a role hierarchy. Doctor and nurse permissions reflect
@@ -43,6 +45,8 @@ _CURRENT_CLINICIAN_ACTIONS = frozenset(
         ClinicalAction.EDIT_APPOINTMENTS,
         ClinicalAction.VIEW_APPOINTMENT_REASON,
         ClinicalAction.INVITE_PATIENT,
+        ClinicalAction.VIEW_DOCUMENTS,
+        ClinicalAction.EDIT_DOCUMENTS,
     }
 )
 
@@ -61,6 +65,7 @@ PATIENT_OWN_ACTIONS = frozenset(
         ClinicalAction.VIEW_MEDICAL_RECORDS,
         ClinicalAction.VIEW_MEDICATIONS,
         ClinicalAction.VIEW_CONSENTS,
+        ClinicalAction.VIEW_DOCUMENTS,
         ClinicalAction.VIEW_APPOINTMENTS,
         ClinicalAction.VIEW_APPOINTMENT_REASON,
     }
@@ -70,11 +75,7 @@ PATIENT_OWN_ACTIONS = frozenset(
 def staff_profile(db: Session, user: User) -> Staff | None:
     if user.role != UserRole.STAFF or user.clinic_id is None:
         return None
-    return (
-        db.query(Staff)
-        .filter(Staff.user_id == user.id, Staff.clinic_id == user.clinic_id)
-        .first()
-    )
+    return db.query(Staff).filter(Staff.user_id == user.id, Staff.clinic_id == user.clinic_id).first()
 
 
 def has_role_action(staff_role: StaffRole, action: ClinicalAction) -> bool:
@@ -88,11 +89,7 @@ def clinical_access(
     action: ClinicalAction = ClinicalAction.VIEW_PATIENT,
 ) -> Patient:
     """Return the patient only when tenant, identity, assignment and action allow it."""
-    patient = (
-        db.query(Patient)
-        .filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id)
-        .first()
-    )
+    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id).first()
     if patient is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
 
@@ -122,7 +119,9 @@ def clinical_access(
         .first()
     )
     if assigned is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sem acesso clínico a este paciente.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Sem acesso clínico a este paciente."
+        )
     return patient
 
 

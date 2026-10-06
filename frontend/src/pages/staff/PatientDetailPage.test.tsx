@@ -35,6 +35,12 @@ vi.mock('../../hooks/useSession', () => ({
 }))
 
 vi.mock('../../hooks/useClinicalData', () => ({
+  useClinicalDocuments: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useDocumentHistory: () => ({ data: [], isLoading: false }),
+  useCreateDocumentNote: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateDocumentNote: () => ({ mutate: vi.fn(), isPending: false }),
+  useUploadClinicalDocument: () => ({ mutate: vi.fn(), isPending: false }),
+  useUploadDocumentVersion: () => ({ mutate: vi.fn(), isPending: false }),
   useMedicalRecords: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useMedicalRecordRevisions: () => ({ data: [], isLoading: false }),
   useCreateMedicalRecord: () => ({ mutate: vi.fn(), isPending: false }),

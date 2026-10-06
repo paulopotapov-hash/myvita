@@ -15,7 +15,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app', label: 'Início' },
     { to: '/app/consultas', label: 'As minhas consultas' },
     { to: '/app/perfil', label: 'Perfil' },
-    { to: '/app/saude', label: 'Dados clínicos' },
+    { to: '/app/saude', label: 'Saúde' },
     { to: '/app/notificacoes', label: 'Notificações' },
     { to: '/app/seguranca', label: 'Segurança' },
   ],

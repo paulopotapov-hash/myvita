@@ -10,6 +10,33 @@ export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cance
 export type ConsentType = 'treatment' | 'data_processing' | 'communications' | 'research'
 export type ConsentStatus = 'granted' | 'revoked'
 export type MedicationStatus = 'active' | 'discontinued' | 'completed'
+export type DocumentKind = 'note' | 'file'
+
+export interface ClinicalDocumentPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  kind: DocumentKind
+  title: string
+  current_version: number
+  created_at: string
+  updated_at: string
+  current_content: string | null
+  current_author: string | null
+}
+
+export interface ClinicalDocumentVersionPublic {
+  id: string
+  document_id: string
+  author_name: string
+  version: number
+  content: string | null
+  original_filename: string | null
+  media_type: string | null
+  file_size: number | null
+  created_at: string
+  is_current: boolean
+}
 
 /** What the account must do before anything else works
  * (backend/app/core/security.py pending_account_action). While set, every
@@ -181,6 +208,8 @@ export interface NotificationPublic {
   is_read: boolean
   read_at: string | null
   created_at: string
+  target_type?: string | null
+  target_id?: string | null
 }
 
 // --- Request payloads (mirrors backend *Request schemas) --------------------

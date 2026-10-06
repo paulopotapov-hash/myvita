@@ -104,6 +104,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
       TRUSTED_PROXIES: '["172.30.0.10"]'
+      DOCUMENT_STORAGE_DIR: /var/lib/myvita/documents
     depends_on:
       db:
         condition: service_healthy
@@ -112,6 +113,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
+    volumes:
+      - myvita_documents:/var/lib/myvita/documents
     cap_drop:
       - ALL
     security_opt:
@@ -222,6 +225,7 @@ services:
 
 volumes:
   myvita_pg_data:
+  myvita_documents:
   myvita_backups:
   myvita_backup_metrics:
 

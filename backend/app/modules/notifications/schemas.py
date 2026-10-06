@@ -11,4 +11,6 @@ class NotificationPublic(BaseModel):
     is_read: bool
     read_at: datetime | None
     created_at: datetime
+    target_type: str | None
+    target_id: uuid.UUID | None
     model_config = {"from_attributes": True}

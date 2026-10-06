@@ -29,6 +29,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/migrations:/app/migrations
+      - ./backend/var/documents:/app/var/documents
 
   frontend:
     build: ./frontend
