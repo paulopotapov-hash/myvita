@@ -18,6 +18,7 @@ import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
 import { AccountsPage } from './pages/admin/AccountsPage'
 import { PasswordResetConfirmPage, PasswordResetRequestPage } from './pages/auth/PasswordResetPages'
+import { MessagesPage } from './pages/MessagesPage'
 
 export default function App() {
   return (
@@ -41,6 +42,14 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route
+          path="mensagens"
+          element={
+            <RoleRoute allow={['patient', 'staff']}>
+              <MessagesPage />
+            </RoleRoute>
+          }
+        />
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route
           path="saude"

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../lib/apiClient'
 import { NotificationsPage } from './NotificationsPage'
@@ -31,7 +32,7 @@ describe('NotificationsPage', () => {
       isError: false,
     }))
     const user = userEvent.setup()
-    render(<NotificationsPage />)
+    render(<MemoryRouter><NotificationsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: 'Marcar como lida' }))
     expect(markRead).toHaveBeenCalledWith('n1', expect.objectContaining({ onError: expect.any(Function) }))
@@ -44,6 +45,27 @@ describe('NotificationsPage', () => {
     useNotifications.mockReturnValue({ data: { total: 0, items: [] }, isLoading: false, isError: false })
     render(<NotificationsPage />)
     expect(screen.getByText('Sem notificações')).toBeInTheDocument()
+  })
+
+  it('opens a typed conversation notification through the authenticated messages page', () => {
+    useNotifications.mockReturnValue({
+      data: {
+        total: 1,
+        items: [{
+          ...unread('message-notification'),
+          target_type: 'conversation',
+          target_id: null,
+          conversation_target_id: 'conversation-1',
+        }],
+      },
+      isLoading: false,
+      isError: false,
+    })
+    render(<MemoryRouter><NotificationsPage /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: 'Ver mensagem' })).toHaveAttribute(
+      'href',
+      '/app/mensagens?conversationTargetId=conversation-1',
+    )
   })
 
   it('surfaces a mark-as-read failure instead of swallowing it', async () => {

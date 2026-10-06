@@ -59,7 +59,7 @@ def test_upgrade_stops_on_case_duplicates_and_changes_nothing():
         engine.dispose()
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c7d8e9f0a1b2"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d1e2f3a4b5c6"
         triggers = (
             connection.execute(
                 text(

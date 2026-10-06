@@ -28,6 +28,8 @@ Documentação específica do frontend (stack, variáveis de ambiente, decisões
 
 Documentos clínicos (ficheiros PDF e notas versionadas), autorização, armazenamento e limitações operacionais: `docs/clinical-documents.md`.
 
+Mensagens clínicas (inbox da equipa, respostas, escalonamento e limites operacionais): `docs/clinical-messaging.md`.
+
 ## Correr sem Docker (dev local)
 
 ```bash

@@ -15,6 +15,9 @@ Backend authorization is authoritative; frontend visibility is UX only. Cross-te
 | Consent grant/revoke | own only | forbidden | forbidden | forbidden | forbidden |
 | Medical records | own read | same-clinic read/create/version | same | forbidden | forbidden |
 | Medication | own read | same-clinic read/create/update/deactivate | same | forbidden | forbidden |
+| Clinical documents | own read | assigned patient read/create/version | same | forbidden | forbidden |
+| Clinical conversations | own read/reply to team-started threads | assigned patient start/read/reply | same | forbidden | forbidden |
+| Conversation triage | forbidden | read/reply/close; doctor handles escalations | read/reply/change non-closed status/escalate | forbidden | forbidden |
 | Notifications | own read/mark read | own | own | own | own |
 | Staff invitation | forbidden | forbidden | forbidden | forbidden | create same-clinic |
 | Patient invitation | forbidden | create same-clinic | create same-clinic | forbidden | create same-clinic |

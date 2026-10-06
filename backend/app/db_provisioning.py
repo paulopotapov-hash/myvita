@@ -12,9 +12,9 @@ Idempotent: safe to run on every deployment. The runtime role ends up with:
   cannot create, alter or drop objects;
 - SELECT/INSERT/UPDATE/DELETE on application tables (including tables
   created by future migrations, via default privileges);
-- SELECT/INSERT only on audit_logs — it can append to the audit trail but
-  never edit, delete or truncate it (the table's triggers additionally stop
-  the owner from doing so by accident);
+- SELECT/INSERT only on audit_logs and clinical_messages — it can append to
+  each but never edit, delete or truncate them (database triggers also reject
+  message edits/deletes and stop accidental audit-history rewrites);
 - SELECT only on alembic_version.
 
 Default privileges grant full DML on new tables; a future append-only
@@ -29,7 +29,7 @@ from sqlalchemy import String, create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
-APPEND_ONLY_TABLES = ("audit_logs",)
+APPEND_ONLY_TABLES = ("audit_logs", "clinical_messages")
 READ_ONLY_TABLES = ("alembic_version",)
 _ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 

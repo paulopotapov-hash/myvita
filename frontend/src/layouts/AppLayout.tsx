@@ -16,6 +16,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app/consultas', label: 'As minhas consultas' },
     { to: '/app/perfil', label: 'Perfil' },
     { to: '/app/saude', label: 'Saúde' },
+    { to: '/app/mensagens', label: 'Mensagens' },
     { to: '/app/notificacoes', label: 'Notificações' },
     { to: '/app/seguranca', label: 'Segurança' },
   ],
@@ -23,6 +24,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/app', label: 'Início' },
     { to: '/app/consultas', label: 'Consultas' },
     { to: '/app/pacientes', label: 'Pacientes' },
+    { to: '/app/mensagens', label: 'Mensagens' },
     { to: '/app/notificacoes', label: 'Notificações' },
     { to: '/app/seguranca', label: 'Segurança' },
   ],
@@ -49,7 +51,12 @@ export function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   if (!user) return null // ProtectedRoute guarantees this never renders without a user
-  const navItems = NAV_BY_ROLE[user.role]
+  const role = user?.role
+  const navItems = role
+    ? NAV_BY_ROLE[role].filter(
+        (item) => item.to !== '/app/mensagens' || user.role === 'patient' || user.staff_role === 'doctor' || user.staff_role === 'nurse',
+      )
+    : []
 
   const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
     `block rounded-md px-3 py-2 text-sm font-medium ${

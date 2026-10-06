@@ -28,6 +28,12 @@ class ClinicalAction(str, enum.Enum):
     INVITE_PATIENT = "patient.invite"
     VIEW_DOCUMENTS = "documents.view"
     EDIT_DOCUMENTS = "documents.edit"
+    VIEW_CONVERSATIONS = "conversations.view"
+    CREATE_CONVERSATIONS = "conversations.create"
+    REPLY_CONVERSATIONS = "conversations.reply"
+    TRIAGE_CONVERSATIONS = "conversations.triage"
+    ESCALATE_CONVERSATIONS = "conversations.escalate"
+    MANAGE_CONVERSATIONS = "conversations.manage"
 
 
 # Explicit policy, not a role hierarchy. Doctor and nurse permissions reflect
@@ -47,12 +53,16 @@ _CURRENT_CLINICIAN_ACTIONS = frozenset(
         ClinicalAction.INVITE_PATIENT,
         ClinicalAction.VIEW_DOCUMENTS,
         ClinicalAction.EDIT_DOCUMENTS,
+        ClinicalAction.VIEW_CONVERSATIONS,
+        ClinicalAction.CREATE_CONVERSATIONS,
+        ClinicalAction.REPLY_CONVERSATIONS,
     }
 )
 
 ROLE_ACTIONS: dict[StaffRole, frozenset[ClinicalAction]] = {
-    StaffRole.DOCTOR: _CURRENT_CLINICIAN_ACTIONS,
-    StaffRole.NURSE: _CURRENT_CLINICIAN_ACTIONS,
+    StaffRole.DOCTOR: _CURRENT_CLINICIAN_ACTIONS | {ClinicalAction.MANAGE_CONVERSATIONS},
+    StaffRole.NURSE: _CURRENT_CLINICIAN_ACTIONS
+    | {ClinicalAction.TRIAGE_CONVERSATIONS, ClinicalAction.ESCALATE_CONVERSATIONS},
     StaffRole.PHYSIOTHERAPIST: frozenset(),
     # Existing pilot matrix permits administrative staff to handle appointment
     # logistics. This does not grant access to clinical notes or demographics.
@@ -66,6 +76,8 @@ PATIENT_OWN_ACTIONS = frozenset(
         ClinicalAction.VIEW_MEDICATIONS,
         ClinicalAction.VIEW_CONSENTS,
         ClinicalAction.VIEW_DOCUMENTS,
+        ClinicalAction.VIEW_CONVERSATIONS,
+        ClinicalAction.REPLY_CONVERSATIONS,
         ClinicalAction.VIEW_APPOINTMENTS,
         ClinicalAction.VIEW_APPOINTMENT_REASON,
     }

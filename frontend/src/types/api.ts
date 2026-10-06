@@ -11,6 +11,33 @@ export type ConsentType = 'treatment' | 'data_processing' | 'communications' | '
 export type ConsentStatus = 'granted' | 'revoked'
 export type MedicationStatus = 'active' | 'discontinued' | 'completed'
 export type DocumentKind = 'note' | 'file'
+export type ConversationStatus = 'open' | 'waiting_for_patient' | 'waiting_for_team' | 'closed'
+export type MessageSenderRole = 'patient' | 'doctor' | 'nurse'
+
+export interface ClinicalMessagePublic {
+  id: string
+  sender_name: string
+  sender_role: MessageSenderRole
+  body: string
+  created_at: string
+}
+
+export interface ConversationListItem {
+  id: string
+  patient_id: string
+  patient_name: string
+  subject: string
+  status: ConversationStatus
+  needs_doctor_review: boolean
+  updated_at: string
+  closed_at: string | null
+  last_message: ClinicalMessagePublic
+  unread: boolean
+}
+
+export interface ConversationDetail extends ConversationListItem {
+  messages: ClinicalMessagePublic[]
+}
 
 export interface ClinicalDocumentPublic {
   id: string
@@ -210,6 +237,7 @@ export interface NotificationPublic {
   created_at: string
   target_type?: string | null
   target_id?: string | null
+  conversation_target_id?: string | null
 }
 
 // --- Request payloads (mirrors backend *Request schemas) --------------------

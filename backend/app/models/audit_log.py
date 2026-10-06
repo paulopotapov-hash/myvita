@@ -92,6 +92,12 @@ class AuditAction(str, enum.Enum):
     DOCUMENT_UPDATED = "document_updated"
     DOCUMENT_VIEWED = "document_viewed"
     DOCUMENT_DOWNLOADED = "document_downloaded"
+    CONVERSATION_CREATED = "conversation_created"
+    CONVERSATION_VIEWED = "conversation_viewed"
+    MESSAGE_SENT = "message_sent"
+    CONVERSATION_STATUS_CHANGED = "conversation_status_changed"
+    CONVERSATION_ESCALATED = "conversation_escalated"
+    CONVERSATION_ESCALATION_CLEARED = "conversation_escalation_cleared"
 
 
 class AuditResult(str, enum.Enum):

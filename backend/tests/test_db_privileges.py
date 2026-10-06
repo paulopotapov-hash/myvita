@@ -94,6 +94,21 @@ def test_runtime_role_can_append_but_never_rewrite_audit_history(runtime_role):
     _expect_denied(runtime, "TRUNCATE audit_logs")
 
 
+def test_runtime_role_can_append_but_not_rewrite_clinical_messages(runtime_role):
+    _, runtime, _ = runtime_role
+    with runtime.connect() as connection:
+        privileges = connection.execute(
+            text(
+                "SELECT has_table_privilege(current_user, 'clinical_messages', 'SELECT'), "
+                "has_table_privilege(current_user, 'clinical_messages', 'INSERT'), "
+                "has_table_privilege(current_user, 'clinical_messages', 'UPDATE'), "
+                "has_table_privilege(current_user, 'clinical_messages', 'DELETE'), "
+                "has_table_privilege(current_user, 'clinical_messages', 'TRUNCATE')"
+            )
+        ).one()
+    assert tuple(privileges) == (True, True, False, False, False)
+
+
 def test_runtime_role_has_application_dml_but_no_ddl(runtime_role):
     _, runtime, _ = runtime_role
     clinic_id = uuid.uuid4()

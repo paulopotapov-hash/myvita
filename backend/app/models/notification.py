@@ -29,9 +29,17 @@ class Notification(Base):
             ondelete="RESTRICT",
             use_alter=True,
         ),
+        ForeignKeyConstraint(
+            ["conversation_target_id", "clinic_id"],
+            ["clinical_conversations.id", "clinical_conversations.clinic_id"],
+            name="fk_notification_conversation_target",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         CheckConstraint(
-            "(target_type IS NULL AND target_id IS NULL) OR "
-            "(target_type = 'document' AND target_id IS NOT NULL)",
+            "(target_type IS NULL AND target_id IS NULL AND conversation_target_id IS NULL) OR "
+            "(target_type = 'document' AND target_id IS NOT NULL AND conversation_target_id IS NULL) OR "
+            "(target_type = 'conversation' AND target_id IS NULL AND conversation_target_id IS NOT NULL)",
             name="ck_notification_target_type",
         ),
     )
@@ -47,6 +55,7 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     target_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    conversation_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
