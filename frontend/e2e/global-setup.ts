@@ -79,8 +79,9 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     )
     staffIds[role] = created.id
   }
-  await admin.dispose()
 
+  // Since Phase 1, clinicians reach a patient only through an explicit care assignment.
+  // Patient one gets the doctor and the nurse; patient two stays unassigned for denial checks.
   const patientIds = { patient: '', other_patient: '' }
   for (const role of ['patient', 'other_patient'] as const) {
     const context = await request.newContext({ baseURL })
@@ -94,6 +95,16 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await save(context, role)
     await context.dispose()
   }
+  for (const role of ['doctor', 'nurse'] as const) {
+    await ok(
+      await admin.post(`/api/v1/patients/${patientIds.patient}/care-team`, {
+        headers: await csrfHeader(admin),
+        data: { staff_id: staffIds[role] },
+      }),
+      `assign ${role}`,
+    )
+  }
+  await admin.dispose()
 
   for (const role of ['doctor', 'nurse'] as const) {
     const context = await request.newContext({ baseURL })

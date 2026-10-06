@@ -71,7 +71,7 @@ psql postgres -c "create database myvita_e2e_test owner myvita"                 
 cd ../frontend && npx playwright install chromium
 ```
 
-`npm run e2e` arranca o backend (`e2e/start-backend.sh`, porta 8010) e o Vite (porta 5174, com proxy para o backend), **apaga e volta a migrar** a base de dados E2E, cria uma clínica determinística pela API pública (administrador, médico, enfermeiro, dois pacientes) e guarda uma sessão por papel em `e2e/.auth/` (ignorado pelo git). O script recusa qualquer base de dados cujo nome não termine em `_test`. Também é preciso `psql` no PATH: as notificações são inseridas diretamente porque o backend ainda não as gera.
+`npm run e2e` arranca o backend (`e2e/start-backend.sh`, porta 8010) e o Vite (porta 5174, com proxy para o backend), **apaga e volta a migrar** a base de dados E2E, cria uma clínica determinística pela API pública (administrador, médico, enfermeiro, dois pacientes; o médico e o enfermeiro ficam atribuídos ao primeiro paciente, o segundo fica sem equipa para testar recusas) e guarda uma sessão por papel em `e2e/.auth/` (ignorado pelo git). O script recusa qualquer base de dados cujo nome não termine em `_test`. Também é preciso `psql` no PATH: as notificações são inseridas diretamente porque o backend ainda não as gera.
 
 - `auth`, `appointments`, `medical-records`, `medications`, `consent`, `notifications`, `security`: fluxos por papel, validação, 401 e rotas não autorizadas.
 - `a11y`: `axe-core` (WCAG 2.x A/AA) em todas as páginas principais, teclado, foco visível, diálogo, salto para o conteúdo.

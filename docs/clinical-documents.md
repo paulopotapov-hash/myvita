@@ -20,6 +20,23 @@ Development Compose mounts `backend/var/documents`; production Compose mounts a 
 
 **Production limitation:** the current scheduled backup and off-site backup pipeline archives PostgreSQL only; it does not yet archive or restore `myvita_documents`. Configure and verify an independent protected backup/restore for this volume before using Documents for production clinical records. No public/static file URLs are issued. PDF active-content sanitization and malware scanning are not implemented; the MVP stores PDFs as attachments and does not render them inline.
 
+### What was validated locally (Phase 4)
+
+On a local production-shaped Compose stack (`docker-compose.prod.yml` + `docker-compose.prod-http.yml`, throwaway secrets), through the public proxy:
+
+- PDF upload, new version, download of current and previous versions (byte-identical by SHA-256), and rejection of traversal names, wrong extension/MIME/signature and oversized files.
+- Files survive `docker compose down` / `up` because they live in the named `myvita_documents` volume.
+- A manual volume backup and restore works: stop the backend, archive the volume read-only, and restore it with ownership and `0600` permissions preserved:
+
+  ```bash
+  docker run --rm --user 0 -v <project>_myvita_documents:/data:ro -v "$PWD":/out --entrypoint sh <backend-image> -c 'tar -cf /out/documents.tar -C /data .'
+  docker run --rm --user 0 -v <project>_myvita_documents:/data -v "$PWD":/in:ro --entrypoint sh <backend-image> -c 'tar -xpf /in/documents.tar -C /data'
+  ```
+
+  With the volume emptied, downloads fail with a 404 that discloses no path; after the restore they succeed with identical checksums.
+
+Not validated: scheduling, encryption, off-site copies and retention for this archive, and keeping it consistent with the PostgreSQL backup (metadata rows and files must be restored to the same point in time). **Document storage backup/restore requires production infrastructure validation before production deployment.**
+
 ## Notifications
 
 Creating a document and each new version inserts one patient notification in the same database transaction. The notification contains a short title/message and a typed document target; the document remains the source of content. Only the patient account receives the notification. Opening its link returns through the authenticated Documents API, which rechecks authorization.

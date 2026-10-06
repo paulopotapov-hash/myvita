@@ -131,6 +131,8 @@ test.describe('authenticated pages as a doctor', () => {
 
   test('the skip link is the first tab stop and lands on the main content', async ({ page }) => {
     await page.goto('/app')
+    // Tab only once the shell exists; before that, focus has nothing to land on.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await page.keyboard.press('Tab')
     const skip = page.getByRole('link', { name: 'Saltar para o conteúdo' })
     await expect(skip).toBeFocused()

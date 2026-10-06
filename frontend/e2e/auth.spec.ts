@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { authState, loadSeed, loginThroughUi } from './support'
+import { expect, request, test } from '@playwright/test'
+import { loadSeed, loginThroughUi, PASSWORD } from './support'
 
 const seed = loadSeed()
 
@@ -35,11 +35,19 @@ test.describe('login', () => {
 })
 
 test.describe('logout', () => {
-  test.use({ storageState: authState('other_patient') })
+  // Logout revokes every session of that user, so it uses its own account, never a shared fixture.
+  test('ends the session and closes the protected area', async ({ page, baseURL }) => {
+    const name = 'Paciente Logout E2E'
+    const api = await request.newContext({ baseURL })
+    const registered = await api.post('/api/v1/patients/register', {
+      data: { clinic_id: seed.clinicId, full_name: name, email: `logout.${Date.now()}@example.pt`, password: PASSWORD },
+    })
+    expect(registered.ok()).toBe(true)
+    await page.context().addCookies((await api.storageState()).cookies)
+    await api.dispose()
 
-  test('ends the session and closes the protected area', async ({ page }) => {
     await page.goto('/app')
-    await expect(page.getByRole('banner').getByText(seed.names.other_patient)).toBeVisible()
+    await expect(page.getByRole('banner').getByText(name)).toBeVisible()
 
     await page.getByRole('button', { name: 'Sair' }).click()
     await expect(page).toHaveURL(/\/login$/)

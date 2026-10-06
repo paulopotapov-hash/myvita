@@ -9,9 +9,12 @@ test.describe.serial('notifications', () => {
       await page.goto('/app/notificacoes')
       await expect(page.getByRole('heading', { name: 'Notificações', level: 1 })).toBeVisible()
 
+      // Other flows (documents, messaging) also notify this patient; assert on the seeded entries only.
       const items = page.getByRole('listitem')
-      await expect(items).toHaveCount(2)
-      await expect(page.getByText('Nova', { exact: true })).toHaveCount(2)
+      for (const title of ['Consulta confirmada', 'Resultados disponíveis']) {
+        await expect(items.filter({ hasText: title })).toHaveCount(1)
+        await expect(items.filter({ hasText: title }).getByText('Nova', { exact: true })).toBeVisible()
+      }
 
       const first = items.filter({ hasText: 'Consulta confirmada' })
       await first.getByRole('button', { name: 'Marcar como lida' }).click()
@@ -25,8 +28,9 @@ test.describe.serial('notifications', () => {
 
     test('keeps the read state after a reload', async ({ page }) => {
       await page.goto('/app/notificacoes')
-      await expect(page.getByRole('listitem')).toHaveCount(2)
-      await expect(page.getByText('Nova', { exact: true })).toHaveCount(1)
+      const items = page.getByRole('listitem')
+      await expect(items.filter({ hasText: 'Consulta confirmada' }).getByText('Nova', { exact: true })).toHaveCount(0)
+      await expect(items.filter({ hasText: 'Consulta confirmada' }).getByRole('button', { name: 'Marcar como lida' })).toHaveCount(0)
       await expect(
         page.getByRole('listitem').filter({ hasText: 'Resultados disponíveis' }).getByText('Nova', { exact: true }),
       ).toBeVisible()
@@ -38,8 +42,11 @@ test.describe.serial('notifications', () => {
 
     test("never sees another user's notifications", async ({ page }) => {
       await page.goto('/app/notificacoes')
-      await expect(page.getByText('Sem notificações')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Notificações', level: 1 })).toBeVisible()
+      await expect(page.getByText('A carregar')).toHaveCount(0)
+      // The doctor may have their own (messaging) notifications; the patient's never appear.
       await expect(page.getByText('Consulta confirmada')).toHaveCount(0)
+      await expect(page.getByText('Resultados disponíveis')).toHaveCount(0)
     })
   })
 })
