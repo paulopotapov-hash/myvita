@@ -274,11 +274,14 @@ Implementado:
 - `docker-compose.prod.yml` separado do dev, sem defaults inseguros, sem exposição desnecessária da BD
 - Convites seguros, de uso único e ligados à clínica para onboarding controlado de staff/pacientes; alteração de password invalida sessões anteriores
 
+Implementado desde então (ver `frontend/README.md` para o estado de cada fluxo na UI):
+- Consultas: criar, listar, detalhe, atualizar e cancelar (`PATCH`, `POST /cancel`), com auditoria
+- Ficha de paciente, registos clínicos versionados, medicação (incluindo terminar), consentimentos e notificações (leitura/marcar como lida)
+- MFA TOTP com códigos de recuperação, alteração obrigatória de palavra-passe e recuperação de acesso mediada pelo administrador da clínica (sem entrega automática por email)
+
 Por fazer:
-- Endpoints para atualizar/cancelar consultas (`PATCH`/`DELETE`) — e, quando existirem, os eventos `APPOINTMENT_UPDATED`/`APPOINTMENT_CANCELLED` já definidos em `AuditAction`
-- Endpoints de leitura/detalhe de ficha de paciente — e o evento `STAFF_VIEWED_PATIENT` já definido, à espera de ter onde ligar
-- Recuperação de password e MFA (dependem de identidade/entrega verificadas e de uma política operacional aprovada)
-- Bloqueio de conta após N tentativas falhadas (hoje mitigado só pelo rate limiting por IP)
+- Geração automática de notificações a partir de eventos clínicos (hoje só existe a leitura/marcação; nada as cria)
+- Bloqueio de conta por tentativas de palavra-passe falhadas (o MFA já bloqueia após falhas; o login só tem rate limiting por IP)
 - Validação do upload/restore off-site com credenciais reais e entrega de alertas a um destino humano real
 
 ## Notas para produção que dependem do ambiente de deployment

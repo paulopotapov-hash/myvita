@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '../components/Button'
+import { FormMessage } from '../components/FormMessage'
 import { MfaEnrolment } from '../components/MfaEnrolment'
 import { SESSION_QUERY_KEY, useSession } from '../hooks/useSession'
 import { TextField } from '../components/TextField'
@@ -19,6 +20,7 @@ export function AccountSecurityPage() {
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
+    if (change.isPending) return
     const result = passwordChangeSchema.safeParse({
       current_password: currentPassword,
       new_password: newPassword,
@@ -51,8 +53,8 @@ export function AccountSecurityPage() {
           <TextField label="Palavra-passe atual" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} error={fieldErrors.current_password} />
           <TextField label="Nova palavra-passe" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} error={fieldErrors.new_password} />
           <TextField label="Confirmar nova palavra-passe" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
-          {fieldErrors._root && <p role="alert" className="text-sm text-red-600">{fieldErrors._root}</p>}
-          {change.isSuccess && <p className="text-sm text-teal-700">Palavra-passe alterada e sessões anteriores revogadas.</p>}
+          {fieldErrors._root && <FormMessage kind="error">{fieldErrors._root}</FormMessage>}
+          {change.isSuccess && <FormMessage kind="success">Palavra-passe alterada e sessões anteriores revogadas.</FormMessage>}
           <Button type="submit" isLoading={change.isPending}>Alterar palavra-passe</Button>
         </form>
       </section>

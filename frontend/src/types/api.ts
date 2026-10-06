@@ -164,6 +164,8 @@ export interface MedicationPublic {
   prescribed_by_staff_id: string
   name: string
   dosage: string
+  route: string | null
+  frequency: string | null
   instructions: string | null
   status: MedicationStatus
   start_date: string
@@ -289,13 +291,23 @@ export interface MedicalRecordWriteRequest { title: string; content: string }
 export interface MedicationCreateRequest {
   name: string
   dosage: string
+  route?: string
+  frequency?: string
   instructions?: string
   start_date: string
   end_date?: string
 }
+/** Only the fields the backend marks nullable can be cleared with `null`. */
 export interface MedicationUpdateRequest {
+  name?: string
   dosage?: string
+  route?: string | null
+  frequency?: string | null
   instructions?: string | null
   status?: MedicationStatus
+  start_date?: string
   end_date?: string | null
+}
+export interface MedicationDeactivateRequest {
+  end_date?: string
 }

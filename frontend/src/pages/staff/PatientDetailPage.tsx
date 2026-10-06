@@ -4,16 +4,19 @@ import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
+import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { useAppointments, usePatient, useUpdatePatient } from '../../hooks/useClinicData'
-import { useCreateMedicalRecord, useCreateMedication, useMedicalRecords, useMedicalRecordRevisions, useMedications, useUpdateMedicalRecord, useUpdateMedication } from '../../hooks/useClinicalData'
 import { useGrantConsent, usePatientConsents, useRevokeConsent } from '../../hooks/useConsents'
 import { useSession } from '../../hooks/useSession'
-import { toUserMessage } from '../../lib/errorMessages'
+import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDate, formatDateTime } from '../../lib/formatDate'
-import { consentCreateSchema, zodErrorsToRecord } from '../../lib/validation'
-import type { ConsentType, MedicalRecordPublic, PatientPublic } from '../../types/api'
+import { consentCreateSchema, patientUpdateSchema, zodErrorsToRecord } from '../../lib/validation'
+import type { ConsentType, PatientPublic } from '../../types/api'
+import { MedicalRecordsSection } from './MedicalRecordsSection'
+import { MedicationsSection } from './MedicationsSection'
 
 const CONSENT_LABELS: Record<ConsentType, string> = {
   treatment: 'Tratamento',
@@ -26,103 +29,43 @@ function PatientUpdateForm({ patient, patientOwnRecord }: { patient: PatientPubl
   const update = useUpdatePatient(patient.id)
   const [phone, setPhone] = useState(patient.phone ?? '')
   const [healthNumber, setHealthNumber] = useState(patient.national_health_number ?? '')
-  const [message, setMessage] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [success, setSuccess] = useState('')
 
-  return (
-    <form
-      className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        setMessage('')
-        update.mutate(
-          patientOwnRecord ? { phone: phone || null } : { phone: phone || null, national_health_number: healthNumber || null },
-          {
-            onSuccess: () => setMessage('Dados atualizados com sucesso.'),
-            onError: (error) => setMessage(toUserMessage(error)),
-          },
-        )
-      }}
-    >
-      <TextField label="Telefone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-      {!patientOwnRecord && <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} />}
-      <div className="flex items-center gap-3 sm:col-span-2">
-        <Button type="submit" isLoading={update.isPending}>Guardar dados</Button>
-        {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
-      </div>
-    </form>
-  )
-}
-
-function MedicalRecordsSection({ patientId, canWrite }: { patientId: string; canWrite: boolean }) {
-  const records = useMedicalRecords(patientId)
-  const create = useCreateMedicalRecord(patientId)
-  const update = useUpdateMedicalRecord(patientId)
-  const [selected, setSelected] = useState<MedicalRecordPublic | null>(null)
-  const revisions = useMedicalRecordRevisions(selected?.id ?? '')
-  const [form, setForm] = useState({ title: '', content: '' })
-  const [message, setMessage] = useState('')
-
-  function save(event: React.FormEvent) {
+  function submit(event: React.FormEvent) {
     event.preventDefault()
-    setMessage('')
-    if (!form.title.trim() || !form.content.trim()) {
-      setMessage('Preenche o título e o conteúdo clínico.')
+    if (update.isPending) return
+    setSuccess('')
+    const result = patientUpdateSchema.safeParse({ phone, national_health_number: healthNumber })
+    if (!result.success) {
+      setErrors(zodErrorsToRecord(result.error))
       return
     }
-    const options = {
-      onSuccess: () => {
-        setSelected(null)
-        setForm({ title: '', content: '' })
-        setMessage('Registo clínico guardado.')
+    setErrors({})
+    const { phone: cleanPhone, national_health_number: cleanHealthNumber } = result.data
+    update.mutate(
+      patientOwnRecord
+        ? { phone: cleanPhone || null }
+        : { phone: cleanPhone || null, national_health_number: cleanHealthNumber || null },
+      {
+        onSuccess: () => setSuccess('Dados atualizados com sucesso.'),
+        onError: (error) => setErrors(formErrorsFrom(error, ['phone', 'national_health_number'])),
       },
-      onError: (error: unknown) => setMessage(toUserMessage(error)),
-    }
-    if (selected) update.mutate({ id: selected.id, payload: form }, options)
-    else create.mutate(form, options)
+    )
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-medium">Histórico clínico</h2>
-      {canWrite && (
-        <form className="mb-6 grid gap-3 border-b border-slate-100 pb-5" onSubmit={save}>
-          <TextField label="Título do registo" value={form.title} onChange={(event) => setForm((value) => ({ ...value, title: event.target.value }))} />
-          <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">Conteúdo clínico
-            <textarea className="min-h-28 rounded-md border border-slate-300 px-3 py-2 font-normal" value={form.content} onChange={(event) => setForm((value) => ({ ...value, content: event.target.value }))} maxLength={20000} />
-          </label>
-          <div className="flex items-center gap-3"><Button type="submit" isLoading={create.isPending || update.isPending}>{selected ? 'Guardar nova versão' : 'Criar registo'}</Button>{selected && <Button variant="secondary" onClick={() => { setSelected(null); setForm({ title: '', content: '' }) }}>Cancelar edição</Button>}</div>
-          {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
-        </form>
+    <form className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2" onSubmit={submit} noValidate>
+      <TextField label="Telefone" value={phone} onChange={(event) => setPhone(event.target.value)} error={errors.phone} maxLength={30} />
+      {!patientOwnRecord && (
+        <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} error={errors.national_health_number} maxLength={30} />
       )}
-      {records.isLoading && <LoadingSpinner />}
-      {records.isError && <ErrorState message={toUserMessage(records.error)} onRetry={() => records.refetch()} />}
-      {records.data?.length === 0 && <EmptyState title="Sem registos clínicos" />}
-      {records.data && records.data.length > 0 && <ul className="divide-y divide-slate-100">{records.data.map((record) => <li key={record.id} className="py-4"><div className="flex items-start justify-between gap-3"><div><p className="font-medium">{record.title}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{record.content}</p><p className="mt-1 text-xs text-slate-500">Versão {record.version} · {formatDateTime(record.updated_at)}</p></div>{canWrite && <Button variant="secondary" onClick={() => { setSelected(record); setForm({ title: record.title, content: record.content }) }}>Editar</Button>}</div>{selected?.id === record.id && <div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="text-sm font-medium">Revisões</p>{revisions.isLoading && <LoadingSpinner />}{revisions.data?.map((revision) => <p key={revision.id} className="mt-1 text-xs text-slate-600">Versão {revision.version} · {formatDateTime(revision.created_at)}</p>)}</div>}</li>)}</ul>}
-    </section>
-  )
-}
-
-function MedicationsSection({ patientId, canWrite }: { patientId: string; canWrite: boolean }) {
-  const medications = useMedications(patientId)
-  const create = useCreateMedication(patientId)
-  const update = useUpdateMedication(patientId)
-  const [form, setForm] = useState({ name: '', dosage: '', start_date: '' })
-  const [message, setMessage] = useState('')
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-medium">Medicação</h2>
-      {canWrite && <form className="mb-6 grid gap-3 border-b border-slate-100 pb-5 sm:grid-cols-3" onSubmit={(event) => { event.preventDefault(); setMessage(''); create.mutate(form, { onSuccess: () => { setForm({ name: '', dosage: '', start_date: '' }); setMessage('Medicação adicionada.') }, onError: (error) => setMessage(toUserMessage(error)) }) }}>
-        <TextField label="Medicamento" value={form.name} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} />
-        <TextField label="Dosagem" value={form.dosage} onChange={(event) => setForm((value) => ({ ...value, dosage: event.target.value }))} />
-        <TextField label="Data de início" type="date" value={form.start_date} onChange={(event) => setForm((value) => ({ ...value, start_date: event.target.value }))} />
-        <div className="sm:col-span-3"><Button type="submit" isLoading={create.isPending}>Adicionar medicação</Button></div>
-        {message && <p role="status" className="text-sm text-slate-600 sm:col-span-3">{message}</p>}
-      </form>}
-      {medications.isLoading && <LoadingSpinner />}
-      {medications.isError && <ErrorState message={toUserMessage(medications.error)} onRetry={() => medications.refetch()} />}
-      {medications.data?.length === 0 && <EmptyState title="Sem medicação" />}
-      {medications.data && medications.data.length > 0 && <ul className="divide-y divide-slate-100">{medications.data.map((medication) => <li key={medication.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-medium">{medication.name} · {medication.dosage}</p><p className="text-sm text-slate-500">{medication.status === 'active' ? 'Ativa' : medication.status === 'completed' ? 'Concluída' : 'Descontinuada'} · início {formatDate(medication.start_date)}</p></div>{canWrite && medication.status === 'active' && <Button variant="secondary" disabled={update.isPending} onClick={() => update.mutate({ id: medication.id, payload: { status: 'discontinued' } }, { onError: (error) => setMessage(toUserMessage(error)) })}>Terminar</Button>}</li>)}</ul>}
-    </section>
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+        <Button type="submit" isLoading={update.isPending}>Guardar dados</Button>
+        {errors._root && <FormMessage kind="error">{errors._root}</FormMessage>}
+        {success && <FormMessage kind="success">{success}</FormMessage>}
+      </div>
+    </form>
   )
 }
 
@@ -195,7 +138,8 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
       {canReadClinical && <MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} />}
       {canReadClinical && <MedicationsSection patientId={patient.id} canWrite={canWriteClinical} />}
 
-      <ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} />
+      {/* The backend answers 403 on consents to administrative roles, so the section is not offered to them. */}
+      {canReadClinical && <ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} />}
     </div>
   )
 }
@@ -207,9 +151,11 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
   const [form, setForm] = useState({ consent_type: 'treatment' as ConsentType, purpose: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState('')
+  const busy = grant.isPending || revoke.isPending
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
+    if (busy) return
     setSuccess('')
     const result = consentCreateSchema.safeParse(form)
     if (!result.success) {
@@ -222,19 +168,17 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
         setForm((current) => ({ ...current, purpose: '' }))
         setSuccess('Consentimento concedido e registado no histórico.')
       },
-      onError: (error) => setErrors({ _root: toUserMessage(error) }),
+      onError: (error) => setErrors(formErrorsFrom(error, ['consent_type', 'purpose'])),
     })
   }
 
   function confirmRevoke(consentId: string) {
+    if (busy) return
     if (!window.confirm('Revogar este consentimento? O registo continuará visível no histórico.')) return
     setSuccess('')
     setErrors({})
     revoke.mutate(consentId, {
-      onSuccess: () => {
-        setErrors({})
-        setSuccess('Consentimento revogado. O histórico foi preservado.')
-      },
+      onSuccess: () => setSuccess('Consentimento revogado. O histórico foi preservado.'),
       onError: (error) => setErrors({ _root: toUserMessage(error) }),
     })
   }
@@ -246,31 +190,31 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
         <p className="text-sm text-slate-500">A revogação preserva sempre o registo original no histórico.</p>
       </div>
 
-      {canManage && <form onSubmit={submit} className="mb-6 grid gap-4 border-b border-slate-200 pb-6 md:grid-cols-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="consent-type" className="text-sm font-medium text-slate-700">Tipo</label>
-          <select
-            id="consent-type"
+      {canManage && (
+        <form onSubmit={submit} noValidate className="mb-6 grid gap-4 border-b border-slate-200 pb-6 md:grid-cols-3">
+          <SelectField
+            label="Tipo"
             value={form.consent_type}
+            error={errors.consent_type}
             onChange={(event) => {
               const parsed = consentCreateSchema.shape.consent_type.safeParse(event.target.value)
               if (parsed.success) setForm((current) => ({ ...current, consent_type: parsed.data }))
             }}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
             {Object.entries(CONSENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </div>
-        <TextField
-          label="Finalidade"
-          value={form.purpose}
-          onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}
-          error={errors.purpose}
-        />
-        <div className="flex items-end"><Button type="submit" isLoading={grant.isPending}>Conceder</Button></div>
-        {errors._root && <p role="alert" className="text-sm text-red-600 md:col-span-3">{errors._root}</p>}
-        {success && <p role="status" className="text-sm text-teal-700 md:col-span-3">{success}</p>}
-      </form>}
+          </SelectField>
+          <TextField
+            label="Finalidade"
+            value={form.purpose}
+            onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}
+            error={errors.purpose}
+            maxLength={500}
+          />
+          <div className="flex items-end"><Button type="submit" isLoading={grant.isPending} disabled={busy}>Conceder</Button></div>
+        </form>
+      )}
+      {errors._root && <FormMessage kind="error" className="mb-3">{errors._root}</FormMessage>}
+      {success && <FormMessage kind="success" className="mb-3">{success}</FormMessage>}
 
       {consents.isLoading && <LoadingSpinner />}
       {consents.isError && <ErrorState message={toUserMessage(consents.error)} onRetry={() => consents.refetch()} />}
@@ -290,7 +234,14 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
                 <p className="mt-1 text-xs text-slate-500">Concedido em {formatDateTime(consent.granted_at)}{consent.revoked_at ? ` · Revogado em ${formatDateTime(consent.revoked_at)}` : ''}</p>
               </div>
               {canManage && consent.status === 'granted' && (
-                <Button variant="secondary" disabled={revoke.isPending} onClick={() => confirmRevoke(consent.id)}>Revogar</Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  isLoading={revoke.isPending && revoke.variables === consent.id}
+                  onClick={() => confirmRevoke(consent.id)}
+                >
+                  Revogar
+                </Button>
               )}
             </li>
           ))}

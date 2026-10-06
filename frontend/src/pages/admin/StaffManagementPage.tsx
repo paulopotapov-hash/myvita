@@ -3,11 +3,12 @@ import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
+import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { useStaff } from '../../hooks/useClinicData'
-import { ApiError } from '../../lib/apiClient'
-import { toUserMessage } from '../../lib/errorMessages'
+import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { staffCreateSchema, zodErrorsToRecord } from '../../lib/validation'
 import { invitationsService } from '../../services/invitations'
 import type { StaffRole } from '../../types/api'
@@ -33,6 +34,7 @@ export function StaffManagementPage() {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (createStaff.isPending) return
     setInvitationLink('')
     const result = staffCreateSchema.safeParse(form)
     if (!result.success) {
@@ -47,13 +49,7 @@ export function StaffManagementPage() {
           setForm(EMPTY_FORM)
           setInvitationLink(`${window.location.origin}/convite#token=${encodeURIComponent(invitation.token)}`)
         },
-        onError: (error) => {
-          if (error instanceof ApiError && error.fieldErrors) {
-            setFieldErrors(error.fieldErrors)
-          } else {
-            setFieldErrors({ _root: toUserMessage(error) })
-          }
-        },
+        onError: (error) => setFieldErrors(formErrorsFrom(error, ['full_name', 'email', 'staff_role', 'specialty'])),
       },
     )
   }
@@ -78,34 +74,21 @@ export function StaffManagementPage() {
             onChange={(e) => update('email', e.target.value)}
             error={fieldErrors.email}
           />
-          <div className="flex flex-col gap-1">
-            <label htmlFor="staff_role" className="text-sm font-medium text-slate-700">
-              Função
-            </label>
-            <select
-              id="staff_role"
-              value={form.staff_role}
-              onChange={(e) => update('staff_role', e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-600"
-            >
-              {Object.entries(STAFF_ROLE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SelectField label="Função" value={form.staff_role} onChange={(e) => update('staff_role', e.target.value)} error={fieldErrors.staff_role}>
+            {Object.entries(STAFF_ROLE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </SelectField>
           <TextField
             label="Especialidade (opcional)"
             value={form.specialty}
             onChange={(e) => update('specialty', e.target.value)}
+            error={fieldErrors.specialty}
           />
           <div className="sm:col-span-2">
-            {fieldErrors._root && (
-              <p role="alert" className="mb-2 text-sm text-red-600">
-                {fieldErrors._root}
-              </p>
-            )}
+            {fieldErrors._root && <FormMessage kind="error" className="mb-2">{fieldErrors._root}</FormMessage>}
             {invitationLink && (
               <div className="mb-3 rounded-md bg-teal-50 p-3 text-sm text-teal-900">
                 <p className="font-medium">Convite criado. Partilha uma única vez por um canal privado aprovado.</p>

@@ -1,3 +1,5 @@
+> **Documento histórico.** Auditoria pontual de 2026-09-24 (commit `f5eb6c0`), feita antes de existirem os endpoints de consultas (alterar/cancelar), registos clínicos, medicação e notificações. As secções abaixo **já não descrevem o estado atual**; ver "Estado funcional" em `README.md` para o estado corrente.
+
 # Phase F1 frontend audit
 
 Audit performed against commit `f5eb6c0` on 2026-09-24. The source of truth was the FastAPI routers and Pydantic schemas currently present on `main`, not roadmap documentation.

@@ -56,9 +56,50 @@ npm run typecheck     # tsc -b --noEmit
 npm run lint          # oxlint
 ```
 
-Testes cobrem: cliente API (CSRF, credentials, parsing de erros), rotas protegidas (loading/não-autenticado/erro-de-servidor/autenticado), restrição por role, fluxo de login completo, navegação por role no layout autenticado.
+Testes cobrem: cliente API (CSRF, credentials, parsing de erros), rotas protegidas, restrição por role, login (incluindo segundo fator), navegação por role, schemas de validação, mapeamento de erros do backend para campos de formulário e os fluxos clínicos (consultas, registos clínicos, medicação, consentimentos, notificações) e de conta (palavra-passe, contas da clínica).
 
-## Limitações conhecidas (por falta de endpoint no backend, não por bug)
+## Estado funcional
 
-- **Perfil do paciente** não mostra data de nascimento/telefone depois do registo inicial — não existe um `GET /patients/me`, só a resposta do próprio registo. Documentado na própria página em vez de inventar dados.
-- **Consultas** não podem ser atualizadas/canceladas pela UI — o backend só suporta criar e listar (`POST`/`GET /api/v1/appointments`), sem `PATCH`/`DELETE`.
+Legenda: **Implementado** · **Parcial** · **Não implementado**. Reflete o código em `src/`; o backend continua a ser a fonte de verdade de RBAC e isolamento por clínica.
+
+### Autenticação e conta
+
+| Área | Estado | Notas |
+| --- | --- | --- |
+| Login/logout, sessão por cookie httpOnly, restauro de sessão, redirecionamento após login, tratamento de 401 | Implementado | `/login`, `ProtectedRoute`, `SessionExpiryBoundary` |
+| MFA (TOTP) | Implementado | Segundo passo no login (código ou código de recuperação); ativação com códigos de recuperação em `/app/seguranca` e no ecrã de configuração obrigatória |
+| Alteração de palavra-passe (voluntária e obrigatória) | Implementado | `/app/seguranca`; ecrã bloqueante quando a conta o exige |
+| Recuperação de acesso | Parcial | O pedido regista-se para a clínica e a ligação de redefinição é emitida pelo administrador em `/app/contas`; **não há envio automático por email** |
+| Registo de paciente, onboarding de clínica, aceitação de convite | Implementado | Disponibilidade controlada pela configuração pública do backend |
+
+### Papéis e permissões (UX; o backend aplica as regras)
+
+| Papel | Pode |
+| --- | --- |
+| Paciente | Apenas os seus dados: consultas, dados clínicos (leitura), consentimentos (conceder/revogar), notificações, perfil, segurança |
+| Médico/Enfermeiro (`staff`) | Pacientes, consultas (incluindo motivo), registos clínicos e medicação (escrita), consentimentos (leitura) |
+| Administrativo (`staff` `admin`) | Pacientes (lista) e consultas sem motivo clínico; sem conteúdo clínico nem consentimentos |
+| Administrador da clínica | Equipa (convites), contas (recuperação/desativação), pacientes (lista), consultas sem motivo; sem conteúdo clínico nem consentimentos |
+
+### Fluxos clínicos
+
+| Área | Estado | Notas |
+| --- | --- | --- |
+| Consultas | Parcial | Listar, detalhe, criar, alterar **duração e motivo** e cancelar (com confirmação). Alterar data/hora, paciente, profissional ou estado (confirmada, concluída, falta) existe no backend mas **não tem UI** |
+| Registos clínicos | Parcial | Listar, criar, editar (nova versão) e listar revisões (versão e data). **Não** mostra o conteúdo de revisões antigas |
+| Medicação | Parcial | Criar (nome, dosagem, via, frequência, instruções, datas), ver, editar, concluir e descontinuar (com confirmação). Mostra até 100 registos e avisa quando há mais; sem filtro por estado nem data de fim ao terminar (o backend assume hoje) |
+| Consentimentos | Implementado | Paciente concede/revoga (o histórico é preservado); médicos e enfermeiros consultam |
+| Notificações | Parcial | Lista paginada e marcar como lida. **O backend não gera notificações automaticamente**, por isso a lista só tem conteúdo se este for criado fora da aplicação |
+| Equipa e contas (administrador) | Implementado | Convites, repor 2FA, ligação de redefinição, exigir nova palavra-passe, desativar/reativar |
+
+### Formulários e feedback
+
+- Validação cliente com Zod em `src/lib/validation.ts` (espelha limites do backend; o backend revalida). Erros aparecem junto ao campo; erros 422 do backend são mapeados para o campo (`formErrorsFrom`) ou mostrados como mensagem geral.
+- Pedidos de escrita bloqueiam o botão enquanto decorrem (sem duplo envio) e mostram sucesso (`role="status"`) ou erro (`role="alert"`) com `FormMessage`. Ações destrutivas pedem confirmação.
+- Componentes partilhados: `Button`, `TextField`, `TextAreaField`, `SelectField`, `FormMessage`, `LoadingSpinner`, `ErrorState`, `EmptyState`.
+
+## Limitações conhecidas (por falta de endpoint ou decisão de produto)
+
+- Notificações automáticas (ver acima): depende de uma decisão de produto e provavelmente de alteração ao modelo no backend.
+- Recuperação de acesso sem entrega por email: sem canal de entrega aprovado.
+- Não existe endpoint de perfil do utilizador autenticado com dados clínicos; o paciente vê os seus dados em «Dados clínicos».

@@ -22,7 +22,7 @@ export function PasswordResetRequestPage() {
     event.preventDefault()
     const result = loginSchema.shape.email.safeParse(email)
     if (!result.success) {
-      setError('Introduz um email válido.')
+      setError(result.error.issues[0].message)
       return
     }
     setError(null)

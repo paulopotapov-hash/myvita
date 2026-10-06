@@ -3,14 +3,15 @@ import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
+import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { useAppointments, useCancelAppointment, useCreateAppointment, usePatients, useStaff, useUpdateAppointment } from '../../hooks/useClinicData'
 import { useSession } from '../../hooks/useSession'
-import { ApiError } from '../../lib/apiClient'
-import { toUserMessage } from '../../lib/errorMessages'
+import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
-import { appointmentCreateSchema, zodErrorsToRecord } from '../../lib/validation'
+import { appointmentCreateSchema, appointmentUpdateSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { AppointmentPublic } from '../../types/api'
 
 export function AppointmentsPage() {
@@ -21,6 +22,7 @@ export function AppointmentsPage() {
   const staff = useStaff()
   const patients = usePatients(canCreate)
   const [selected, setSelected] = useState<AppointmentPublic | null>(null)
+  const [notice, setNotice] = useState('')
 
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>()
@@ -38,7 +40,8 @@ export function AppointmentsPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold text-slate-900">Consultas</h1>
 
-      {canCreate && <CreateAppointmentForm canHandleReason={canHandleReason} />}
+      {canCreate && <CreateAppointmentForm canHandleReason={canHandleReason} onCreated={() => setNotice('')} />}
+      {notice && <FormMessage kind="success">{notice}</FormMessage>}
 
       <section className="rounded-xl border border-slate-200 bg-white p-6">
         {appointments.isLoading && <LoadingSpinner />}
@@ -65,7 +68,7 @@ export function AppointmentsPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <AppointmentStatusBadge status={appointment.status} />
-                  <Button variant="secondary" onClick={() => setSelected(appointment)}>Detalhes</Button>
+                  <Button variant="secondary" onClick={() => { setNotice(''); setSelected(appointment) }}>Detalhes</Button>
                 </div>
               </li>
             ))}
@@ -73,31 +76,71 @@ export function AppointmentsPage() {
         )}
       </section>
       {selected && (
-        <AppointmentDetailDialog appointment={selected} canEdit={canCreate} canHandleReason={canHandleReason} patientName={patientNameById.get(selected.patient_id) ?? 'O próprio paciente'} staffName={staffNameById.get(selected.staff_id) ?? 'Profissional'} onClose={() => setSelected(null)} />
+        <AppointmentDetailDialog appointment={selected} canEdit={canCreate} canHandleReason={canHandleReason} patientName={patientNameById.get(selected.patient_id) ?? 'O próprio paciente'} staffName={staffNameById.get(selected.staff_id) ?? 'Profissional'} onClose={() => setSelected(null)} onDone={setNotice} />
       )}
     </div>
   )
 }
 
-function AppointmentDetailDialog({ appointment, canEdit, canHandleReason, patientName, staffName, onClose }: { appointment: AppointmentPublic; canEdit: boolean; canHandleReason: boolean; patientName: string; staffName: string; onClose: () => void }) {
+function AppointmentDetailDialog({ appointment, canEdit, canHandleReason, patientName, staffName, onClose, onDone }: { appointment: AppointmentPublic; canEdit: boolean; canHandleReason: boolean; patientName: string; staffName: string; onClose: () => void; onDone: (message: string) => void }) {
   const updateAppointment = useUpdateAppointment()
   const cancelAppointment = useCancelAppointment()
   const [duration, setDuration] = useState(String(appointment.duration_minutes))
   const [reason, setReason] = useState(appointment.reason ?? '')
-  const [message, setMessage] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const busy = updateAppointment.isPending || cancelAppointment.isPending
   const mutable = canEdit && (appointment.status === 'scheduled' || appointment.status === 'confirmed')
+
+  function save(event: React.FormEvent) {
+    event.preventDefault()
+    if (busy) return
+    const result = appointmentUpdateSchema.safeParse({ duration_minutes: duration, reason })
+    if (!result.success) {
+      setErrors(zodErrorsToRecord(result.error))
+      return
+    }
+    setErrors({})
+    updateAppointment.mutate(
+      { id: appointment.id, payload: { duration_minutes: result.data.duration_minutes, ...(canHandleReason ? { reason: result.data.reason || null } : {}) } },
+      {
+        onSuccess: () => { onDone('Consulta atualizada.'); onClose() },
+        onError: (error) => setErrors(formErrorsFrom(error, ['duration_minutes', 'reason'])),
+      },
+    )
+  }
+
+  function cancel() {
+    if (busy) return
+    if (!window.confirm('Cancelar esta consulta?')) return
+    setErrors({})
+    cancelAppointment.mutate(appointment.id, {
+      onSuccess: () => { onDone('Consulta cancelada.'); onClose() },
+      onError: (error) => setErrors({ _root: toUserMessage(error) }),
+    })
+  }
+
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="appointment-detail-title" className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/40 p-4">
       <section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4"><div><h2 id="appointment-detail-title" className="text-lg font-semibold">Detalhe da consulta</h2><p className="text-sm text-slate-500">{formatDateTime(appointment.scheduled_at)}</p></div><button type="button" aria-label="Fechar detalhes" onClick={onClose} className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100">×</button></div>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2"><div><dt className="text-sm text-slate-500">Estado</dt><dd className="mt-1"><AppointmentStatusBadge status={appointment.status} /></dd></div><div><dt className="text-sm text-slate-500">Paciente</dt><dd className="font-medium">{patientName}</dd></div><div><dt className="text-sm text-slate-500">Profissional</dt><dd className="font-medium">{staffName}</dd></div></dl>
-        {mutable ? <form className="mt-5 grid gap-3" onSubmit={(event) => { event.preventDefault(); setMessage(''); const minutes = Number(duration); if (!Number.isInteger(minutes) || minutes < 5 || minutes > 480) { setMessage('A duração deve estar entre 5 e 480 minutos.'); return } updateAppointment.mutate({ id: appointment.id, payload: { duration_minutes: minutes, ...(canHandleReason ? { reason: reason || null } : {}) } }, { onSuccess: () => { setMessage('Consulta atualizada.'); onClose() }, onError: (error) => setMessage(toUserMessage(error)) }) }}><TextField label="Duração (minutos)" type="number" min={5} max={480} value={duration} onChange={(event) => setDuration(event.target.value)} />{canHandleReason && <TextField label="Motivo" value={reason} onChange={(event) => setReason(event.target.value)} />}<div className="flex flex-wrap gap-3"><Button type="submit" isLoading={updateAppointment.isPending}>Guardar alterações</Button><Button variant="secondary" disabled={cancelAppointment.isPending} onClick={() => { if (!window.confirm('Cancelar esta consulta?')) return; cancelAppointment.mutate(appointment.id, { onSuccess: onClose, onError: (error) => setMessage(toUserMessage(error)) }) }}>Cancelar consulta</Button></div>{message && <p role="alert" className="text-sm text-red-600">{message}</p>}</form> : <p className="mt-5 text-sm text-slate-600">{appointment.reason ? `${appointment.reason} · ` : ''}{appointment.duration_minutes} minutos</p>}
+        {mutable ? (
+          <form className="mt-5 grid gap-3" onSubmit={save} noValidate>
+            <TextField label="Duração (minutos)" type="number" min={5} max={480} value={duration} onChange={(event) => setDuration(event.target.value)} error={errors.duration_minutes} />
+            {canHandleReason && <TextField label="Motivo" value={reason} onChange={(event) => setReason(event.target.value)} error={errors.reason} maxLength={500} />}
+            {errors._root && <FormMessage kind="error">{errors._root}</FormMessage>}
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" isLoading={updateAppointment.isPending} disabled={busy}>Guardar alterações</Button>
+              <Button variant="secondary" isLoading={cancelAppointment.isPending} disabled={busy} onClick={cancel}>Cancelar consulta</Button>
+            </div>
+          </form>
+        ) : <p className="mt-5 text-sm text-slate-600">{appointment.reason ? `${appointment.reason} · ` : ''}{appointment.duration_minutes} minutos</p>}
       </section>
     </div>
   )
 }
 
-function CreateAppointmentForm({ canHandleReason }: { canHandleReason: boolean }) {
+function CreateAppointmentForm({ canHandleReason, onCreated }: { canHandleReason: boolean; onCreated: () => void }) {
   const createAppointment = useCreateAppointment()
   const patients = usePatients()
   const staff = useStaff()
@@ -112,31 +155,29 @@ function CreateAppointmentForm({ canHandleReason }: { canHandleReason: boolean }
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (createAppointment.isPending) return
     setJustCreated(false)
+    onCreated()
     const result = appointmentCreateSchema.safeParse(form)
     if (!result.success) {
       setFieldErrors(zodErrorsToRecord(result.error))
       return
     }
     setFieldErrors({})
+    const { reason, ...rest } = result.data
     createAppointment.mutate(
       {
-        ...result.data,
-        scheduled_at: new Date(result.data.scheduled_at).toISOString(),
-        ...(canHandleReason && result.data.reason ? { reason: result.data.reason } : {}),
+        ...rest,
+        scheduled_at: new Date(rest.scheduled_at).toISOString(),
+        // The backend answers 403 to any `reason` from non-clinical roles, even an empty one.
+        ...(canHandleReason && reason ? { reason } : {}),
       },
       {
         onSuccess: () => {
           setForm({ patient_id: '', staff_id: '', scheduled_at: '', duration_minutes: '30', reason: '' })
           setJustCreated(true)
         },
-        onError: (error) => {
-          if (error instanceof ApiError && error.fieldErrors) {
-            setFieldErrors(error.fieldErrors)
-          } else {
-            setFieldErrors({ _root: toUserMessage(error) })
-          }
-        },
+        onError: (error) => setFieldErrors(formErrorsFrom(error, ['patient_id', 'staff_id', 'scheduled_at', 'duration_minutes', 'reason'])),
       },
     )
   }
@@ -145,53 +186,22 @@ function CreateAppointmentForm({ canHandleReason }: { canHandleReason: boolean }
     <section className="rounded-xl border border-slate-200 bg-white p-6">
       <h2 className="mb-4 text-lg font-medium text-slate-900">Marcar consulta</h2>
       <form onSubmit={handleSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="patient" className="text-sm font-medium text-slate-700">
-            Paciente
-          </label>
-          <select
-            id="patient"
-            value={form.patient_id}
-            onChange={(e) => update('patient_id', e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-600"
-          >
-            <option value="">Escolhe um paciente…</option>
-            {(patients.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.patient_id && (
-            <p role="alert" className="text-sm text-red-600">
-              {fieldErrors.patient_id}
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="staff" className="text-sm font-medium text-slate-700">
-            Profissional
-          </label>
-          <select
-            id="staff"
-            value={form.staff_id}
-            onChange={(e) => update('staff_id', e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-600"
-          >
-            <option value="">Escolhe um profissional…</option>
-            {(staff.data ?? []).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.full_name}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.staff_id && (
-            <p role="alert" className="text-sm text-red-600">
-              {fieldErrors.staff_id}
-            </p>
-          )}
-        </div>
+        <SelectField label="Paciente" value={form.patient_id} onChange={(e) => update('patient_id', e.target.value)} error={fieldErrors.patient_id}>
+          <option value="">Escolhe um paciente…</option>
+          {(patients.data ?? []).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.full_name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField label="Profissional" value={form.staff_id} onChange={(e) => update('staff_id', e.target.value)} error={fieldErrors.staff_id}>
+          <option value="">Escolhe um profissional…</option>
+          {(staff.data ?? []).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.full_name}
+            </option>
+          ))}
+        </SelectField>
 
         <TextField
           label="Data e hora"
@@ -213,15 +223,13 @@ function CreateAppointmentForm({ canHandleReason }: { canHandleReason: boolean }
           label="Motivo (opcional)"
           value={form.reason}
           onChange={(e) => update('reason', e.target.value)}
+          error={fieldErrors.reason}
+          maxLength={500}
         />}
 
         <div className="sm:col-span-2">
-          {fieldErrors._root && (
-            <p role="alert" className="mb-2 text-sm text-red-600">
-              {fieldErrors._root}
-            </p>
-          )}
-          {justCreated && <p className="mb-2 text-sm text-teal-700">Consulta marcada com sucesso.</p>}
+          {fieldErrors._root && <FormMessage kind="error" className="mb-2">{fieldErrors._root}</FormMessage>}
+          {justCreated && <FormMessage kind="success" className="mb-2">Consulta marcada com sucesso.</FormMessage>}
           <Button type="submit" isLoading={createAppointment.isPending}>
             Marcar consulta
           </Button>

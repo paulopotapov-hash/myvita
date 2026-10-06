@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../lib/apiClient'
 import { AccountsPage } from './AccountsPage'
 import { authService } from '../../services/auth'
 import { usersService } from '../../services/users'
@@ -98,5 +99,25 @@ describe('AccountsPage', () => {
     await screen.findByText('Enf. Rui')
     await user.click(within(row('Enf. Rui')).getByRole('button', { name: 'Desativar' }))
     expect(usersService.deactivate).not.toHaveBeenCalled()
+  })
+
+  it('confirms a completed action with a success message and refreshes the list', async () => {
+    vi.mocked(usersService.deactivate).mockResolvedValue(accounts[2])
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Enf. Rui')
+    await user.click(within(row('Enf. Rui')).getByRole('button', { name: 'Desativar' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Conta desativada.')
+    expect(usersService.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows a failed action as an alert and no success message', async () => {
+    vi.mocked(usersService.resetMfa).mockRejectedValue(new ApiError(409, 'x', { detail: 'Conta sem 2FA ativa.' }))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Enf. Rui')
+    await user.click(within(row('Enf. Rui')).getByRole('button', { name: 'Repor 2FA' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Conta sem 2FA ativa.')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

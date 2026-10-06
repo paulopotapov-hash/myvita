@@ -4,7 +4,7 @@ import { medicalRecordsService } from './medicalRecords'
 import { medicationsService } from './medications'
 
 vi.mock('../lib/apiClient', () => ({
-  api: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
+  api: { get: vi.fn(), getPage: vi.fn(), post: vi.fn(), patch: vi.fn() },
 }))
 
 describe('clinical API services', () => {
@@ -32,9 +32,17 @@ describe('clinical API services', () => {
     medicationsService.create('patient-1', createPayload)
     medicationsService.update('medication-1', { status: 'discontinued' })
 
-    expect(api.get).toHaveBeenNthCalledWith(1, '/api/v1/patients/patient-1/medications', undefined)
-    expect(api.get).toHaveBeenNthCalledWith(2, '/api/v1/medications/medication-1', undefined)
+    expect(api.getPage).toHaveBeenCalledWith('/api/v1/patients/patient-1/medications?page_size=100', undefined)
+    expect(api.get).toHaveBeenCalledWith('/api/v1/medications/medication-1', undefined)
     expect(api.post).toHaveBeenCalledWith('/api/v1/patients/patient-1/medications', createPayload)
     expect(api.patch).toHaveBeenCalledWith('/api/v1/medications/medication-1', { status: 'discontinued' })
+  })
+
+  it('maps medication termination to the dedicated deactivate endpoint', () => {
+    medicationsService.deactivate('medication-1')
+    medicationsService.deactivate('medication-2', { end_date: '2026-10-01' })
+
+    expect(api.post).toHaveBeenNthCalledWith(1, '/api/v1/medications/medication-1/deactivate', undefined)
+    expect(api.post).toHaveBeenNthCalledWith(2, '/api/v1/medications/medication-2/deactivate', { end_date: '2026-10-01' })
   })
 })

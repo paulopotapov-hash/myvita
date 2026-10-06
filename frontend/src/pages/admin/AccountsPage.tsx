@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
+import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { useSession } from '../../hooks/useSession'
 import { toUserMessage } from '../../lib/errorMessages'
@@ -28,6 +29,7 @@ export function AccountsPage() {
   const queryClient = useQueryClient()
   const [issuedLink, setIssuedLink] = useState<{ name: string; link: string; expiresAt: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState('')
   const accounts = useQuery({ queryKey: ACCOUNTS_QUERY_KEY, queryFn: ({ signal }) => usersService.list(signal) })
 
   const action = useMutation({
@@ -39,8 +41,14 @@ export function AccountsPage() {
       }
       await ACTIONS[kind].run(account.id)
     },
-    onMutate: () => setError(null),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ACCOUNTS_QUERY_KEY }),
+    onMutate: () => {
+      setError(null)
+      setSuccess('')
+    },
+    onSuccess: (_data, { kind }) => {
+      if (kind !== 'reset-link') setSuccess(ACTIONS[kind].success)
+      return queryClient.invalidateQueries({ queryKey: ACCOUNTS_QUERY_KEY })
+    },
     onError: (failure) => setError(toUserMessage(failure)),
   })
 
@@ -61,7 +69,8 @@ export function AccountsPage() {
         Recuperação de acesso da equipa e dos pacientes desta clínica. A recuperação de outro administrador é feita
         pelo operador da plataforma.
       </p>
-      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <FormMessage kind="error" className="mb-4">{error}</FormMessage>}
+      {success && <FormMessage kind="success" className="mb-4">{success}</FormMessage>}
       {issuedLink && (
         <div role="status" className="mb-6 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm">
           <p className="font-medium text-teal-900">Ligação de redefinição para {issuedLink.name}</p>
@@ -126,10 +135,10 @@ export function AccountsPage() {
 
 type AccountAction = 'reset-link' | 'require-change' | 'reset-mfa' | 'deactivate' | 'reactivate'
 
-const ACTIONS: Record<AccountAction, { confirm: string; run: (id: string) => Promise<unknown> }> = {
-  'reset-link': { confirm: 'Emitir uma ligação de redefinição de palavra-passe? Ligações anteriores deixam de funcionar.', run: usersService.issuePasswordReset },
-  'require-change': { confirm: 'Exigir que esta pessoa altere a palavra-passe no próximo acesso?', run: usersService.requirePasswordChange },
-  'reset-mfa': { confirm: 'Repor a autenticação de dois fatores? A pessoa perde todas as sessões e terá de a configurar de novo.', run: usersService.resetMfa },
-  deactivate: { confirm: 'Desativar esta conta? Todas as sessões terminam imediatamente; nenhum dado é apagado.', run: usersService.deactivate },
-  reactivate: { confirm: 'Reativar esta conta?', run: usersService.reactivate },
+const ACTIONS: Record<AccountAction, { confirm: string; success: string; run: (id: string) => Promise<unknown> }> = {
+  'reset-link': { confirm: 'Emitir uma ligação de redefinição de palavra-passe? Ligações anteriores deixam de funcionar.', success: '', run: usersService.issuePasswordReset },
+  'require-change': { confirm: 'Exigir que esta pessoa altere a palavra-passe no próximo acesso?', success: 'A alteração de palavra-passe passa a ser exigida no próximo acesso.', run: usersService.requirePasswordChange },
+  'reset-mfa': { confirm: 'Repor a autenticação de dois fatores? A pessoa perde todas as sessões e terá de a configurar de novo.', success: 'Autenticação de dois fatores reposta.', run: usersService.resetMfa },
+  deactivate: { confirm: 'Desativar esta conta? Todas as sessões terminam imediatamente; nenhum dado é apagado.', success: 'Conta desativada.', run: usersService.deactivate },
+  reactivate: { confirm: 'Reativar esta conta?', success: 'Conta reativada.', run: usersService.reactivate },
 }

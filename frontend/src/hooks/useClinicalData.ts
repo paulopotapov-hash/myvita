@@ -25,6 +25,10 @@ export function useCreateMedication(patientId: string) {
   const client = useQueryClient()
   return useMutation({ mutationFn: (payload: MedicationCreateRequest) => medicationsService.create(patientId, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medications'] }) })
 }
+export function useDeactivateMedication(patientId: string) {
+  const client = useQueryClient()
+  return useMutation({ mutationFn: (id: string) => medicationsService.deactivate(id), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medications'] }) })
+}
 export function useUpdateMedication(patientId: string) {
   const client = useQueryClient()
   return useMutation({ mutationFn: ({ id, payload }: { id: string; payload: MedicationUpdateRequest }) => medicationsService.update(id, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medications'] }) })

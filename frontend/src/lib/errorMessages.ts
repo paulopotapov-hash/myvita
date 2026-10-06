@@ -39,3 +39,21 @@ export function toUserMessage(error: unknown): string {
 
   return 'Ocorreu um erro inesperado. Tenta novamente.'
 }
+
+/**
+ * Maps a failed mutation onto form errors: backend 422 field errors land on
+ * the matching form field; anything else (or a field the form doesn't have)
+ * becomes a `_root` message so a rejected submit is never silent.
+ */
+export function formErrorsFrom(error: unknown, fields: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  let unmatched = false
+  if (error instanceof ApiError && error.fieldErrors) {
+    for (const [field, message] of Object.entries(error.fieldErrors)) {
+      if (fields.includes(field)) out[field] = message
+      else unmatched = true
+    }
+    if (!unmatched && Object.keys(out).length > 0) return out
+  }
+  return { ...out, _root: toUserMessage(error) }
+}

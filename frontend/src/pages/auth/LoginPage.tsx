@@ -7,7 +7,7 @@ import { useSession } from '../../hooks/useSession'
 import { usePublicConfig } from '../../hooks/usePublicConfig'
 import { toUserMessage } from '../../lib/errorMessages'
 import { safePostLoginPath } from '../../lib/navigation'
-import { loginSchema, zodErrorsToRecord } from '../../lib/validation'
+import { loginSchema, mfaVerificationCodeSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { isMfaChallenge } from '../../types/api'
 
@@ -53,13 +53,13 @@ export function LoginPage() {
 
   function handleCodeSubmit(event: React.FormEvent) {
     event.preventDefault()
-    const trimmed = code.trim()
-    if (trimmed.length < 6) {
-      setFieldErrors({ code: 'Introduz o código de 6 dígitos ou um código de recuperação.' })
+    const parsed = mfaVerificationCodeSchema.safeParse(code)
+    if (!parsed.success) {
+      setFieldErrors({ code: parsed.error.issues[0].message })
       return
     }
     setFieldErrors({})
-    verifyMfa.mutate(trimmed, {
+    verifyMfa.mutate(parsed.data, {
       onError: (error) => {
         setCode('')
         setFieldErrors({ _root: toUserMessage(error) })

@@ -23,9 +23,7 @@ export function PatientProfilePage() {
         <Row label="Clínica" value={clinicName ?? '—'} />
       </dl>
       <p className="max-w-md text-sm text-slate-500">
-        Data de nascimento e telefone ainda não podem ser consultados aqui — a API atual só os devolve no
-        momento do registo. Assim que existir um endpoint para o perfil clínico completo, esta página passa a
-        mostrá-los.
+        Data de nascimento, telefone e restantes dados pessoais estão em «Dados clínicos».
       </p>
     </div>
   )

@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toUserMessage } from '../lib/errorMessages'
+import { mfaCodeSchema } from '../lib/validation'
 import { authService } from '../services/auth'
 import { Button } from './Button'
 import { TextField } from './TextField'
@@ -50,12 +51,14 @@ export function MfaEnrolment({ onDone }: { onDone: () => void }) {
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!/^\d{6}$/.test(code.trim())) {
-      setError('Introduz o código de 6 dígitos mostrado na aplicação.')
+    if (enable.isPending) return
+    const parsed = mfaCodeSchema.safeParse(code)
+    if (!parsed.success) {
+      setError(parsed.error.issues[0].message)
       return
     }
     setError(null)
-    enable.mutate(code.trim(), {
+    enable.mutate(parsed.data, {
       onError: (failure) => {
         setCode('')
         setError(toUserMessage(failure))
