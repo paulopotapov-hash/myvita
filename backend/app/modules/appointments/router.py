@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_denials, client_ip, record_audit_event
-from app.core.clinical_access import is_clinical_staff
+from app.core.clinical_access import ClinicalAction, clinical_access, has_role_action, staff_profile
 from app.core.database import get_db
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
-from app.models import Appointment, AuditAction, AuditResult, Patient, Staff, User, UserRole
+from app.models import Appointment, AuditAction, AuditResult, Patient, Staff, StaffRole, User, UserRole
 from app.modules.appointments.schemas import (
     AppointmentCreateRequest,
     AppointmentPublic,
@@ -31,7 +31,12 @@ _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
 
 
 def _public(appointment: Appointment, user: User, db: Session) -> AppointmentPublic:
-    may_read_reason = user.role == UserRole.PATIENT or is_clinical_staff(db, user)
+    staff = staff_profile(db, user)
+    may_read_reason = user.role == UserRole.PATIENT or (
+        staff is not None
+        and has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENT_REASON)
+        and _has_assignment(db, appointment.patient_id, staff.id, user.clinic_id)
+    )
     return AppointmentPublic(
         id=appointment.id,
         clinic_id=appointment.clinic_id,
@@ -44,10 +49,34 @@ def _public(appointment: Appointment, user: User, db: Session) -> AppointmentPub
     )
 
 
+def _has_assignment(db: Session, patient_id: uuid.UUID, staff_id: uuid.UUID, clinic_id: uuid.UUID | None) -> bool:
+    from app.models import ClinicalCareAssignment
+
+    return (
+        db.query(ClinicalCareAssignment.id)
+        .filter(
+            ClinicalCareAssignment.patient_id == patient_id,
+            ClinicalCareAssignment.staff_id == staff_id,
+            ClinicalCareAssignment.clinic_id == clinic_id,
+            ClinicalCareAssignment.active.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
 def _reject_admin_reason(
-    payload: AppointmentCreateRequest | AppointmentUpdateRequest, user: User, db: Session
+    payload: AppointmentCreateRequest | AppointmentUpdateRequest,
+    user: User,
+    db: Session,
+    patient_id: uuid.UUID,
 ) -> None:
-    if "reason" in payload.model_fields_set and not is_clinical_staff(db, user):
+    staff = staff_profile(db, user)
+    if "reason" in payload.model_fields_set and not (
+        staff is not None
+        and has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENT_REASON)
+        and _has_assignment(db, patient_id, staff.id, user.clinic_id)
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas profissionais clínicos podem registar o motivo da consulta.",
@@ -82,7 +111,12 @@ def create(
 ) -> AppointmentPublic:
     with audit_denials(request, _staff_user, "appointment", payload.patient_id):
         _hide_cross_tenant_targets(payload, clinic_id, db)
-        _reject_admin_reason(payload, _staff_user, db)
+        actor_staff = staff_profile(db, _staff_user) if _staff_user.role == UserRole.STAFF else None
+        if _staff_user.role == UserRole.STAFF and (
+            actor_staff is None or actor_staff.staff_role != StaffRole.ADMIN
+        ):
+            clinical_access(db, payload.patient_id, _staff_user, ClinicalAction.EDIT_APPOINTMENTS)
+        _reject_admin_reason(payload, _staff_user, db, payload.patient_id)
         appointment = create_appointment(db, clinic_id, payload)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CREATED,
@@ -145,6 +179,10 @@ def detail(
             patient = db.query(Patient).filter(Patient.user_id == _user.id).first()
             if patient is None or appointment.patient_id != patient.id:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consulta não encontrada.")
+        elif _user.role == UserRole.STAFF:
+            actor_staff = staff_profile(db, _user)
+            if actor_staff is None or actor_staff.staff_role != StaffRole.ADMIN:
+                clinical_access(db, appointment.patient_id, _user, ClinicalAction.VIEW_APPOINTMENTS)
     record_audit_event(
         action=(
             AuditAction.PATIENT_VIEWED_OWN_RECORD
@@ -173,8 +211,13 @@ def update(
     staff_user: User = Depends(_staff_or_admin_only),
 ) -> AppointmentPublic:
     with audit_denials(request, staff_user, "appointment", appointment_id):
-        get_appointment_for_clinic(db, appointment_id, clinic_id)
-        _reject_admin_reason(payload, staff_user, db)
+        current = get_appointment_for_clinic(db, appointment_id, clinic_id)
+        patient_id = payload.patient_id or current.patient_id
+        actor_staff = staff_profile(db, staff_user) if staff_user.role == UserRole.STAFF else None
+        if actor_staff is not None and actor_staff.staff_role != StaffRole.ADMIN:
+            clinical_access(db, current.patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
+            clinical_access(db, patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
+        _reject_admin_reason(payload, staff_user, db, patient_id)
         appointment = update_appointment(db, appointment_id, clinic_id, payload)
     record_audit_event(
         action=AuditAction.APPOINTMENT_UPDATED,
@@ -199,6 +242,10 @@ def cancel(
     staff_user: User = Depends(_staff_or_admin_only),
 ) -> AppointmentPublic:
     with audit_denials(request, staff_user, "appointment", appointment_id):
+        current = get_appointment_for_clinic(db, appointment_id, clinic_id)
+        actor_staff = staff_profile(db, staff_user) if staff_user.role == UserRole.STAFF else None
+        if actor_staff is not None and actor_staff.staff_role != StaffRole.ADMIN:
+            clinical_access(db, current.patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
         appointment = cancel_appointment(db, appointment_id, clinic_id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CANCELLED,

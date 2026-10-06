@@ -1,11 +1,13 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.clinical_access import accessible_patient, is_clinical_staff
+from app.core.clinical_access import ClinicalAction, clinical_access, has_role_action, staff_profile
 from app.core.security import hash_password
-from app.models import Clinic, Patient, User, UserRole
+from app.models import Clinic, ClinicalCareAssignment, Patient, Staff, StaffRole, User, UserRole
 from app.modules.patients.schemas import PatientRegisterRequest, PatientUpdateRequest
 from app.modules.users import service as users_service
 
@@ -48,7 +50,7 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
 
 
 def list_patients_for_clinic(
-    db: Session, clinic_id: str, *, offset: int = 0, limit: int = 50
+    db: Session, clinic_id: str, user: User, *, offset: int = 0, limit: int = 50
 ) -> tuple[list[Patient], int]:
     """
     Staff/clinic_admin only (enforced in the router) — the patient directory
@@ -61,39 +63,57 @@ def list_patients_for_clinic(
         .filter(Patient.clinic_id == clinic_id)
         .join(User, Patient.user_id == User.id)
     )
+    if user.role == UserRole.STAFF:
+        staff = staff_profile(db, user)
+        if staff is None or (
+            staff.staff_role != StaffRole.ADMIN
+            and not has_role_action(staff.staff_role, ClinicalAction.VIEW_PATIENT)
+        ):
+            return [], 0
+        if staff.staff_role == StaffRole.ADMIN:
+            pass  # The existing access matrix permits a basic, operational directory for clinic administrators.
+        else:
+            query = query.join(
+                ClinicalCareAssignment,
+                (ClinicalCareAssignment.patient_id == Patient.id)
+                & (ClinicalCareAssignment.clinic_id == Patient.clinic_id),
+            ).filter(
+                ClinicalCareAssignment.staff_id == staff.id,
+                ClinicalCareAssignment.active.is_(True),
+            )
+    elif user.role != UserRole.CLINIC_ADMIN:
+        return [], 0
     total = query.count()
     patients = query.order_by(User.full_name, Patient.id).offset(offset).limit(limit).all()
     return patients, total
 
 
 def get_patient_for_user(db: Session, patient_id: uuid.UUID, user: User) -> Patient:
-    patient = accessible_patient(db, patient_id, user)
+    patient = clinical_access(db, patient_id, user, ClinicalAction.VIEW_PATIENT)
     _ = patient.user
     return patient
 
 
 def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateRequest, user: User) -> Patient:
     changes = payload.model_dump(exclude_unset=True)
-    patient = (
-        db.query(Patient)
-        .options(selectinload(Patient.user))
-        .filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id)
-        .first()
-    )
-    if patient is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
     if user.role == UserRole.PATIENT:
+        patient = (
+            db.query(Patient)
+            .options(selectinload(Patient.user))
+            .filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id)
+            .first()
+        )
+        if patient is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
         if patient.user_id != user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
         if set(changes) != {"phone"}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="O paciente só pode alterar o próprio telefone."
             )
-    elif not is_clinical_staff(db, user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas profissionais clínicos podem alterar dados demográficos.",
-        )
+    else:
+        patient = clinical_access(db, patient_id, user, ClinicalAction.EDIT_PATIENT)
+        patient = db.query(Patient).options(selectinload(Patient.user)).filter(Patient.id == patient.id).one()
     for field, value in changes.items():
         setattr(patient, field, value)
     db.commit()
@@ -114,3 +134,63 @@ def deactivate_patient(db: Session, patient_id: uuid.UUID, clinic_id: str, actor
     users_service.deactivate(db, patient.user, actor)
     db.refresh(patient)
     return patient
+
+
+def assign_clinical_staff(
+    db: Session, patient_id: uuid.UUID, staff_id: uuid.UUID, clinic_id: str, actor: User
+) -> ClinicalCareAssignment:
+    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.clinic_id == clinic_id).first()
+    staff = db.query(Staff).filter(Staff.id == staff_id, Staff.clinic_id == clinic_id).first()
+    if patient is None or staff is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente ou profissional não encontrado.")
+    if staff.staff_role not in {StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.PHYSIOTHERAPIST}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Função não clínica.")
+    existing = (
+        db.query(ClinicalCareAssignment)
+        .filter(
+            ClinicalCareAssignment.patient_id == patient.id,
+            ClinicalCareAssignment.staff_id == staff.id,
+            ClinicalCareAssignment.active.is_(True),
+        )
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Profissional já associado ao paciente.")
+    assignment = ClinicalCareAssignment(
+        clinic_id=patient.clinic_id,
+        patient_id=patient.id,
+        staff_id=staff.id,
+        assigned_by_user_id=actor.id,
+    )
+    db.add(assignment)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Profissional já associado ao paciente."
+        ) from exc
+    db.refresh(assignment)
+    return assignment
+
+
+def end_clinical_assignment(
+    db: Session, patient_id: uuid.UUID, staff_id: uuid.UUID, clinic_id: str
+) -> ClinicalCareAssignment:
+    assignment = (
+        db.query(ClinicalCareAssignment)
+        .filter(
+            ClinicalCareAssignment.clinic_id == clinic_id,
+            ClinicalCareAssignment.patient_id == patient_id,
+            ClinicalCareAssignment.staff_id == staff_id,
+            ClinicalCareAssignment.active.is_(True),
+        )
+        .first()
+    )
+    if assignment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Associação clínica não encontrada.")
+    assignment.active = False
+    assignment.ended_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(assignment)
+    return assignment

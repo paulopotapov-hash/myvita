@@ -84,6 +84,12 @@ def _tenant(client: TestClient, suffix: str) -> dict:
     patient = _identity(response)
     patient_id = response.json()["id"]
     response = client.post(
+        f"/api/v1/patients/{patient_id}/care-team",
+        headers=_use(client, admin),
+        json={"staff_id": staff_id},
+    )
+    assert response.status_code == 201, response.text
+    response = client.post(
         "/api/v1/auth/login",
         json={"email": f"b6-doctor-{suffix}@example.pt", "password": "SenhaForte123!"},
     )

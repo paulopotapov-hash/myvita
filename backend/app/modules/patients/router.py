@@ -3,20 +3,24 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, Patient, User, UserRole
 from app.modules.patients.schemas import (
+    CareAssignmentCreateRequest,
+    CareAssignmentPublic,
     PatientPublic,
     PatientRegisterRequest,
     PatientSummary,
     PatientUpdateRequest,
 )
 from app.modules.patients.service import (
+    assign_clinical_staff,
     deactivate_patient,
+    end_clinical_assignment,
     get_patient_for_user,
     list_patients_for_clinic,
     register_patient,
@@ -102,7 +106,9 @@ def list_mine(
     can show a name instead of a bare UUID. Never a cross-clinic listing:
     clinic_id always comes from the staff member's own session.
     """
-    patients, total = list_patients_for_clinic(db, clinic_id, offset=(page - 1) * page_size, limit=page_size)
+    patients, total = list_patients_for_clinic(
+        db, clinic_id, staff_user, offset=(page - 1) * page_size, limit=page_size
+    )
     response.headers["X-Total-Count"] = str(total)
     record_audit_event(
         action=AuditAction.STAFF_VIEWED_PATIENT,
@@ -125,7 +131,8 @@ def detail(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PatientPublic:
-    patient = get_patient_for_user(db, patient_id, user)
+    with audit_denials(request, user, "patient", patient_id):
+        patient = get_patient_for_user(db, patient_id, user)
     record_audit_event(
         action=(
             AuditAction.PATIENT_VIEWED_OWN_RECORD
@@ -152,7 +159,8 @@ def update(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PatientPublic:
-    patient = update_patient(db, patient_id, payload, user)
+    with audit_denials(request, user, "patient", patient_id):
+        patient = update_patient(db, patient_id, payload, user)
     record_audit_event(
         action=AuditAction.PATIENT_UPDATED,
         result=AuditResult.SUCCESS,
@@ -165,6 +173,58 @@ def update(
         user_agent=request.headers.get("user-agent"),
     )
     return _public(patient)
+
+
+@router.post("/{patient_id}/care-team", response_model=CareAssignmentPublic, status_code=201)
+def assign_care_team_member(
+    patient_id: uuid.UUID,
+    payload: CareAssignmentCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_admin_only),
+) -> CareAssignmentPublic:
+    with audit_denials(request, admin, "care_assignment", patient_id):
+        assignment = assign_clinical_staff(db, patient_id, payload.staff_id, clinic_id, admin)
+    record_audit_event(
+        action=AuditAction.CARE_ASSIGNMENT_CREATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="care_assignment",
+        resource_id=assignment.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": str(patient_id), "staff_id": str(payload.staff_id)},
+    )
+    return CareAssignmentPublic.model_validate(assignment)
+
+
+@router.delete("/{patient_id}/care-team/{staff_id}", response_model=CareAssignmentPublic)
+def remove_care_team_member(
+    patient_id: uuid.UUID,
+    staff_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_admin_only),
+) -> CareAssignmentPublic:
+    with audit_denials(request, admin, "care_assignment", patient_id):
+        assignment = end_clinical_assignment(db, patient_id, staff_id, clinic_id)
+    record_audit_event(
+        action=AuditAction.CARE_ASSIGNMENT_ENDED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="care_assignment",
+        resource_id=assignment.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": str(patient_id), "staff_id": str(staff_id)},
+    )
+    return CareAssignmentPublic.model_validate(assignment)
 
 
 @router.post("/{patient_id}/deactivate", response_model=PatientSummary)

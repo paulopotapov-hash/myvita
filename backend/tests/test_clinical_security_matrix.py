@@ -277,6 +277,13 @@ def test_patient_cannot_reach_another_patients_data_in_the_same_clinic(client: T
     _assert_untouched(client, world.a, world.seed_a)
 
 
+def test_patient_identity_is_authoritative_for_patient_detail_ids(client: TestClient, world: World):
+    headers = world.a.act(client, "patient")
+    assert client.get(f"/api/v1/patients/{world.a.patient_id}", headers=headers).status_code == 200
+    assert client.get(f"/api/v1/patients/{world.a.other_patient_id}", headers=headers).status_code == 404
+    assert client.get(f"/api/v1/patients/{world.b.patient_id}", headers=headers).status_code == 404
+
+
 def test_staff_never_see_or_consume_a_patients_notifications(client: TestClient, world: World):
     for role in ("doctor", "nurse", "admin", "clinic_admin"):
         headers = world.a.act(client, role)
@@ -289,6 +296,12 @@ def test_staff_never_see_or_consume_a_patients_notifications(client: TestClient,
 def test_patient_sees_only_their_own_records_in_each_list(client: TestClient, world: World):
     own = prescribe(client, world.a, "Own drug")
     other_patient_id = world.a.other_patient_id
+    response = client.post(
+        f"/api/v1/patients/{other_patient_id}/care-team",
+        headers=world.a.act(client, "clinic_admin"),
+        json={"staff_id": world.a.staff_ids["doctor"]},
+    )
+    assert response.status_code == 201
     world.a.act(client, "doctor")
     other = client.post(
         f"/api/v1/patients/{other_patient_id}/medications",
@@ -303,6 +316,53 @@ def test_patient_sees_only_their_own_records_in_each_list(client: TestClient, wo
     assert client.get(f"/api/v1/medications/{own['id']}").status_code == 200
     world.a.act(client, "other_patient")
     assert client.get(f"/api/v1/medications/{own['id']}").status_code == 404
+
+
+def test_professional_access_requires_active_patient_assignment_and_is_audited(
+    client: TestClient, world: World
+):
+    world.a.act(client, "doctor")
+    assert client.get(f"/api/v1/patients/{world.a.patient_id}").status_code == 200
+    assert client.get(f"/api/v1/patients/{world.a.other_patient_id}").status_code == 403
+    assert [row["id"] for row in client.get("/api/v1/patients").json()] == [world.a.patient_id]
+
+    world.a.act(client, "clinic_admin")
+    assigned = client.post(
+        f"/api/v1/patients/{world.a.other_patient_id}/care-team",
+        headers=use(client, world.a.who["clinic_admin"]),
+        json={"staff_id": world.a.staff_ids["doctor"]},
+    )
+    assert assigned.status_code == 201
+    assignment_id = assigned.json()["id"]
+
+    world.a.act(client, "doctor")
+    assert client.get(f"/api/v1/patients/{world.a.other_patient_id}").status_code == 200
+    denied = audit(client, "permission_denied", resource_id=world.a.other_patient_id)
+    assert denied and denied[-1].event_metadata["actor_staff_role"] == "doctor"
+
+    world.a.act(client, "clinic_admin")
+    ended = client.delete(
+        f"/api/v1/patients/{world.a.other_patient_id}/care-team/{world.a.staff_ids['doctor']}",
+        headers=use(client, world.a.who["clinic_admin"]),
+    )
+    assert ended.status_code == 200
+    assert ended.json()["id"] == assignment_id
+    world.a.act(client, "doctor")
+    assert client.get(f"/api/v1/patients/{world.a.other_patient_id}").status_code == 403
+    assert audit(client, "care_assignment_created", resource_id=assignment_id)
+    assert audit(client, "care_assignment_ended", resource_id=assignment_id)
+
+
+def test_physiotherapist_role_is_supported_but_has_no_unconfigured_clinical_permissions(
+    client: TestClient, world: World
+):
+    headers = world.a.act(client, "physiotherapist")
+    assert client.get(f"/api/v1/patients/{world.a.patient_id}", headers=headers).status_code == 403
+    assert (
+        client.get(f"/api/v1/patients/{world.a.patient_id}/medical-records", headers=headers).status_code
+        == 403
+    )
+    assert client.get("/api/v1/patients", headers=headers).json() == []
 
 
 @pytest.mark.parametrize("bad_id", ["1", "0", "-1", "abc", "../etc/passwd"])

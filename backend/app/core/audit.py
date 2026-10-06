@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request
 from app.core.client_ip import get_client_ip as client_ip  # re-exported: see app/core/client_ip.py
 from app.core.database import SessionLocal
 from app.models.audit_log import AuditAction, AuditLog, AuditResult
+from app.models.staff import Staff
 from app.models.user import User
 
 __all__ = ["record_audit_event", "record_denied_access", "audit_denials", "client_ip"]
@@ -55,6 +56,15 @@ def record_audit_event(
     """
     session = SessionLocal()
     try:
+        audit_metadata = dict(metadata or {})
+        if actor_user_id is not None:
+            actor_staff = (
+                session.query(Staff.staff_role)
+                .filter(Staff.user_id == actor_user_id, Staff.clinic_id == clinic_id)
+                .scalar()
+            )
+            if actor_staff is not None:
+                audit_metadata["actor_staff_role"] = actor_staff.value
         session.add(
             AuditLog(
                 clinic_id=clinic_id,
@@ -66,7 +76,7 @@ def record_audit_event(
                 result=result,
                 ip_address=_bounded(ip_address, 45),
                 user_agent=_bounded(user_agent, 255),
-                event_metadata=metadata,
+                event_metadata=audit_metadata or None,
             )
         )
         session.commit()

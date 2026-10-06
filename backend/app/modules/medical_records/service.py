@@ -3,13 +3,13 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.clinical_access import accessible_patient, clinical_staff
+from app.core.clinical_access import ClinicalAction, clinical_access, clinical_staff
 from app.models import MedicalRecord, MedicalRecordRevision, User
 from app.modules.medical_records.schemas import MedicalRecordCreateRequest, MedicalRecordUpdateRequest
 
 
 def list_records(db: Session, patient_id: uuid.UUID, user: User) -> list[MedicalRecord]:
-    accessible_patient(db, patient_id, user)
+    clinical_access(db, patient_id, user, ClinicalAction.VIEW_MEDICAL_RECORDS)
     return (
         db.query(MedicalRecord)
         .filter(MedicalRecord.patient_id == patient_id, MedicalRecord.clinic_id == user.clinic_id)
@@ -26,15 +26,15 @@ def get_record(db: Session, record_id: uuid.UUID, user: User) -> MedicalRecord:
     )
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registo clínico não encontrado.")
-    accessible_patient(db, record.patient_id, user)
+    clinical_access(db, record.patient_id, user, ClinicalAction.VIEW_MEDICAL_RECORDS)
     return record
 
 
 def create_record(
     db: Session, patient_id: uuid.UUID, payload: MedicalRecordCreateRequest, user: User
 ) -> MedicalRecord:
-    patient = accessible_patient(db, patient_id, user, write=True)
-    staff = clinical_staff(db, user)
+    patient = clinical_access(db, patient_id, user, ClinicalAction.EDIT_MEDICAL_RECORDS)
+    staff = clinical_staff(db, user, patient_id, ClinicalAction.EDIT_MEDICAL_RECORDS)
     record = MedicalRecord(
         clinic_id=patient.clinic_id,
         patient_id=patient.id,
@@ -63,8 +63,8 @@ def update_record(
     db: Session, record_id: uuid.UUID, payload: MedicalRecordUpdateRequest, user: User
 ) -> MedicalRecord:
     record = get_record(db, record_id, user)
-    accessible_patient(db, record.patient_id, user, write=True)
-    staff = clinical_staff(db, user)
+    clinical_access(db, record.patient_id, user, ClinicalAction.EDIT_MEDICAL_RECORDS)
+    staff = clinical_staff(db, user, record.patient_id, ClinicalAction.EDIT_MEDICAL_RECORDS)
     # Lock + reload so concurrent edits get distinct, gapless versions.
     db.refresh(record, with_for_update=True)
     record.version += 1

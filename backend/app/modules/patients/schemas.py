@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -60,3 +60,20 @@ class PatientUpdateRequest(RequestModel):
         if not self.model_fields_set:
             raise ValueError("At least one field is required.")
         return self
+
+
+class CareAssignmentCreateRequest(RequestModel):
+    staff_id: uuid.UUID
+
+
+class CareAssignmentPublic(BaseModel):
+    id: uuid.UUID
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    staff_id: uuid.UUID
+    assigned_by_user_id: uuid.UUID
+    active: bool
+    created_at: datetime
+    ended_at: datetime | None
+
+    model_config = {"from_attributes": True}

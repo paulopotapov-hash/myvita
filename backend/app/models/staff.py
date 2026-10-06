@@ -12,6 +12,7 @@ from app.core.database import Base
 class StaffRole(str, enum.Enum):
     DOCTOR = "doctor"
     NURSE = "nurse"
+    PHYSIOTHERAPIST = "physiotherapist"
     ADMIN = "admin"
 
 
@@ -21,6 +22,7 @@ class Staff(Base):
     __tablename__ = "staff"
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_staff_user_id"),
+        UniqueConstraint("id", "clinic_id", name="uq_staff_id_clinic"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

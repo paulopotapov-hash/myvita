@@ -16,6 +16,7 @@ import type { StaffRole } from '../../types/api'
 const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   doctor: 'Médico(a)',
   nurse: 'Enfermeiro(a)',
+  physiotherapist: 'Fisioterapeuta',
   admin: 'Administrativo(a)',
 }
 

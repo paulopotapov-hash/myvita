@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.clinical_access import accessible_patient, clinical_staff
+from app.core.clinical_access import ClinicalAction, clinical_access, clinical_staff
 from app.models import Medication, MedicationStatus, User
 from app.modules.medications.schemas import (
     MedicationCreateRequest,
@@ -22,7 +22,7 @@ def list_medications(
     offset: int = 0,
     limit: int = 50,
 ) -> tuple[list[Medication], int]:
-    accessible_patient(db, patient_id, user)
+    clinical_access(db, patient_id, user, ClinicalAction.VIEW_MEDICATIONS)
     query = db.query(Medication).filter(
         Medication.patient_id == patient_id, Medication.clinic_id == user.clinic_id
     )
@@ -43,15 +43,15 @@ def get_medication(db: Session, medication_id: uuid.UUID, user: User) -> Medicat
     )
     if medication is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medicação não encontrada.")
-    accessible_patient(db, medication.patient_id, user)
+    clinical_access(db, medication.patient_id, user, ClinicalAction.VIEW_MEDICATIONS)
     return medication
 
 
 def create_medication(
     db: Session, patient_id: uuid.UUID, payload: MedicationCreateRequest, user: User
 ) -> Medication:
-    patient = accessible_patient(db, patient_id, user, write=True)
-    staff = clinical_staff(db, user)
+    patient = clinical_access(db, patient_id, user, ClinicalAction.EDIT_MEDICATIONS)
+    staff = clinical_staff(db, user, patient_id, ClinicalAction.EDIT_MEDICATIONS)
     medication = Medication(
         clinic_id=patient.clinic_id,
         patient_id=patient.id,
@@ -68,8 +68,8 @@ def update_medication(
     db: Session, medication_id: uuid.UUID, payload: MedicationUpdateRequest, user: User
 ) -> Medication:
     medication = get_medication(db, medication_id, user)
-    accessible_patient(db, medication.patient_id, user, write=True)
-    clinical_staff(db, user)
+    clinical_access(db, medication.patient_id, user, ClinicalAction.EDIT_MEDICATIONS)
+    clinical_staff(db, user, medication.patient_id, ClinicalAction.EDIT_MEDICATIONS)
     if medication.status != MedicationStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Medicação já terminada.")
     changes = payload.model_dump(exclude_unset=True)
@@ -94,8 +94,8 @@ def deactivate_medication(
     user: User,
 ) -> Medication:
     medication = get_medication(db, medication_id, user)
-    accessible_patient(db, medication.patient_id, user, write=True)
-    clinical_staff(db, user)
+    clinical_access(db, medication.patient_id, user, ClinicalAction.EDIT_MEDICATIONS)
+    clinical_staff(db, user, medication.patient_id, ClinicalAction.EDIT_MEDICATIONS)
     if medication.status != MedicationStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Medicação já terminada.")
     requested_end = payload.end_date if payload is not None else None

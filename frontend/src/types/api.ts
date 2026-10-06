@@ -5,7 +5,7 @@
  */
 
 export type UserRole = 'patient' | 'staff' | 'clinic_admin'
-export type StaffRole = 'doctor' | 'nurse' | 'admin'
+export type StaffRole = 'doctor' | 'nurse' | 'physiotherapist' | 'admin'
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 export type ConsentType = 'treatment' | 'data_processing' | 'communications' | 'research'
 export type ConsentStatus = 'granted' | 'revoked'

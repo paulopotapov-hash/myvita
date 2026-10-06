@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.models import AuditLog, Notification, User
 from tests.account_support import PASSWORD
 
-STAFF_ROLES = ("doctor", "nurse", "admin")
+STAFF_ROLES = ("doctor", "nurse", "physiotherapist", "admin")
 ALL_ROLES = (*STAFF_ROLES, "clinic_admin", "patient")
 
 
@@ -125,6 +125,14 @@ def make_tenant(client: TestClient, suffix: str) -> Tenant:
     with client.session_factory() as db:  # type: ignore[attr-defined]
         for key, email in emails.items():
             tenant.user_ids[key] = str(db.query(User).filter(User.email_matches(email)).one().id)
+    # Explicit care-team membership is required for professional access.
+    for role in ("doctor", "nurse", "physiotherapist"):
+        response = client.post(
+            f"/api/v1/patients/{tenant.patient_id}/care-team",
+            headers=tenant.act(client, "clinic_admin"),
+            json={"staff_id": tenant.staff_ids[role]},
+        )
+        assert response.status_code == 201, response.text
     return tenant
 
 

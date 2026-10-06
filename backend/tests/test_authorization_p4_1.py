@@ -93,6 +93,13 @@ def _tenant(client: TestClient, suffix: str) -> dict:
     )
     assert patient_response.status_code == 201
     identities["patient"] = _identity(patient_response)
+    for role in ("doctor", "nurse"):
+        assigned = client.post(
+            f"/api/v1/patients/{patient_response.json()['id']}/care-team",
+            headers=_use(client, identities["clinic_admin"]),
+            json={"staff_id": staff_ids[role]},
+        )
+        assert assigned.status_code == 201, assigned.text
     return {
         "clinic_id": clinic_id,
         "patient_id": patient_response.json()["id"],

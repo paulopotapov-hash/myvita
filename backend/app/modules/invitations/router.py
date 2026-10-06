@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
-from app.core.clinical_access import clinical_staff
+from app.core.clinical_access import ClinicalAction, clinical_staff
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, INVITATION_PUBLIC_RATE_LIMIT, limiter
 from app.core.security import require_roles, set_session_cookie
@@ -80,7 +80,7 @@ def invite_patient(
 ) -> InvitationCreated:
     assert actor.clinic_id is not None
     if actor.role == UserRole.STAFF:
-        clinical_staff(db, actor)
+        clinical_staff(db, actor, action=ClinicalAction.INVITE_PATIENT)
     invitation, token = create_invitation(
         db,
         clinic_id=actor.clinic_id,

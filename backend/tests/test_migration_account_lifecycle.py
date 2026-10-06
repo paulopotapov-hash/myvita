@@ -55,7 +55,7 @@ def test_upgrade_stops_on_case_duplicates_and_changes_nothing():
         engine.dispose()
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f6a7b8c9d0e1"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "ab12cd34ef56"
         triggers = connection.execute(
             text("SELECT tgname FROM pg_trigger WHERE tgrelid = 'audit_logs'::regclass AND NOT tgisinternal")
         ).scalars().all()

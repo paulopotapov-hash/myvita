@@ -5,13 +5,13 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.clinical_access import accessible_patient
+from app.core.clinical_access import ClinicalAction, clinical_access
 from app.models import Consent, ConsentStatus, Patient, User, UserRole
 from app.modules.consents.schemas import ConsentCreateRequest
 
 
 def list_consents(db: Session, patient_id: uuid.UUID, user: User) -> list[Consent]:
-    patient = accessible_patient(db, patient_id, user)
+    patient = clinical_access(db, patient_id, user, ClinicalAction.VIEW_CONSENTS)
     return (
         db.query(Consent)
         .filter(Consent.clinic_id == user.clinic_id, Consent.patient_id == patient.id)
@@ -24,7 +24,7 @@ def get_consent(db: Session, consent_id: uuid.UUID, user: User) -> Consent:
     consent = db.query(Consent).filter(Consent.id == consent_id, Consent.clinic_id == user.clinic_id).first()
     if consent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consentimento não encontrado.")
-    accessible_patient(db, consent.patient_id, user)
+    clinical_access(db, consent.patient_id, user, ClinicalAction.VIEW_CONSENTS)
     return consent
 
 

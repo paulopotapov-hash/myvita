@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import Appointment, Patient, Staff, User, UserRole
+from app.core.clinical_access import ClinicalAction, has_role_action, staff_profile
+from app.models import Appointment, ClinicalCareAssignment, Patient, Staff, StaffRole, User, UserRole
 from app.models.appointment import AppointmentStatus
 from app.modules.appointments.schemas import AppointmentCreateRequest, AppointmentUpdateRequest
 
@@ -165,10 +166,19 @@ def list_appointments_for_user(db: Session, user: User) -> list[Appointment]:
             .all()
         )
 
-    # STAFF / CLINIC_ADMIN
-    return (
-        db.query(Appointment)
-        .filter(Appointment.clinic_id == user.clinic_id)
-        .order_by(Appointment.scheduled_at)
-        .all()
-    )
+    query = db.query(Appointment).filter(Appointment.clinic_id == user.clinic_id)
+    if user.role == UserRole.STAFF:
+        staff = staff_profile(db, user)
+        if staff is None or not has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENTS):
+            return []
+        if staff.staff_role != StaffRole.ADMIN:
+            assigned_patient_ids = (
+                db.query(ClinicalCareAssignment.patient_id)
+                .filter(
+                    ClinicalCareAssignment.clinic_id == user.clinic_id,
+                    ClinicalCareAssignment.staff_id == staff.id,
+                    ClinicalCareAssignment.active.is_(True),
+                )
+            )
+            query = query.filter(Appointment.patient_id.in_(assigned_patient_ids))
+    return query.order_by(Appointment.scheduled_at).all()

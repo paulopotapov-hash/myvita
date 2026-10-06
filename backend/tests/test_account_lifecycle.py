@@ -181,7 +181,10 @@ def test_forced_password_change_blocks_everything_else(client):
     changed = post(client, "/api/v1/auth/change-password", {"current_password": PASSWORD, "new_password": NEW_PASSWORD})
     assert changed.status_code == 204
     assert client.get("/api/v1/patients").status_code == 200
-    assert audit_rows(client, "password_change")[-1].event_metadata == {"forced": True}
+    assert audit_rows(client, "password_change")[-1].event_metadata == {
+        "forced": True,
+        "actor_staff_role": "doctor",
+    }
 
 
 def test_password_change_comes_before_mfa_enrolment(client, enforce_mfa, totp_clock):
