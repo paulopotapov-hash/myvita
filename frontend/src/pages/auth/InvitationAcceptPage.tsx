@@ -10,6 +10,7 @@ import { toUserMessage } from '../../lib/errorMessages'
 import { invitationAcceptSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { invitationsService } from '../../services/invitations'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 export function InvitationAcceptPage() {
   const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '')
@@ -17,6 +18,7 @@ export function InvitationAcceptPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(fieldErrors)
   useEffect(() => {
     if (window.location.hash) window.history.replaceState(null, '', '/convite')
   }, [])
@@ -61,9 +63,9 @@ export function InvitationAcceptPage() {
             <p className="font-medium">{preview.data.clinic_name}</p>
             <p>{preview.data.full_name} · {preview.data.email}</p>
           </div>
-          <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-            <TextField label="Nova palavra-passe" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} error={fieldErrors.password} />
-            <TextField label="Confirmar palavra-passe" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
+          <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
+            <TextField label="Nova palavra-passe" required type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} error={fieldErrors.password} />
+            <TextField label="Confirmar palavra-passe" required type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
             {fieldErrors._root && <p role="alert" className="text-sm text-red-600">{fieldErrors._root}</p>}
             <Button type="submit" isLoading={accept.isPending}>Ativar conta</Button>
           </form>

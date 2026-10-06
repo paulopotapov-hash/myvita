@@ -16,6 +16,7 @@ import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
 import { medicalRecordSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { MedicalRecordPublic } from '../../types/api'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const EMPTY_FORM = { title: '', content: '' }
 const FORM_FIELDS = ['title', 'content'] as const
@@ -28,6 +29,7 @@ export function MedicalRecordsSection({ patientId, canWrite }: { patientId: stri
   const revisions = useMedicalRecordRevisions(selected?.id ?? '')
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(errors)
   const [success, setSuccess] = useState('')
   const saving = create.isPending || update.isPending
 
@@ -66,19 +68,19 @@ export function MedicalRecordsSection({ patientId, canWrite }: { patientId: stri
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-medium">Histórico clínico</h2>
+    <section aria-labelledby="records-title" className="rounded-xl border border-slate-200 bg-white p-6">
+      <h2 id="records-title" className="mb-4 text-lg font-medium">Histórico clínico</h2>
       {canWrite && (
-        <form className="mb-6 grid gap-3 border-b border-slate-100 pb-5" onSubmit={save} noValidate>
+        <form ref={formRef} className="mb-6 grid gap-3 border-b border-slate-100 pb-5" onSubmit={save} noValidate>
           <TextField
-            label="Título do registo"
+            label="Título do registo" required
             value={form.title}
             onChange={(event) => setForm((value) => ({ ...value, title: event.target.value }))}
             error={errors.title}
             maxLength={200}
           />
           <TextAreaField
-            label="Conteúdo clínico"
+            label="Conteúdo clínico" required
             value={form.content}
             onChange={(event) => setForm((value) => ({ ...value, content: event.target.value }))}
             error={errors.content}
@@ -107,14 +109,14 @@ export function MedicalRecordsSection({ patientId, canWrite }: { patientId: stri
             <li key={record.id} className="py-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium">{record.title}</p>
+                  <p id={`record-${record.id}`} className="font-medium">{record.title}</p>
                   <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{record.content}</p>
                   <p className="mt-1 text-xs text-slate-500">
                     Versão {record.version} · {formatDateTime(record.updated_at)}
                   </p>
                 </div>
                 {canWrite && (
-                  <Button variant="secondary" disabled={saving} onClick={() => startEdit(record)}>
+                  <Button variant="secondary" aria-describedby={`record-${record.id}`} disabled={saving} onClick={() => startEdit(record)}>
                     Editar
                   </Button>
                 )}

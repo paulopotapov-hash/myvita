@@ -26,4 +26,7 @@ backups/
 node_modules/
 dist/
 frontend/coverage/
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
 backend/var/documents/

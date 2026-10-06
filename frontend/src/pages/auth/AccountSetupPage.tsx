@@ -11,6 +11,7 @@ import { passwordChangeSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { authService } from '../../services/auth'
 import type { PasswordChangeRequest, PendingAccountAction } from '../../types/api'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const TITLES: Record<PendingAccountAction, { title: string; subtitle: string }> = {
   password_change: {
@@ -62,6 +63,7 @@ function ForcedPasswordChange({ onDone }: { onDone: () => void }) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(fieldErrors)
   const change = useMutation({ mutationFn: (payload: PasswordChangeRequest) => authService.changePassword(payload) })
 
   function submit(event: React.FormEvent) {
@@ -83,10 +85,10 @@ function ForcedPasswordChange({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <TextField label="Palavra-passe atual" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} error={fieldErrors.current_password} />
-      <TextField label="Nova palavra-passe" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} error={fieldErrors.new_password} />
-      <TextField label="Confirmar nova palavra-passe" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
+    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
+      <TextField label="Palavra-passe atual" required type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} error={fieldErrors.current_password} />
+      <TextField label="Nova palavra-passe" required type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} error={fieldErrors.new_password} />
+      <TextField label="Confirmar nova palavra-passe" required type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
       {fieldErrors._root && <p role="alert" className="text-sm text-red-600">{fieldErrors._root}</p>}
       <Button type="submit" isLoading={change.isPending}>Alterar palavra-passe</Button>
     </form>

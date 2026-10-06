@@ -2,15 +2,16 @@ import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { ErrorState } from '../../components/ErrorState'
+import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { usePatientRegister } from '../../hooks/useAuthMutations'
 import { useClinics } from '../../hooks/useClinicData'
 import { useSession } from '../../hooks/useSession'
 import { usePublicConfig } from '../../hooks/usePublicConfig'
-import { ApiError } from '../../lib/apiClient'
-import { toUserMessage } from '../../lib/errorMessages'
+import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { patientRegisterSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const EMPTY_FORM = { clinic_id: '', full_name: '', email: '', password: '', birth_date: '', phone: '' }
 
@@ -21,6 +22,7 @@ export function PatientRegisterPage() {
   const publicConfig = usePublicConfig()
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(fieldErrors)
 
   if (isAuthenticated) return <Navigate to="/app" replace />
   if (publicConfig.isSuccess && !publicConfig.data.patient_registration_enabled) {
@@ -46,56 +48,35 @@ export function PatientRegisterPage() {
         phone: result.data.phone || undefined,
       },
       {
-        onError: (error) => {
-          if (error instanceof ApiError && error.fieldErrors) {
-            setFieldErrors(error.fieldErrors)
-          } else {
-            setFieldErrors({ _root: toUserMessage(error) })
-          }
-        },
+        onError: (error) =>
+          setFieldErrors(formErrorsFrom(error, ['clinic_id', 'full_name', 'email', 'password', 'birth_date', 'phone'])),
       },
     )
   }
 
   return (
     <AuthLayout title="Criar conta" subtitle="Regista-te como paciente numa clínica myVita">
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="clinic" className="text-sm font-medium text-slate-700">
-            Clínica
-          </label>
-          {clinics.isLoading && <p className="text-sm text-slate-500">A carregar clínicas…</p>}
-          {clinics.isError && <ErrorState message={toUserMessage(clinics.error)} onRetry={() => clinics.refetch()} />}
-          {clinics.data && (
-            <select
-              id="clinic"
-              value={form.clinic_id}
-              onChange={(e) => update('clinic_id', e.target.value)}
-              aria-invalid={Boolean(fieldErrors.clinic_id)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-600"
-            >
-              <option value="">Escolhe a tua clínica…</option>
-              {clinics.data.map((clinic) => (
-                <option key={clinic.id} value={clinic.id}>
-                  {clinic.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {fieldErrors.clinic_id && (
-            <p role="alert" className="text-sm text-red-600">
-              {fieldErrors.clinic_id}
-            </p>
-          )}
-        </div>
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        {clinics.isLoading && <p role="status" className="text-sm text-slate-500">A carregar clínicas…</p>}
+        {clinics.isError && <ErrorState message={toUserMessage(clinics.error)} onRetry={() => clinics.refetch()} />}
+        {clinics.data && (
+          <SelectField label="Clínica" required value={form.clinic_id} onChange={(e) => update('clinic_id', e.target.value)} error={fieldErrors.clinic_id}>
+            <option value="">Escolhe a tua clínica…</option>
+            {clinics.data.map((clinic) => (
+              <option key={clinic.id} value={clinic.id}>
+                {clinic.name}
+              </option>
+            ))}
+          </SelectField>
+        )}
         <TextField
-          label="Nome completo"
+          label="Nome completo" required
           value={form.full_name}
           onChange={(e) => update('full_name', e.target.value)}
           error={fieldErrors.full_name}
         />
         <TextField
-          label="Email"
+          label="Email" required
           type="email"
           autoComplete="email"
           value={form.email}
@@ -103,7 +84,7 @@ export function PatientRegisterPage() {
           error={fieldErrors.email}
         />
         <TextField
-          label="Palavra-passe"
+          label="Palavra-passe" required
           type="password"
           autoComplete="new-password"
           value={form.password}

@@ -12,6 +12,7 @@ import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { staffCreateSchema, zodErrorsToRecord } from '../../lib/validation'
 import { invitationsService } from '../../services/invitations'
 import type { StaffRole } from '../../types/api'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   doctor: 'Médico(a)',
@@ -27,6 +28,7 @@ export function StaffManagementPage() {
   const createStaff = useMutation({ mutationFn: invitationsService.inviteStaff })
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(fieldErrors)
   const [invitationLink, setInvitationLink] = useState('')
 
   function update<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
@@ -61,15 +63,15 @@ export function StaffManagementPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-medium text-slate-900">Convidar profissional</h2>
-        <form onSubmit={handleSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
+        <form ref={formRef} onSubmit={handleSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
           <TextField
-            label="Nome completo"
+            label="Nome completo" required
             value={form.full_name}
             onChange={(e) => update('full_name', e.target.value)}
             error={fieldErrors.full_name}
           />
           <TextField
-            label="Email"
+            label="Email" required
             type="email"
             value={form.email}
             onChange={(e) => update('email', e.target.value)}

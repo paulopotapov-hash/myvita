@@ -23,6 +23,7 @@ import {
 import { medicationFormSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { MedicationFormValues } from '../../lib/validation'
 import type { MedicationPublic, MedicationStatus } from '../../types/api'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const FORM_FIELDS = ['name', 'dosage', 'route', 'frequency', 'instructions', 'start_date', 'end_date'] as const
 
@@ -51,6 +52,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
   const [editing, setEditing] = useState<MedicationPublic | null>(null)
   const [form, setForm] = useState<MedicationFormValues>(EMPTY_MEDICATION_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(errors)
   const [success, setSuccess] = useState('')
 
   const saving = create.isPending || (editing !== null && update.isPending)
@@ -132,18 +134,18 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
   const total = medications.data?.total ?? 0
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-medium">Medicação</h2>
+    <section aria-labelledby="medications-title" className="rounded-xl border border-slate-200 bg-white p-6">
+      <h2 id="medications-title" className="mb-4 text-lg font-medium">Medicação</h2>
       {canWrite && (
-        <form onSubmit={submit} noValidate className="mb-6 grid gap-3 border-b border-slate-100 pb-5 sm:grid-cols-2">
+        <form ref={formRef} onSubmit={submit} noValidate className="mb-6 grid gap-3 border-b border-slate-100 pb-5 sm:grid-cols-2">
           <h3 className="text-sm font-medium text-slate-700 sm:col-span-2">
             {editing ? `Editar ${editing.name}` : 'Nova medicação'}
           </h3>
-          <TextField label="Medicamento" value={form.name} onChange={(event) => setField('name', event.target.value)} error={errors.name} maxLength={200} />
-          <TextField label="Dosagem" value={form.dosage} onChange={(event) => setField('dosage', event.target.value)} error={errors.dosage} maxLength={200} />
+          <TextField label="Medicamento" required value={form.name} onChange={(event) => setField('name', event.target.value)} error={errors.name} maxLength={200} />
+          <TextField label="Dosagem" required value={form.dosage} onChange={(event) => setField('dosage', event.target.value)} error={errors.dosage} maxLength={200} />
           <TextField label="Via de administração (opcional)" value={form.route} onChange={(event) => setField('route', event.target.value)} error={errors.route} maxLength={100} />
           <TextField label="Frequência (opcional)" value={form.frequency} onChange={(event) => setField('frequency', event.target.value)} error={errors.frequency} maxLength={100} />
-          <TextField label="Data de início" type="date" value={form.start_date} onChange={(event) => setField('start_date', event.target.value)} error={errors.start_date} />
+          <TextField label="Data de início" required type="date" value={form.start_date} onChange={(event) => setField('start_date', event.target.value)} error={errors.start_date} />
           <TextField label="Data de fim (opcional)" type="date" value={form.end_date} onChange={(event) => setField('end_date', event.target.value)} error={errors.end_date} />
           <div className="sm:col-span-2">
             <TextAreaField label="Instruções (opcional)" value={form.instructions} onChange={(event) => setField('instructions', event.target.value)} error={errors.instructions} maxLength={2000} />
@@ -174,7 +176,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
             <li key={medication.id} className="flex flex-wrap items-start justify-between gap-3 py-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium">{medication.name} · {medication.dosage}</p>
+                  <p id={`medication-${medication.id}`} className="font-medium">{medication.name} · {medication.dosage}</p>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{STATUS_LABELS[medication.status]}</span>
                 </div>
                 <p className="text-sm text-slate-500">
@@ -187,9 +189,9 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
               </div>
               {canWrite && medication.status === 'active' && (
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" disabled={busy} onClick={() => startEdit(medication)}>Editar</Button>
-                  <Button variant="secondary" disabled={busy} isLoading={update.isPending && update.variables?.id === medication.id && update.variables.payload.status === 'completed'} onClick={() => finish(medication, 'completed')}>Concluir</Button>
-                  <Button variant="secondary" disabled={busy} isLoading={deactivate.isPending && deactivate.variables === medication.id} onClick={() => finish(medication, 'discontinued')}>Descontinuar</Button>
+                  <Button variant="secondary" aria-describedby={`medication-${medication.id}`} disabled={busy} onClick={() => startEdit(medication)}>Editar</Button>
+                  <Button variant="secondary" aria-describedby={`medication-${medication.id}`} disabled={busy} isLoading={update.isPending && update.variables?.id === medication.id && update.variables.payload.status === 'completed'} onClick={() => finish(medication, 'completed')}>Concluir</Button>
+                  <Button variant="secondary" aria-describedby={`medication-${medication.id}`} disabled={busy} isLoading={deactivate.isPending && deactivate.variables === medication.id} onClick={() => finish(medication, 'discontinued')}>Descontinuar</Button>
                 </div>
               )}
             </li>

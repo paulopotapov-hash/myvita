@@ -50,13 +50,42 @@ Abre `http://localhost` apenas para uma verificação local. Um deployment real 
 ## Testes
 
 ```bash
-npm run test          # vitest run
+npm run test          # vitest run (unitários/componentes; não corre os specs E2E)
 npm run test:coverage # com cobertura
-npm run typecheck     # tsc -b --noEmit
+npm run typecheck     # tsc -b --noEmit (inclui e2e/)
 npm run lint          # oxlint
+npm run e2e           # Playwright, browser real contra o backend real (ver abaixo)
 ```
 
-Testes cobrem: cliente API (CSRF, credentials, parsing de erros), rotas protegidas, restrição por role, login (incluindo segundo fator), navegação por role, schemas de validação, mapeamento de erros do backend para campos de formulário e os fluxos clínicos (consultas, registos clínicos, medicação, consentimentos, notificações) e de conta (palavra-passe, contas da clínica).
+Testes unitários cobrem: cliente API (CSRF, credentials, parsing de erros), rotas protegidas, restrição por role, login (incluindo segundo fator), navegação por role, schemas de validação, mapeamento de erros do backend para campos de formulário, o componente `Modal`, a gestão de foco e os fluxos clínicos (consultas, registos clínicos, medicação, consentimentos, notificações) e de conta (palavra-passe, contas da clínica).
+
+### Testes E2E (Playwright)
+
+Correm no Chromium contra o **backend real** e uma base de dados PostgreSQL descartável; nada é mockado e não há atalhos de autenticação.
+
+Pré-requisitos (uma vez):
+
+```bash
+cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt   # ou define E2E_PYTHON
+psql postgres -c "create database myvita_e2e_test owner myvita"                       # ou define E2E_DATABASE_URL
+cd ../frontend && npx playwright install chromium
+```
+
+`npm run e2e` arranca o backend (`e2e/start-backend.sh`, porta 8010) e o Vite (porta 5174, com proxy para o backend), **apaga e volta a migrar** a base de dados E2E, cria uma clínica determinística pela API pública (administrador, médico, enfermeiro, dois pacientes) e guarda uma sessão por papel em `e2e/.auth/` (ignorado pelo git). O script recusa qualquer base de dados cujo nome não termine em `_test`. Também é preciso `psql` no PATH: as notificações são inseridas diretamente porque o backend ainda não as gera.
+
+- `auth`, `appointments`, `medical-records`, `medications`, `consent`, `notifications`, `security`: fluxos por papel, validação, 401 e rotas não autorizadas.
+- `a11y`: `axe-core` (WCAG 2.x A/AA) em todas as páginas principais, teclado, foco visível, diálogo, salto para o conteúdo.
+- `responsive`: 320, 375, 390, 768 e 1280 px — sem overflow horizontal, diálogo dentro do viewport, menu móvel.
+
+Limites de pedidos do backend (login 10/min, registo 5/min por IP) são respeitados: usa 1 worker, sem retries, e só os dois papéis de staff fazem login na preparação. `E2E_SCREENSHOTS=1` grava capturas em `test-results/screens/`. O CI existente não executa o E2E (precisa de PostgreSQL e do ambiente Python do backend).
+
+### Acessibilidade e responsividade
+
+- Estrutura: ligação «Saltar para o conteúdo», `<main>` focável, título do documento por página e foco movido para o conteúdo em cada navegação; menu móvel com `aria-expanded`/`aria-controls`, fechado com Escape.
+- Formulários: `<label>` associada, campos obrigatórios marcados (`required`), erros ligados ao campo (`aria-describedby`), foco no primeiro campo inválido após submeter, mensagens de estado em `role="status"` e de erro em `role="alert"`.
+- Diálogos: `Modal` com foco preso, Escape, restauro do foco e bloqueio de scroll.
+- Listas e tabelas: ações repetidas descrevem a linha a que se aplicam; tabela de pacientes com `caption` e cabeçalhos com `scope`.
+- Layout testado de 320 px a desktop; sem larguras fixas que forcem scroll lateral.
 
 ## Estado funcional
 

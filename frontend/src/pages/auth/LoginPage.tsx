@@ -10,6 +10,7 @@ import { safePostLoginPath } from '../../lib/navigation'
 import { loginSchema, mfaVerificationCodeSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { isMfaChallenge } from '../../types/api'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 export function LoginPage() {
   const { isAuthenticated } = useSession()
@@ -21,6 +22,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(fieldErrors)
   const [step, setStep] = useState<'credentials' | 'mfa'>('credentials')
   const [code, setCode] = useState('')
 
@@ -70,9 +72,9 @@ export function LoginPage() {
   if (step === 'mfa') {
     return (
       <AuthLayout title="Verificação em dois passos" subtitle="Introduz o código da tua aplicação autenticadora">
-        <form onSubmit={handleCodeSubmit} noValidate className="flex flex-col gap-4">
+        <form ref={formRef} onSubmit={handleCodeSubmit} noValidate className="flex flex-col gap-4">
           <TextField
-            label="Código de verificação"
+            label="Código de verificação" required
             inputMode="numeric"
             autoComplete="one-time-code"
             autoFocus
@@ -99,9 +101,9 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="Iniciar sessão" subtitle="Acede à tua conta myVita">
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <TextField
-          label="Email"
+          label="Email" required
           type="email"
           autoComplete="email"
           value={email}
@@ -109,7 +111,7 @@ export function LoginPage() {
           error={fieldErrors.email}
         />
         <TextField
-          label="Palavra-passe"
+          label="Palavra-passe" required
           type="password"
           autoComplete="current-password"
           value={password}

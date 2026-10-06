@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
@@ -7,6 +7,7 @@ import { toUserMessage } from '../../lib/errorMessages'
 import { invitationAcceptSchema, loginSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { authService } from '../../services/auth'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 /**
  * Self-service entry point. No delivery channel is approved yet, so the
@@ -16,6 +17,7 @@ import { authService } from '../../services/auth'
 export function PasswordResetRequestPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const formRef = useFocusFirstInvalid(useMemo<Record<string, string>>(() => Object.fromEntries(error ? [['email', error]] : []), [error]))
   const request = useMutation({ mutationFn: (email: string) => authService.requestPasswordReset(email) })
 
   function submit(event: React.FormEvent) {
@@ -34,8 +36,8 @@ export function PasswordResetRequestPage() {
       {request.data ? (
         <p role="status" className="text-sm text-slate-700">{request.data.detail}</p>
       ) : (
-        <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-          <TextField label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={error ?? undefined} />
+        <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
+          <TextField label="Email" required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={error ?? undefined} />
           <Button type="submit" isLoading={request.isPending}>Pedir ajuda</Button>
         </form>
       )}
@@ -52,6 +54,7 @@ export function PasswordResetConfirmPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const confirmFormRef = useFocusFirstInvalid(fieldErrors)
   const confirm = useMutation({ mutationFn: () => authService.confirmPasswordReset(token, password) })
 
   // Drop the token from the address bar/history as soon as it is read.
@@ -74,9 +77,9 @@ export function PasswordResetConfirmPage() {
     <AuthLayout title="Redefinir palavra-passe" subtitle="Escolhe uma nova palavra-passe">
       {!token && <p role="alert" className="text-sm text-red-600">Ligação de redefinição inválida ou incompleta.</p>}
       {token && !confirm.isSuccess && (
-        <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-          <TextField label="Nova palavra-passe" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} error={fieldErrors.password} />
-          <TextField label="Confirmar palavra-passe" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
+        <form ref={confirmFormRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
+          <TextField label="Nova palavra-passe" required type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} error={fieldErrors.password} />
+          <TextField label="Confirmar palavra-passe" required type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} error={fieldErrors.confirm_password} />
           {fieldErrors._root && <p role="alert" className="text-sm text-red-600">{fieldErrors._root}</p>}
           <Button type="submit" isLoading={confirm.isPending}>Guardar palavra-passe</Button>
         </form>

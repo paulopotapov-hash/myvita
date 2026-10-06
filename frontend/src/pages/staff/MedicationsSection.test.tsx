@@ -322,4 +322,21 @@ describe('MedicationsSection', () => {
       expect(screen.getByRole('button', { name: 'Adicionar medicação' })).toBeDisabled()
     })
   })
+
+  it('moves focus to the first invalid field after a failed submit', async () => {
+    const user = userEvent.setup()
+    renderSection()
+    await user.click(screen.getByRole('button', { name: 'Adicionar medicação' }))
+    expect(screen.getByLabelText('Medicamento')).toHaveFocus()
+    expect(screen.getByLabelText('Medicamento')).toBeRequired()
+    expect(screen.getByLabelText('Medicamento')).toHaveAccessibleDescription('Indica o nome do medicamento.')
+  })
+
+  it('gives each row action the medication it acts on as its description', () => {
+    setItems([active])
+    renderSection()
+    for (const name of ['Editar', 'Concluir', 'Descontinuar']) {
+      expect(screen.getByRole('button', { name })).toHaveAccessibleDescription('Amoxicilina · 500 mg')
+    }
+  })
 })

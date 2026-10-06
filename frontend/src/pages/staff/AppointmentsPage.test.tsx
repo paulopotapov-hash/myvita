@@ -234,4 +234,28 @@ describe('AppointmentsPage clinical workflow', () => {
       expect(screen.getByRole('button', { name: 'Cancelar consulta' })).toBeDisabled()
     })
   })
+
+  describe('dialog accessibility', () => {
+    it('moves focus into the dialog, closes on Escape and returns focus to the opener', async () => {
+      appointmentState.rows = [{
+        id: 'appointment-1', clinic_id: 'clinic-1', patient_id: 'patient-1', staff_id: 'staff-1',
+        scheduled_at: '2026-10-20T10:30:00Z', duration_minutes: 30, status: 'scheduled', reason: 'Consulta anual',
+      }]
+      const user = userEvent.setup()
+      renderPage()
+      const opener = screen.getByRole('button', { name: 'Detalhes' })
+      await user.click(opener)
+      expect(screen.getByRole('dialog', { name: 'Detalhe da consulta' })).toHaveFocus()
+      await user.keyboard('{Escape}')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(opener).toHaveFocus()
+    })
+
+    it('focuses the first invalid field of the create form', async () => {
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(screen.getByRole('button', { name: 'Marcar consulta' }))
+      expect(screen.getByLabelText('Paciente')).toHaveFocus()
+    })
+  })
 })

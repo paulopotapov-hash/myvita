@@ -1,10 +1,11 @@
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toUserMessage } from '../lib/errorMessages'
 import { mfaCodeSchema } from '../lib/validation'
 import { authService } from '../services/auth'
 import { Button } from './Button'
 import { TextField } from './TextField'
+import { useFocusFirstInvalid } from '../hooks/useFocusFirstInvalid'
 
 /**
  * TOTP enrolment: start setup (the seed is shown exactly once), confirm with
@@ -14,6 +15,7 @@ import { TextField } from './TextField'
 export function MfaEnrolment({ onDone }: { onDone: () => void }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const formRef = useFocusFirstInvalid(useMemo<Record<string, string>>(() => Object.fromEntries(error ? [['code', error]] : []), [error]))
   const setup = useMutation({ mutationFn: () => authService.startMfaSetup() })
   const enable = useMutation({ mutationFn: (code: string) => authService.enableMfa(code) })
 
@@ -67,7 +69,7 @@ export function MfaEnrolment({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
       <p className="text-sm text-slate-700">
         Na aplicação autenticadora, adiciona uma conta com esta chave (ou abre a ligação neste dispositivo):
       </p>
@@ -79,6 +81,7 @@ export function MfaEnrolment({ onDone }: { onDone: () => void }) {
       </a>
       <TextField
         label="Código de 6 dígitos"
+        required
         inputMode="numeric"
         autoComplete="one-time-code"
         value={code}

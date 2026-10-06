@@ -65,4 +65,37 @@ describe('AppLayout navigation', () => {
     expect(screen.queryAllByRole('link', { name: 'Equipa' })).toHaveLength(0)
     expect(screen.getAllByRole('link', { name: 'Pacientes' }).length).toBeGreaterThan(0)
   })
+
+  it('offers a skip link that moves focus to the main content', async () => {
+    const user = userEvent.setup()
+    renderLayoutAsRole('patient')
+    await screen.findByText('Ana')
+    await user.tab()
+    const skip = screen.getByRole('link', { name: 'Saltar para o conteúdo' })
+    expect(skip).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('main')).toHaveFocus()
+  })
+
+  it('names the page in the document title', async () => {
+    renderLayoutAsRole('patient')
+    await screen.findByText('Ana')
+    expect(document.title).toBe('Início · myVita')
+  })
+
+  it('exposes the mobile menu state and closes it with Escape, returning focus to the toggle', async () => {
+    const user = userEvent.setup()
+    renderLayoutAsRole('patient')
+    await screen.findByText('Ana')
+    const toggle = screen.getByRole('button', { name: 'Menu de navegação' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const drawer = document.getElementById(toggle.getAttribute('aria-controls') ?? '')
+    expect(drawer).not.toBeNull()
+    await user.tab()
+    await user.keyboard('{Escape}')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveFocus()
+  })
 })

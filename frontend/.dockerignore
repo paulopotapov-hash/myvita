@@ -4,3 +4,6 @@ dist
 .env.*
 !.env.example
 coverage
+test-results
+playwright-report
+e2e/.auth

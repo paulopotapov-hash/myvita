@@ -5,9 +5,11 @@ import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { Modal } from '../../components/Modal'
 import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { useAppointments, useCancelAppointment, useCreateAppointment, usePatients, useStaff, useUpdateAppointment } from '../../hooks/useClinicData'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 import { useSession } from '../../hooks/useSession'
 import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
@@ -56,7 +58,7 @@ export function AppointmentsPage() {
             {appointments.data.map((appointment) => (
               <li key={appointment.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div>
-                  <p className="font-medium text-slate-900">{formatDateTime(appointment.scheduled_at)}</p>
+                  <p id={`appointment-${appointment.id}`} className="font-medium text-slate-900">{formatDateTime(appointment.scheduled_at)}</p>
                   <p className="text-sm text-slate-500">
                     {user?.role === 'patient'
                       ? `Com ${staffNameById.get(appointment.staff_id) ?? 'profissional'}`
@@ -64,11 +66,11 @@ export function AppointmentsPage() {
                           staffNameById.get(appointment.staff_id) ?? 'profissional'
                         }`}
                   </p>
-                  {appointment.reason && <p className="text-sm text-slate-400">{appointment.reason}</p>}
+                  {appointment.reason && <p className="text-sm text-slate-600">{appointment.reason}</p>}
                 </div>
                 <div className="flex items-center gap-3">
                   <AppointmentStatusBadge status={appointment.status} />
-                  <Button variant="secondary" onClick={() => { setNotice(''); setSelected(appointment) }}>Detalhes</Button>
+                  <Button variant="secondary" aria-describedby={`appointment-${appointment.id}`} onClick={() => { setNotice(''); setSelected(appointment) }}>Detalhes</Button>
                 </div>
               </li>
             ))}
@@ -88,6 +90,7 @@ function AppointmentDetailDialog({ appointment, canEdit, canHandleReason, patien
   const [duration, setDuration] = useState(String(appointment.duration_minutes))
   const [reason, setReason] = useState(appointment.reason ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(errors)
   const busy = updateAppointment.isPending || cancelAppointment.isPending
   const mutable = canEdit && (appointment.status === 'scheduled' || appointment.status === 'confirmed')
 
@@ -120,13 +123,12 @@ function AppointmentDetailDialog({ appointment, canEdit, canHandleReason, patien
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="appointment-detail-title" className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/40 p-4">
-      <section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+    <Modal titleId="appointment-detail-title" onClose={onClose}>
         <div className="flex items-start justify-between gap-4"><div><h2 id="appointment-detail-title" className="text-lg font-semibold">Detalhe da consulta</h2><p className="text-sm text-slate-500">{formatDateTime(appointment.scheduled_at)}</p></div><button type="button" aria-label="Fechar detalhes" onClick={onClose} className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100">×</button></div>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2"><div><dt className="text-sm text-slate-500">Estado</dt><dd className="mt-1"><AppointmentStatusBadge status={appointment.status} /></dd></div><div><dt className="text-sm text-slate-500">Paciente</dt><dd className="font-medium">{patientName}</dd></div><div><dt className="text-sm text-slate-500">Profissional</dt><dd className="font-medium">{staffName}</dd></div></dl>
         {mutable ? (
-          <form className="mt-5 grid gap-3" onSubmit={save} noValidate>
-            <TextField label="Duração (minutos)" type="number" min={5} max={480} value={duration} onChange={(event) => setDuration(event.target.value)} error={errors.duration_minutes} />
+          <form ref={formRef} className="mt-5 grid gap-3" onSubmit={save} noValidate>
+            <TextField label="Duração (minutos)" type="number" required min={5} max={480} value={duration} onChange={(event) => setDuration(event.target.value)} error={errors.duration_minutes} />
             {canHandleReason && <TextField label="Motivo" value={reason} onChange={(event) => setReason(event.target.value)} error={errors.reason} maxLength={500} />}
             {errors._root && <FormMessage kind="error">{errors._root}</FormMessage>}
             <div className="flex flex-wrap gap-3">
@@ -135,8 +137,7 @@ function AppointmentDetailDialog({ appointment, canEdit, canHandleReason, patien
             </div>
           </form>
         ) : <p className="mt-5 text-sm text-slate-600">{appointment.reason ? `${appointment.reason} · ` : ''}{appointment.duration_minutes} minutos</p>}
-      </section>
-    </div>
+    </Modal>
   )
 }
 
@@ -148,6 +149,7 @@ function CreateAppointmentForm({ canHandleReason, onCreated }: { canHandleReason
   const [form, setForm] = useState({ patient_id: '', staff_id: '', scheduled_at: '', duration_minutes: '30', reason: '' })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [justCreated, setJustCreated] = useState(false)
+  const formRef = useFocusFirstInvalid(fieldErrors)
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -185,8 +187,8 @@ function CreateAppointmentForm({ canHandleReason, onCreated }: { canHandleReason
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6">
       <h2 className="mb-4 text-lg font-medium text-slate-900">Marcar consulta</h2>
-      <form onSubmit={handleSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
-        <SelectField label="Paciente" value={form.patient_id} onChange={(e) => update('patient_id', e.target.value)} error={fieldErrors.patient_id}>
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
+        <SelectField label="Paciente" required value={form.patient_id} onChange={(e) => update('patient_id', e.target.value)} error={fieldErrors.patient_id}>
           <option value="">Escolhe um paciente…</option>
           {(patients.data ?? []).map((p) => (
             <option key={p.id} value={p.id}>
@@ -194,7 +196,7 @@ function CreateAppointmentForm({ canHandleReason, onCreated }: { canHandleReason
             </option>
           ))}
         </SelectField>
-        <SelectField label="Profissional" value={form.staff_id} onChange={(e) => update('staff_id', e.target.value)} error={fieldErrors.staff_id}>
+        <SelectField label="Profissional" required value={form.staff_id} onChange={(e) => update('staff_id', e.target.value)} error={fieldErrors.staff_id}>
           <option value="">Escolhe um profissional…</option>
           {(staff.data ?? []).map((s) => (
             <option key={s.id} value={s.id}>
@@ -206,6 +208,7 @@ function CreateAppointmentForm({ canHandleReason, onCreated }: { canHandleReason
         <TextField
           label="Data e hora"
           type="datetime-local"
+          required
           value={form.scheduled_at}
           onChange={(e) => update('scheduled_at', e.target.value)}
           error={fieldErrors.scheduled_at}
@@ -213,6 +216,7 @@ function CreateAppointmentForm({ canHandleReason, onCreated }: { canHandleReason
         <TextField
           label="Duração (minutos)"
           type="number"
+          required
           min={5}
           max={480}
           value={form.duration_minutes}

@@ -9,6 +9,7 @@ import { toUserMessage } from '../../lib/errorMessages'
 import { ApiError } from '../../lib/apiClient'
 import { clinicOnboardingSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const EMPTY_FORM = {
   clinic_name: '',
@@ -26,6 +27,7 @@ export function ClinicOnboardingPage() {
   const publicConfig = usePublicConfig()
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(fieldErrors)
 
   if (isAuthenticated) return <Navigate to="/app" replace />
   if (publicConfig.isSuccess && !publicConfig.data.clinic_onboarding_enabled) {
@@ -65,9 +67,9 @@ export function ClinicOnboardingPage() {
 
   return (
     <AuthLayout title="Criar conta da clínica" subtitle="Regista a tua clínica e a conta de administrador">
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <TextField
-          label="Nome da clínica"
+          label="Nome da clínica" required
           value={form.clinic_name}
           onChange={(e) => update('clinic_name', e.target.value)}
           error={fieldErrors.clinic_name}
@@ -85,13 +87,13 @@ export function ClinicOnboardingPage() {
         />
         <hr className="my-2 border-slate-200" />
         <TextField
-          label="O teu nome"
+          label="O teu nome" required
           value={form.admin_full_name}
           onChange={(e) => update('admin_full_name', e.target.value)}
           error={fieldErrors.admin_full_name}
         />
         <TextField
-          label="Email"
+          label="Email" required
           type="email"
           autoComplete="email"
           value={form.admin_email}
@@ -99,7 +101,7 @@ export function ClinicOnboardingPage() {
           error={fieldErrors.admin_email}
         />
         <TextField
-          label="Palavra-passe"
+          label="Palavra-passe" required
           type="password"
           autoComplete="new-password"
           value={form.admin_password}

@@ -32,19 +32,20 @@ export function PatientsPage() {
         )}
         {rows && rows.length > 0 && (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-xl text-left text-sm">
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">Pacientes da clínica</caption>
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
-                <th className="py-2 font-medium">Nome</th>
-                <th className="py-2 font-medium">Estado</th>
+                <th scope="col" className="py-2 font-medium">Nome</th>
+                <th scope="col" className="py-2 font-medium">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((patient) => (
                 <tr key={patient.id}>
-                  <td className="py-2 font-medium text-slate-900">
+                  <th scope="row" className="py-2 text-left font-medium text-slate-900">
                     {canOpenClinicalRecord ? <Link className="text-teal-700 hover:underline" to={`/app/pacientes/${patient.id}`}>{patient.full_name}</Link> : patient.full_name}
-                  </td>
+                  </th>
                   <td className="py-2 text-slate-600">{patient.is_active ? 'Ativo' : 'Inativo'}</td>
                 </tr>
               ))}

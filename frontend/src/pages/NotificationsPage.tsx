@@ -38,7 +38,7 @@ export function NotificationsPage() {
               <li key={notification.id} className={`flex flex-wrap items-start justify-between gap-3 py-4 ${notification.is_read ? 'opacity-70' : ''}`}>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-medium">{notification.title}</p>
+                    <p id={`notification-${notification.id}`} className="font-medium">{notification.title}</p>
                     {!notification.is_read && <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs text-teal-800">Nova</span>}
                   </div>
                   <p className="text-sm text-slate-600">{notification.message}</p>
@@ -47,6 +47,7 @@ export function NotificationsPage() {
                 {!notification.is_read && (
                   <Button
                     variant="secondary"
+                    aria-describedby={`notification-${notification.id}`}
                     disabled={markRead.isPending}
                     isLoading={markRead.isPending && markRead.variables === notification.id}
                     onClick={() => read(notification.id)}

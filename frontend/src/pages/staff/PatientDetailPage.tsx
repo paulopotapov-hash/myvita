@@ -18,6 +18,7 @@ import type { ConsentType, PatientPublic } from '../../types/api'
 import { MedicalRecordsSection } from './MedicalRecordsSection'
 import { MedicationsSection } from './MedicationsSection'
 import { ClinicalDocumentsSection } from '../shared/ClinicalDocumentsSection'
+import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const CONSENT_LABELS: Record<ConsentType, string> = {
   treatment: 'Tratamento',
@@ -31,6 +32,7 @@ function PatientUpdateForm({ patient, patientOwnRecord }: { patient: PatientPubl
   const [phone, setPhone] = useState(patient.phone ?? '')
   const [healthNumber, setHealthNumber] = useState(patient.national_health_number ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(errors)
   const [success, setSuccess] = useState('')
 
   function submit(event: React.FormEvent) {
@@ -56,7 +58,7 @@ function PatientUpdateForm({ patient, patientOwnRecord }: { patient: PatientPubl
   }
 
   return (
-    <form className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2" onSubmit={submit} noValidate>
+    <form ref={formRef} className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2" onSubmit={submit} noValidate>
       <TextField label="Telefone" value={phone} onChange={(event) => setPhone(event.target.value)} error={errors.phone} maxLength={30} />
       {!patientOwnRecord && (
         <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} error={errors.national_health_number} maxLength={30} />
@@ -152,6 +154,7 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
   const revoke = useRevokeConsent(patientId)
   const [form, setForm] = useState({ consent_type: 'treatment' as ConsentType, purpose: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const formRef = useFocusFirstInvalid(errors)
   const [success, setSuccess] = useState('')
   const busy = grant.isPending || revoke.isPending
 
@@ -186,16 +189,17 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6">
+    <section aria-labelledby="consents-title" className="rounded-xl border border-slate-200 bg-white p-6">
       <div className="mb-5">
-        <h2 className="text-lg font-medium">Consentimentos</h2>
+        <h2 id="consents-title" className="text-lg font-medium">Consentimentos</h2>
         <p className="text-sm text-slate-500">A revogação preserva sempre o registo original no histórico.</p>
       </div>
 
       {canManage && (
-        <form onSubmit={submit} noValidate className="mb-6 grid gap-4 border-b border-slate-200 pb-6 md:grid-cols-3">
+        <form ref={formRef} onSubmit={submit} noValidate className="mb-6 grid gap-4 border-b border-slate-200 pb-6 md:grid-cols-3">
           <SelectField
             label="Tipo"
+            required
             value={form.consent_type}
             error={errors.consent_type}
             onChange={(event) => {
@@ -206,7 +210,7 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
             {Object.entries(CONSENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </SelectField>
           <TextField
-            label="Finalidade"
+            label="Finalidade" required
             value={form.purpose}
             onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}
             error={errors.purpose}
@@ -227,17 +231,18 @@ function ConsentSection({ patientId, canManage }: { patientId: string; canManage
             <li key={consent.id} className="flex flex-wrap items-start justify-between gap-3 py-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-medium">{CONSENT_LABELS[consent.consent_type]}</p>
+                  <p id={`consent-${consent.id}-type`} className="font-medium">{CONSENT_LABELS[consent.consent_type]}</p>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${consent.status === 'granted' ? 'bg-teal-50 text-teal-800' : 'bg-slate-100 text-slate-700'}`}>
                     {consent.status === 'granted' ? 'Concedido' : 'Revogado'}
                   </span>
                 </div>
-                <p className="text-sm text-slate-600">{consent.purpose}</p>
+                <p id={`consent-${consent.id}-purpose`} className="text-sm text-slate-600">{consent.purpose}</p>
                 <p className="mt-1 text-xs text-slate-500">Concedido em {formatDateTime(consent.granted_at)}{consent.revoked_at ? ` · Revogado em ${formatDateTime(consent.revoked_at)}` : ''}</p>
               </div>
               {canManage && consent.status === 'granted' && (
                 <Button
                   variant="secondary"
+                  aria-describedby={`consent-${consent.id}-type consent-${consent.id}-purpose`}
                   disabled={busy}
                   isLoading={revoke.isPending && revoke.variables === consent.id}
                   onClick={() => confirmRevoke(consent.id)}
