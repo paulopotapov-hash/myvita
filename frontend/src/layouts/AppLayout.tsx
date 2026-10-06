@@ -4,6 +4,7 @@ import { useLogout } from '../hooks/useAuthMutations'
 import { useSession } from '../hooks/useSession'
 import type { UserRole } from '../types/api'
 import { toUserMessage } from '../lib/errorMessages'
+import { isClinician, USER_ROLE_LABELS } from '../lib/roles'
 
 interface NavItem {
   to: string
@@ -39,12 +40,6 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   ],
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  patient: 'Paciente',
-  staff: 'Profissional de saúde',
-  clinic_admin: 'Administrador da clínica',
-}
-
 export function AppLayout() {
   const { user } = useSession()
   const logout = useLogout()
@@ -56,7 +51,7 @@ export function AppLayout() {
   const role = user?.role
   const navItems = role
     ? NAV_BY_ROLE[role].filter(
-        (item) => item.to !== '/app/mensagens' || user.role === 'patient' || user.staff_role === 'doctor' || user.staff_role === 'nurse',
+        (item) => item.to !== '/app/mensagens' || user.role === 'patient' || isClinician(user),
       )
     : []
 
@@ -134,7 +129,7 @@ export function AppLayout() {
           <div className="ml-auto flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-medium text-slate-900">{user.full_name}</p>
-              <p className="text-xs text-slate-500">{ROLE_LABELS[user.role]}</p>
+              <p className="text-xs text-slate-500">{USER_ROLE_LABELS[user.role]}</p>
             </div>
             <button
               type="button"

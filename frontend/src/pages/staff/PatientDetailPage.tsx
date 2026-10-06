@@ -13,6 +13,7 @@ import { useGrantConsent, usePatientConsents, useRevokeConsent } from '../../hoo
 import { useSession } from '../../hooks/useSession'
 import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDate, formatDateTime } from '../../lib/formatDate'
+import { isClinician } from '../../lib/roles'
 import { consentCreateSchema, patientUpdateSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { ConsentType, PatientPublic } from '../../types/api'
 import { MedicalRecordsSection } from './MedicalRecordsSection'
@@ -80,7 +81,7 @@ export function PatientDetailPage({ own = false }: { own?: boolean }) {
   const appointments = useAppointments()
   const patient = patientQuery.data
   const patientAppointments = (appointments.data ?? []).filter((item) => item.patient_id === id)
-  const canWriteClinical = user?.role === 'staff' && (user.staff_role === 'doctor' || user.staff_role === 'nurse')
+  const canWriteClinical = isClinician(user)
   const canReadClinical = user?.role === 'patient' || canWriteClinical
 
   if (!id) return <ErrorState message="A sessão não contém uma identidade de paciente válida." />

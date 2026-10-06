@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { expect, request } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { BrowserContext, Page } from '@playwright/test'
 
 export const PASSWORD = 'SenhaForte123!'
 export const AUTH_DIR = path.join(import.meta.dirname, '.auth')
@@ -18,6 +18,13 @@ export interface Seed {
 
 export function authState(role: Role): string {
   return path.join(AUTH_DIR, `${role}.json`)
+}
+
+/** Swap the browser's cookies to a pre-seeded role without spending a login. */
+export async function switchRole(context: BrowserContext, role: Role): Promise<void> {
+  const state = JSON.parse(readFileSync(authState(role), 'utf-8')) as { cookies: Parameters<BrowserContext['addCookies']>[0] }
+  await context.clearCookies()
+  await context.addCookies(state.cookies)
 }
 
 export function loadSeed(): Seed {

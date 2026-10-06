@@ -3,10 +3,10 @@ import uuid
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import audit_denials, client_ip, record_audit_event
+from app.core.audit import audit_denials, record_access
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, AuditResult, ClinicalConversation, ClinicalMessage, User
+from app.models import AuditAction, ClinicalConversation, ClinicalMessage, User
 from app.modules.messaging.schemas import (
     ConversationCreate,
     ConversationDetail,
@@ -35,18 +35,7 @@ def _audit(
     *,
     metadata: dict[str, object] | None = None,
 ) -> None:
-    record_audit_event(
-        action=action,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="conversation",
-        resource_id=conversation_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata=metadata,
-    )
+    record_access(request, user, action, "conversation", conversation_id, metadata=metadata)
 
 
 def _message_public(message: ClinicalMessage) -> MessagePublic:

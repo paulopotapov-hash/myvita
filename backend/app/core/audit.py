@@ -17,7 +17,7 @@ from app.models.audit_log import AuditAction, AuditLog, AuditResult
 from app.models.staff import Staff
 from app.models.user import User
 
-__all__ = ["record_audit_event", "record_denied_access", "audit_denials", "client_ip"]
+__all__ = ["record_audit_event", "record_access", "record_denied_access", "audit_denials", "client_ip"]
 
 logger = logging.getLogger("myvita.audit")
 
@@ -88,6 +88,30 @@ def record_audit_event(
         session.rollback()
     finally:
         session.close()
+
+
+def record_access(
+    request: Request,
+    user: User,
+    action: AuditAction,
+    resource_type: str,
+    resource_id: uuid.UUID | str | None,
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Audit a successful action by the authenticated user, under the actor's own clinic."""
+    record_audit_event(
+        action=action,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata=metadata,
+    )
 
 
 def record_denied_access(

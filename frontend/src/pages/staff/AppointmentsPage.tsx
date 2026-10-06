@@ -13,13 +13,14 @@ import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 import { useSession } from '../../hooks/useSession'
 import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
+import { isClinician } from '../../lib/roles'
 import { appointmentCreateSchema, appointmentUpdateSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { AppointmentPublic } from '../../types/api'
 
 export function AppointmentsPage() {
   const { user } = useSession()
   const canCreate = user?.role === 'staff' || user?.role === 'clinic_admin'
-  const canHandleReason = user?.role === 'staff' && (user.staff_role === 'doctor' || user.staff_role === 'nurse')
+  const canHandleReason = isClinician(user)
   const appointments = useAppointments()
   const staff = useStaff()
   const patients = usePatients(canCreate)

@@ -1,13 +1,11 @@
 """B4 medication management: lifecycle, validation, RBAC, tenant isolation, and audit."""
 
-# ruff: noqa: F401, F811
 from datetime import date, timedelta
 
-import pytest
 from sqlalchemy.orm import Session
 
 from app.models import AuditAction, AuditLog, Medication, MedicationStatus
-from tests.test_clinical_contracts_b6 import _tenant, _use, client
+from tests.test_clinical_contracts_b6 import _tenant, _use
 
 
 def _payload() -> dict:
@@ -132,7 +130,7 @@ def test_tenant_isolation_validation_history_and_safe_audit(client):
     ).status_code == 422
     assert client.get("/api/v1/medications/not-a-uuid").status_code == 422
 
-    db: Session = client.test_session()
+    db: Session = client.session_factory()
     try:
         medication = db.get(Medication, medication_id)
         assert medication is not None

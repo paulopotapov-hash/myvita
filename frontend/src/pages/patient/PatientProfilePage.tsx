@@ -1,11 +1,6 @@
 import { useSession } from '../../hooks/useSession'
 import { useOwnClinicName } from '../../hooks/useOwnClinicName'
-
-const ROLE_LABELS = {
-  patient: 'Paciente',
-  staff: 'Profissional de saúde',
-  clinic_admin: 'Administrador da clínica',
-} as const
+import { USER_ROLE_LABELS } from '../../lib/roles'
 
 export function PatientProfilePage() {
   const { user } = useSession()
@@ -19,7 +14,7 @@ export function PatientProfilePage() {
       <dl className="max-w-md divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
         <Row label="Nome" value={user.full_name} />
         <Row label="Email" value={user.email} />
-        <Row label="Tipo de conta" value={ROLE_LABELS[user.role]} />
+        <Row label="Tipo de conta" value={USER_ROLE_LABELS[user.role]} />
         <Row label="Clínica" value={clinicName ?? '—'} />
       </dl>
       <p className="max-w-md text-sm text-slate-500">

@@ -9,37 +9,10 @@ schema is migrated and truncated by tests/conftest.py), and read the audit_logs 
 back through app.core.database.SessionLocal — the same session factory the
 app itself writes through.
 """
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.core.database import SessionLocal, get_db
-from app.core.rate_limit import limiter
-from app.main import app
+from app.core.database import SessionLocal
 from app.models import AuditAction, AuditLog, AuditResult
-from tests.conftest import TEST_DATABASE_URL, csrf_headers
-
-
-@pytest.fixture()
-def client():
-    engine = create_engine(TEST_DATABASE_URL, future=True)
-    TestSessionLocal = sessionmaker(bind=engine, future=True)
-
-    def override_get_db():
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    limiter.reset()
-    with TestClient(app) as c:
-        yield c
-
-    app.dependency_overrides.clear()
-    engine.dispose()
+from tests.conftest import csrf_headers
 
 
 def _audit_events(action: AuditAction) -> list[AuditLog]:

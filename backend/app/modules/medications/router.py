@@ -4,10 +4,10 @@ from typing import Never
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event, record_denied_access
+from app.core.audit import record_access, record_denied_access
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, AuditResult, Medication, MedicationStatus, User
+from app.models import AuditAction, Medication, MedicationStatus, User
 from app.modules.medications.schemas import (
     MedicationCreateRequest,
     MedicationDeactivateRequest,
@@ -26,17 +26,7 @@ router = APIRouter()
 
 
 def _audit(request: Request, user: User, action: AuditAction, medication: Medication) -> None:
-    record_audit_event(
-        action=action,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="medication",
-        resource_id=medication.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
+    record_access(request, user, action, "medication", medication.id)
 
 
 def _audit_and_raise(request: Request, user: User, resource_id: uuid.UUID, exc: HTTPException) -> Never:
@@ -68,17 +58,8 @@ def list_for_patient(
     except HTTPException as exc:
         _audit_and_raise(request, user, patient_id, exc)
     response.headers["X-Total-Count"] = str(total)
-    record_audit_event(
-        action=AuditAction.MEDICATION_VIEWED,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="medication_list",
-        resource_id=patient_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={"count": len(medications)},
+    record_access(
+        request, user, AuditAction.MEDICATION_VIEWED, "medication_list", patient_id, metadata={"count": len(medications)}
     )
     return medications
 

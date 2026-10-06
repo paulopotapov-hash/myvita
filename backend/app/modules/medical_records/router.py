@@ -3,10 +3,10 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.core.audit import audit_denials, client_ip, record_audit_event
+from app.core.audit import audit_denials, record_access
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, AuditResult, MedicalRecord, MedicalRecordRevision, User
+from app.models import AuditAction, MedicalRecord, MedicalRecordRevision, User
 from app.modules.medical_records.schemas import (
     MedicalRecordCreateRequest,
     MedicalRecordPublic,
@@ -19,17 +19,7 @@ router = APIRouter()
 
 
 def _audit(request: Request, user: User, action: AuditAction, record: MedicalRecord) -> None:
-    record_audit_event(
-        action=action,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="medical_record",
-        resource_id=record.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
+    record_access(request, user, action, "medical_record", record.id)
 
 
 @router.get("/patients/{patient_id}/medical-records", response_model=list[MedicalRecordPublic])
@@ -41,17 +31,8 @@ def list_for_patient(
 ) -> list[MedicalRecord]:
     with audit_denials(request, user, "medical_record", patient_id):
         records = list_records(db, patient_id, user)
-    record_audit_event(
-        action=AuditAction.MEDICAL_RECORD_VIEWED,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="medical_record_list",
-        resource_id=patient_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={"count": len(records)},
+    record_access(
+        request, user, AuditAction.MEDICAL_RECORD_VIEWED, "medical_record_list", patient_id, metadata={"count": len(records)}
     )
     return records
 

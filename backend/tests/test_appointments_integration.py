@@ -12,35 +12,8 @@ AND the matching CSRF cookie for each identity — the CSRF token is bound
 to a specific user's session, not shared across identities.
 """
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.core.database import get_db
-from app.main import app
-from tests.conftest import TEST_DATABASE_URL
-
-
-@pytest.fixture()
-def client():
-    engine = create_engine(TEST_DATABASE_URL, future=True)
-    TestSessionLocal = sessionmaker(bind=engine, future=True)
-
-    def override_get_db():
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
-
-    app.dependency_overrides.clear()
-    engine.dispose()
 
 
 def _capture_identity(response) -> dict:

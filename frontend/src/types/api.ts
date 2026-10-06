@@ -307,15 +307,6 @@ export interface PatientRegisterRequest {
   phone?: string
 }
 
-export interface StaffCreateRequest {
-  full_name: string
-  email: string
-  password: string
-  staff_role: StaffRole
-  specialty?: string
-  license_number?: string
-}
-
 export interface AppointmentCreateRequest {
   patient_id: string
   staff_id: string

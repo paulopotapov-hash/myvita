@@ -3,40 +3,8 @@ Integration tests exercising the real HTTP app (FastAPI TestClient), not
 just the ORM layer. These mirror the manual smoke test run during
 development, kept here so they run in CI going forward.
 """
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.core.database import get_db
-from app.main import app
-from tests.conftest import TEST_DATABASE_URL, csrf_headers
-
-
-@pytest.fixture()
-def client():
-    """
-    Full-stack client against a real, temporary schema on the test Postgres
-    instance. Each test gets a clean slate (tests/conftest.py truncates every table), since
-    HTTP requests run their own independent DB sessions/transactions that
-    a single outer-transaction fixture can't wrap.
-    """
-    engine = create_engine(TEST_DATABASE_URL, future=True)
-    TestSessionLocal = sessionmaker(bind=engine, future=True)
-
-    def override_get_db():
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
-
-    app.dependency_overrides.clear()
-    engine.dispose()
+from tests.conftest import csrf_headers
 
 
 def _onboard_clinic(client, email="admin@clinica.pt"):

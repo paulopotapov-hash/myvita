@@ -3,10 +3,10 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.core.audit import audit_denials, client_ip, record_audit_event
+from app.core.audit import audit_denials, record_access
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, AuditResult, Consent, User
+from app.models import AuditAction, Consent, User
 from app.modules.consents.schemas import ConsentCreateRequest, ConsentPublic
 from app.modules.consents.service import get_consent, grant_consent, list_consents, revoke_consent
 
@@ -14,17 +14,7 @@ router = APIRouter()
 
 
 def _audit(request: Request, user: User, action: AuditAction, consent: Consent) -> None:
-    record_audit_event(
-        action=action,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="consent",
-        resource_id=consent.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
+    record_access(request, user, action, "consent", consent.id)
 
 
 @router.get("/patients/{patient_id}/consents", response_model=list[ConsentPublic])
@@ -36,17 +26,8 @@ def list_patient_consents(
 ) -> list[Consent]:
     with audit_denials(request, user, "consent", patient_id):
         consents = list_consents(db, patient_id, user)
-    record_audit_event(
-        action=AuditAction.CONSENT_VIEWED,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        resource_type="consent_list",
-        resource_id=patient_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={"count": len(consents)},
+    record_access(
+        request, user, AuditAction.CONSENT_VIEWED, "consent_list", patient_id, metadata={"count": len(consents)}
     )
     return consents
 

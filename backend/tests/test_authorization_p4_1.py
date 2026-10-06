@@ -1,33 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.core.database import get_db
-from app.main import app
-from tests.conftest import TEST_DATABASE_URL
-
-
-@pytest.fixture()
-def client():
-    engine = create_engine(TEST_DATABASE_URL, future=True)
-    test_session = sessionmaker(bind=engine, future=True)
-
-    def override_get_db():
-        db = test_session()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-    engine.dispose()
 
 
 def _identity(response) -> dict[str, str]:

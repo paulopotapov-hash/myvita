@@ -5,12 +5,13 @@ import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { usePatientsPage } from '../../hooks/useClinicData'
 import { toUserMessage } from '../../lib/errorMessages'
+import { isClinician } from '../../lib/roles'
 import { Link } from 'react-router-dom'
 import { useSession } from '../../hooks/useSession'
 
 export function PatientsPage() {
   const { user } = useSession()
-  const canOpenClinicalRecord = user?.role === 'staff' && (user.staff_role === 'doctor' || user.staff_role === 'nurse')
+  const canOpenClinicalRecord = isClinician(user)
   const [page, setPage] = useState(1)
   const pageSize = 20
   const patients = usePatientsPage(page, pageSize)

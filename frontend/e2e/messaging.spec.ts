@@ -1,16 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { readFileSync } from 'node:fs'
-import type { BrowserContext } from '@playwright/test'
-import { apiAs, authState, loadSeed } from './support'
+import { apiAs, loadSeed, switchRole } from './support'
 
 const seed = loadSeed()
 const subject = 'Acompanhamento clínico E2E'
-
-async function switchRole(context: BrowserContext, role: 'doctor' | 'nurse' | 'patient') {
-  const state = JSON.parse(readFileSync(authState(role), 'utf-8')) as { cookies: Parameters<BrowserContext['addCookies']>[0] }
-  await context.clearCookies()
-  await context.addCookies(state.cookies)
-}
 
 test.describe('clinical messaging', () => {
   test.beforeAll(async () => {
