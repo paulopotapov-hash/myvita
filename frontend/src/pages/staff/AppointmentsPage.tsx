@@ -1,3 +1,4 @@
+import { AppointmentRequestsPanel } from '../../components/AppointmentRequestsPanel'
 import { useMemo, useState } from 'react'
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -38,6 +39,7 @@ export function AppointmentsPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold text-slate-900">Consultas</h1>
       {feedback && <p role="status" className="text-sm text-teal-700">{feedback}</p>}
+      <AppointmentRequestsPanel />
       {canCreate && <CreateAppointmentForm canHandleReason={canHandleReason} />}
       <label className="flex max-w-xs flex-col gap-1 text-sm font-medium text-slate-700">
         Filtrar por estado

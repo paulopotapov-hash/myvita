@@ -13,6 +13,8 @@ const { appointmentState, cancelMutate, createMutate, updateMutate, patientSearc
   patientSearchQuery: vi.fn(),
 }))
 
+// The request panel has its own tests (AppointmentRequestsPanel.test.tsx).
+vi.mock('../../components/AppointmentRequestsPanel', () => ({ AppointmentRequestsPanel: () => null }))
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({
     user: { id: 'doctor-1', email: 'doctor@example.pt', full_name: 'Doctor', role: 'staff', clinic_id: 'clinic-1', staff_role: 'doctor', patient_id: null },

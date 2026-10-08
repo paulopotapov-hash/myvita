@@ -72,6 +72,34 @@ export interface AppointmentPublic {
   reason: string | null
 }
 
+export type AppointmentRequestStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled'
+
+/** Patient-submitted request; patient/clinic come from the session, the professional is chosen by staff. */
+export interface AppointmentRequestCreate {
+  preferred_start: string // ISO datetime with timezone
+  reason?: string
+}
+
+export interface AppointmentRequestAccept {
+  staff_id: string
+  scheduled_at: string // ISO datetime with timezone
+  duration_minutes: number
+}
+
+export interface AppointmentRequestPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  patient_name: string
+  preferred_start: string
+  /** null when the caller may not read clinical content. */
+  reason: string | null
+  status: AppointmentRequestStatus
+  appointment_id: string | null
+  decided_at: string | null
+  created_at: string
+}
+
 export interface ConsentPublic {
   id: string
   clinic_id: string
