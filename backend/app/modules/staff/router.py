@@ -73,10 +73,7 @@ def list_mine(
     staff member when creating an appointment.
     """
     staff_members = (
-        db.query(Staff)
-        .options(selectinload(Staff.user))
-        .filter(Staff.clinic_id == clinic_id)
-        .all()
+        db.query(Staff).options(selectinload(Staff.user)).filter(Staff.clinic_id == clinic_id).all()
     )
     return [
         StaffPublic(

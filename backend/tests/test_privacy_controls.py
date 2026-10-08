@@ -41,7 +41,9 @@ def test_clinic_directory_is_not_enumerable_without_public_registration(world: W
     # Registration being open is not enough: no clinic is public until it is allowlisted (P2.1).
     monkeypatch.setattr(settings, "PUBLIC_CLINIC_IDS", [])
     assert anon.get("/api/v1/clinics").json() == []
-    monkeypatch.setattr(settings, "PUBLIC_CLINIC_IDS", [uuid.UUID(world.a.clinic_id), uuid.UUID(world.b.clinic_id)])
+    monkeypatch.setattr(
+        settings, "PUBLIC_CLINIC_IDS", [uuid.UUID(world.a.clinic_id), uuid.UUID(world.b.clinic_id)]
+    )
     ids = {clinic["id"] for clinic in anon.get("/api/v1/clinics").json()}
     assert {world.a.clinic_id, world.b.clinic_id} <= ids
 
@@ -64,7 +66,8 @@ def test_list_endpoints_return_only_the_minimum_fields(world: World):
     assert patients and all(set(item) == {"id", "clinic_id", "full_name", "is_active"} for item in patients)
     staff = world.a.admin.get("/api/v1/staff").json()
     assert staff and all(
-        set(item) == {"id", "clinic_id", "full_name", "staff_role", "specialty", "is_active"} for item in staff
+        set(item) == {"id", "clinic_id", "full_name", "staff_role", "specialty", "is_active"}
+        for item in staff
     )
     me = world.a.doctor.get("/api/v1/auth/me").json()
     assert not {"hashed_password", "token_epoch", "is_active"} & set(me)
@@ -78,4 +81,7 @@ def test_login_response_matches_auth_me_so_the_spa_has_staff_role_and_patient_id
         assert login_body == fresh.get("/api/v1/auth/me").json(), actor.key
     doctor_login = Actor("fresh-doc", world.a.doctor.email).login().json()
     assert doctor_login["staff_role"] == "doctor"
-    assert Actor("fresh-pat", world.a.patients["a1"].email).login().json()["patient_id"] == world.a.patients["a1"].patient_id
+    assert (
+        Actor("fresh-pat", world.a.patients["a1"].email).login().json()["patient_id"]
+        == world.a.patients["a1"].patient_id
+    )

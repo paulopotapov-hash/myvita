@@ -13,6 +13,7 @@ Design decisions (do not change without discussion):
 - CSRF: double-submit cookie, HMAC-signed and bound to (user_id, token_epoch).
   See the "CSRF protection" section below for the full rationale.
 """
+
 import hashlib
 import hmac
 import secrets

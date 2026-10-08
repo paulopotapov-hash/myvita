@@ -24,7 +24,9 @@ router = APIRouter()
 
 @router.post("/login", response_model=UserPublic)
 @limiter.limit(LOGIN_RATE_LIMIT)
-def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> UserPublic:
+def login(
+    request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)
+) -> UserPublic:
     user = authenticate(
         db,
         payload.email,

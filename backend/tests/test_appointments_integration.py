@@ -148,9 +148,7 @@ def test_notification_failure_rolls_back_appointment(client, monkeypatch):
     def fail_notification(*_args, **_kwargs):
         raise RuntimeError("synthetic notification failure")
 
-    monkeypatch.setattr(
-        "app.modules.appointments.service._add_patient_notification", fail_notification
-    )
+    monkeypatch.setattr("app.modules.appointments.service._add_patient_notification", fail_notification)
     with pytest.raises(RuntimeError, match="synthetic notification failure"):
         client.post(
             "/api/v1/appointments",
@@ -186,9 +184,7 @@ def test_notification_failure_rolls_back_update_and_cancel(client, monkeypatch):
     def fail_notification(*_args, **_kwargs):
         raise RuntimeError("synthetic notification failure")
 
-    monkeypatch.setattr(
-        "app.modules.appointments.service._add_patient_notification", fail_notification
-    )
+    monkeypatch.setattr("app.modules.appointments.service._add_patient_notification", fail_notification)
     with pytest.raises(RuntimeError, match="synthetic notification failure"):
         client.patch(
             f"/api/v1/appointments/{appointment_id}",

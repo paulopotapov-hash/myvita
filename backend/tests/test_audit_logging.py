@@ -9,6 +9,7 @@ pattern as test_auth_hardening.py instead, and read the audit_logs table
 back through app.core.database.SessionLocal — the same session factory the
 app itself writes through.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -261,9 +262,16 @@ def test_audit_write_does_not_need_a_connection_from_the_request_pool(client):
     held = [engine.connect() for _ in range(capacity)]
     try:
         started = time.monotonic()
-        record_audit_event(action=AuditAction.LOGIN_FAILURE, result=AuditResult.FAILURE, actor_email="pool-saturated@example.test")
+        record_audit_event(
+            action=AuditAction.LOGIN_FAILURE,
+            result=AuditResult.FAILURE,
+            actor_email="pool-saturated@example.test",
+        )
         assert time.monotonic() - started < 5
     finally:
         for connection in held:
             connection.close()
-    assert any(event.actor_email == "pool-saturated@example.test" for event in _audit_events(AuditAction.LOGIN_FAILURE))
+    assert any(
+        event.actor_email == "pool-saturated@example.test"
+        for event in _audit_events(AuditAction.LOGIN_FAILURE)
+    )

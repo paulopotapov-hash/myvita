@@ -6,6 +6,7 @@ importantly, that they never leak another clinic's data.
 Named to sort before test_data_integrity.py — see test_auth_hardening.py's
 fixture docstring for why cross-file ordering matters here.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

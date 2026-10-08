@@ -17,7 +17,12 @@ def list_records(
         MedicalRecord.patient_id == patient_id, MedicalRecord.clinic_id == user.clinic_id
     )
     total = query.count()
-    rows = query.order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc()).offset(offset).limit(limit).all()
+    rows = (
+        query.order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return rows, total
 
 

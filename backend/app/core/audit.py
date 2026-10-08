@@ -3,6 +3,7 @@ Single entry point for writing to the audit trail. Everything that needs to
 log a security or clinical-access event calls `record_audit_event` — nothing
 else should construct an AuditLog row directly.
 """
+
 import logging
 import uuid
 from typing import Any

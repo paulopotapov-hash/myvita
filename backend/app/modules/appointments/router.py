@@ -34,7 +34,9 @@ def _may_read_reason(user: User, db: Session) -> bool:
     return user.role == UserRole.PATIENT or is_clinical_staff(db, user)
 
 
-def _public(appointment: Appointment, user: User, db: Session, *, may_read_reason: bool | None = None) -> AppointmentPublic:
+def _public(
+    appointment: Appointment, user: User, db: Session, *, may_read_reason: bool | None = None
+) -> AppointmentPublic:
     if may_read_reason is None:
         may_read_reason = _may_read_reason(user, db)
     return AppointmentPublic(
@@ -116,9 +118,7 @@ def list_mine(
     appointment in their own clinic. Scoping happens entirely server-side
     based on the authenticated session — see service.list_appointments_for_user.
     """
-    appointments, total = list_appointments_for_user(
-        db, user, offset=(page - 1) * page_size, limit=page_size
-    )
+    appointments, total = list_appointments_for_user(db, user, offset=(page - 1) * page_size, limit=page_size)
     response.headers["X-Total-Count"] = str(total)
     # Clinical access log: who looked at appointment data, and whose.
     # One row per request (not per appointment) — the "resource" for this

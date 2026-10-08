@@ -3,6 +3,7 @@ Integration tests exercising the real HTTP app (FastAPI TestClient), not
 just the ORM layer. These mirror the manual smoke test run during
 development, kept here so they run in CI going forward.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

@@ -7,6 +7,7 @@ enforces the exact same minimum bar — previously this check only existed on
 the clinic onboarding schema, so patient and staff accounts could be created
 with trivially weak passwords.
 """
+
 COMMON_WEAK_PASSWORDS = {
     "password",
     "password1",

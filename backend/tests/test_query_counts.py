@@ -66,10 +66,16 @@ def test_list_endpoints_do_not_issue_one_query_per_row(world: World):
             ).status_code
             == 201
         )
-        assert doctor.post(f"/api/v1/patients/{pid}/medical-records", json={"title": f"n+1 {index}", "content": "x"}).status_code == 201
         assert (
             doctor.post(
-                f"/api/v1/patients/{pid}/medications", json={"name": f"Med{index}", "dosage": "1 mg", "start_date": "2032-01-01"}
+                f"/api/v1/patients/{pid}/medical-records", json={"title": f"n+1 {index}", "content": "x"}
+            ).status_code
+            == 201
+        )
+        assert (
+            doctor.post(
+                f"/api/v1/patients/{pid}/medications",
+                json={"name": f"Med{index}", "dosage": "1 mg", "start_date": "2032-01-01"},
             ).status_code
             == 201
         )
@@ -78,4 +84,6 @@ def test_list_endpoints_do_not_issue_one_query_per_row(world: World):
         queries_before, rows_before = before[path]
         queries_after, rows_after = _count(world, actor, path)
         assert rows_after >= rows_before, path
-        assert queries_after <= queries_before + 1, f"{path}: {queries_before} queries for {rows_before} rows -> {queries_after} for {rows_after}"
+        assert queries_after <= queries_before + 1, (
+            f"{path}: {queries_before} queries for {rows_before} rows -> {queries_after} for {rows_after}"
+        )

@@ -10,6 +10,7 @@ from app.models.staff import StaffRole
 class StaffCreateRequest(RequestModel):
     """Created by a clinic_admin for their own clinic — clinic_id is never
     taken from this payload, only from the admin's own session."""
+
     full_name: str = Field(min_length=2, max_length=255)
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=128)

@@ -38,9 +38,7 @@ def _lock_clinic_schedule(db: Session, clinic_id: str) -> None:
     )
 
 
-def _add_patient_notification(
-    db: Session, patient: Patient, *, title: str, message: str
-) -> None:
+def _add_patient_notification(db: Session, patient: Patient, *, title: str, message: str) -> None:
     db.add(
         Notification(
             clinic_id=patient.clinic_id,
@@ -188,7 +186,10 @@ def update_appointment(
     status_messages = {
         AppointmentStatus.CONFIRMED: ("Consulta confirmada", "Uma consulta da sua agenda foi confirmada."),
         AppointmentStatus.COMPLETED: ("Consulta concluída", "Uma consulta da sua agenda foi concluída."),
-        AppointmentStatus.NO_SHOW: ("Falta registada", "Foi registada uma falta numa consulta da sua agenda."),
+        AppointmentStatus.NO_SHOW: (
+            "Falta registada",
+            "Foi registada uma falta numa consulta da sua agenda.",
+        ),
     }
     title, message = status_messages.get(
         appointment.status,

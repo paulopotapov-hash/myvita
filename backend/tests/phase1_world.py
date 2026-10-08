@@ -206,7 +206,10 @@ def _seed_clinical_resources(tenant: Tenant, hour_offset: int) -> None:
         assert appointment.status_code == 201, appointment.text
         record = doctor.post(
             f"/api/v1/patients/{patient.patient_id}/medical-records",
-            json={"title": f"Seed record {tenant.name}-{key}", "content": f"{RECORD_MARKER} {tenant.name}-{key}"},
+            json={
+                "title": f"Seed record {tenant.name}-{key}",
+                "content": f"{RECORD_MARKER} {tenant.name}-{key}",
+            },
         )
         assert record.status_code == 201, record.text
         medication = doctor.post(
