@@ -10,6 +10,7 @@ from app.core.database import Base
 
 class Clinic(Base):
     """The tenant root. Every other clinical entity hangs off a clinic_id."""
+
     __tablename__ = "clinics"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

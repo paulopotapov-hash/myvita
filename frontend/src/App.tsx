@@ -4,10 +4,8 @@ import { RoleRoute } from './app/RoleRoute'
 import { RootRedirect } from './app/RootRedirect'
 import { AppLayout } from './layouts/AppLayout'
 import { PatientLayout } from './layouts/PatientLayout'
-import { ClinicOnboardingPage } from './pages/auth/ClinicOnboardingPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { InvitationAcceptPage } from './pages/auth/InvitationAcceptPage'
-import { PatientRegisterPage } from './pages/auth/PatientRegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PatientProfilePage } from './pages/patient/PatientProfilePage'
@@ -16,17 +14,18 @@ import { PatientsPage } from './pages/staff/PatientsPage'
 import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
+import { AuditLogPage } from './pages/admin/AuditLogPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
 import { AccountProfilePage } from './pages/AccountProfilePage'
 import { PatientDashboard } from './pages/patient/PatientDashboard'
+import { MessagesInboxPage } from './pages/messages/MessagesInboxPage'
+import { ConversationPage } from './pages/messages/ConversationPage'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/registo" element={<PatientRegisterPage />} />
-      <Route path="/nova-clinica" element={<ClinicOnboardingPage />} />
       <Route path="/convite" element={<InvitationAcceptPage />} />
 
       <Route
@@ -42,6 +41,8 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route path="mensagens" element={<MessagesInboxPage />} />
+        <Route path="mensagens/:conversationId" element={<ConversationPage />} />
         <Route path="perfil" element={<AccountProfilePage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route
@@ -68,6 +69,14 @@ export default function App() {
             </RoleRoute>
           }
         />
+        <Route
+          path="auditoria"
+          element={
+            <RoleRoute allow={['clinic_admin']}>
+              <AuditLogPage />
+            </RoleRoute>
+          }
+        />
       </Route>
 
       <Route
@@ -86,7 +95,10 @@ export default function App() {
         <Route path="consentimentos" element={<PatientDetailPage own section="consents" />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route path="saude" element={<PatientDetailPage own />} />
+        <Route path="documentos" element={<PatientDetailPage own section="documents" />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route path="mensagens" element={<MessagesInboxPage />} />
+        <Route path="mensagens/:conversationId" element={<ConversationPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

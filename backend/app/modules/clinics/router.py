@@ -3,12 +3,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_optional_user, set_session_cookie
-from app.models import AuditAction, AuditResult, Clinic, User
+from app.models import AuditAction, Clinic, User
 from app.modules.clinics.schemas import ClinicOnboardingRequest, ClinicPublic, ClinicSummary
 from app.modules.clinics.service import get_visible_clinic, list_visible_clinics, onboard_clinic
 
@@ -27,16 +27,13 @@ def create_clinic(
         )
     clinic, admin_user = onboard_clinic(db, payload)
     set_session_cookie(response, admin_user)  # auto-login the new admin
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.CLINIC_CREATED,
-        result=AuditResult.SUCCESS,
+        actor=admin_user,
         clinic_id=clinic.id,
-        actor_user_id=admin_user.id,
-        actor_email=admin_user.email,
         resource_type="clinic",
         resource_id=clinic.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
     return clinic
 

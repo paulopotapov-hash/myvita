@@ -13,6 +13,7 @@ to a specific user's session, not shared across identities.
 """
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from threading import Barrier
 
 import pytest
@@ -24,7 +25,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
-from app.models import Appointment
+from app.models import Appointment, AuditAction, AuditLog, Notification, User
 from app.modules.appointments.schemas import AppointmentCreateRequest
 from app.modules.appointments.service import create_appointment
 from tests.conftest import TEST_DATABASE_URL
@@ -141,6 +142,46 @@ def test_staff_can_book_appointment_for_their_clinic(client):
     assert notifications.json()[0]["title"] == "Consulta criada"
 
 
+def test_appointment_notifications_skip_noops_and_cover_updates_and_cancellation(client):
+    tenant = _new_clinic_with_staff_and_patient(client, "event-notifications")
+    admin_headers = _use_identity(client, tenant["admin"])
+    created = client.post(
+        "/api/v1/appointments",
+        json={
+            "patient_id": tenant["patient_id"],
+            "staff_id": tenant["staff_id"],
+            "scheduled_at": "2026-10-03T10:00:00Z",
+        },
+        headers=admin_headers,
+    )
+    appointment_id = created.json()["id"]
+    client.patch(
+        f"/api/v1/appointments/{appointment_id}",
+        json={"reason": "Novo detalhe", "duration_minutes": 45},
+        headers=admin_headers,
+    )
+    _use_identity(client, tenant["patient"])
+    assert client.get("/api/v1/notifications").headers["X-Total-Count"] == "1"
+
+    _use_identity(client, tenant["admin"])
+    changed = client.patch(
+        f"/api/v1/appointments/{appointment_id}",
+        json={"scheduled_at": "2026-10-03T11:00:00Z"},
+        headers=admin_headers,
+    )
+    assert changed.status_code == 200
+    cancelled = client.post(f"/api/v1/appointments/{appointment_id}/cancel", headers=admin_headers)
+    assert cancelled.status_code == 200
+    _use_identity(client, tenant["patient"])
+    notifications = client.get("/api/v1/notifications")
+    assert notifications.headers["X-Total-Count"] == "3"
+    assert {item["title"] for item in notifications.json()} == {
+        "Consulta criada",
+        "Consulta atualizada",
+        "Consulta cancelada",
+    }
+
+
 def test_notification_failure_rolls_back_appointment(client, monkeypatch):
     tenant = _new_clinic_with_staff_and_patient(client, "atomic")
     headers = _use_identity(client, tenant["admin"])
@@ -148,9 +189,7 @@ def test_notification_failure_rolls_back_appointment(client, monkeypatch):
     def fail_notification(*_args, **_kwargs):
         raise RuntimeError("synthetic notification failure")
 
-    monkeypatch.setattr(
-        "app.modules.appointments.service._add_patient_notification", fail_notification
-    )
+    monkeypatch.setattr("app.modules.appointments.service._add_patient_notification", fail_notification)
     with pytest.raises(RuntimeError, match="synthetic notification failure"):
         client.post(
             "/api/v1/appointments",
@@ -186,13 +225,11 @@ def test_notification_failure_rolls_back_update_and_cancel(client, monkeypatch):
     def fail_notification(*_args, **_kwargs):
         raise RuntimeError("synthetic notification failure")
 
-    monkeypatch.setattr(
-        "app.modules.appointments.service._add_patient_notification", fail_notification
-    )
+    monkeypatch.setattr("app.modules.appointments.service._add_patient_notification", fail_notification)
     with pytest.raises(RuntimeError, match="synthetic notification failure"):
         client.patch(
             f"/api/v1/appointments/{appointment_id}",
-            json={"duration_minutes": 45},
+            json={"scheduled_at": "2026-10-01T13:30:00Z"},
             headers=headers,
         )
     with pytest.raises(RuntimeError, match="synthetic notification failure"):
@@ -292,6 +329,93 @@ def test_patient_cannot_create_appointments_directly(client):
         headers=headers,
     )
     assert r.status_code == 403
+
+
+def test_notification_count_read_and_read_all_are_user_and_clinic_scoped(client):
+    first = _new_clinic_with_staff_and_patient(client, "notification-scope-a")
+    second = _new_clinic_with_staff_and_patient(client, "notification-scope-b")
+    db = client.test_session_factory()
+    try:
+        first_user = db.query(User).filter(User.email == "patientnotification-scope-a@x.pt").one()
+        same_clinic_admin = db.query(User).filter(User.email == "adminnotification-scope-a@x.pt").one()
+        mine = Notification(
+            clinic_id=first["clinic_id"], user_id=first_user.id, title="Mine", message="Appointment"
+        )
+        already_read = Notification(
+            clinic_id=first["clinic_id"],
+            user_id=first_user.id,
+            title="Read",
+            message="Appointment",
+            is_read=True,
+            read_at=datetime.now(UTC),
+        )
+        other_user = Notification(
+            clinic_id=first["clinic_id"],
+            user_id=same_clinic_admin.id,
+            title="Other user",
+            message="Appointment",
+        )
+        other_clinic = Notification(
+            clinic_id=second["clinic_id"],
+            user_id=first_user.id,
+            title="Other clinic",
+            message="Appointment",
+        )
+        db.add_all([mine, already_read, other_user, other_clinic])
+        db.commit()
+        mine_id = mine.id
+        read_id = already_read.id
+        existing_read_at = already_read.read_at
+        other_user_id = other_user.id
+        other_clinic_id = other_clinic.id
+    finally:
+        db.close()
+
+    client.cookies.clear()
+    assert client.get("/api/v1/notifications/unread-count").status_code == 401
+    assert client.post("/api/v1/notifications/read-all").status_code == 401
+    admin_headers = _use_identity(client, first["admin"])
+    assert [item["title"] for item in client.get("/api/v1/notifications").json()] == ["Other user"]
+    assert client.get("/api/v1/notifications/unread-count").json() == {"count": 1}
+    headers = _use_identity(client, first["patient"])
+    assert client.get("/api/v1/notifications/unread-count").json() == {"count": 1}
+    assert {item["title"] for item in client.get("/api/v1/notifications").json()} == {"Mine", "Read"}
+    assert client.post(f"/api/v1/notifications/{other_user_id}/read", headers=headers).status_code == 404
+    assert client.post(f"/api/v1/notifications/{other_clinic_id}/read", headers=headers).status_code == 404
+
+    read = client.post(f"/api/v1/notifications/{mine_id}/read", headers=headers)
+    assert read.status_code == 200
+    first_read_at = read.json()["read_at"]
+    read_again = client.post(f"/api/v1/notifications/{mine_id}/read", headers=headers)
+    assert read_again.json()["read_at"] == first_read_at
+    assert client.get("/api/v1/notifications/unread-count").json() == {"count": 0}
+
+    db = client.test_session_factory()
+    try:
+        db.query(Notification).filter(Notification.id == mine_id).update(
+            {Notification.is_read: False, Notification.read_at: None}
+        )
+        db.commit()
+    finally:
+        db.close()
+    result = client.post("/api/v1/notifications/read-all", headers=headers)
+    assert result.status_code == 200
+    assert result.json() == {"updated_count": 1}
+    assert client.post("/api/v1/notifications/read-all", headers=headers).json() == {"updated_count": 0}
+    db = client.test_session_factory()
+    try:
+        assert db.get(Notification, mine_id).read_at is not None
+        assert db.get(Notification, read_id).read_at == existing_read_at
+        assert db.get(Notification, other_user_id).is_read is False
+        assert db.get(Notification, other_clinic_id).is_read is False
+        assert db.query(AuditLog).filter(AuditLog.action == AuditAction.NOTIFICATION_READ).count() >= 3
+    finally:
+        db.close()
+    assert client.get("/api/v1/notifications/unread-count").json() == {"count": 0}
+    admin_headers = _use_identity(client, first["admin"])
+    assert (
+        client.post(f"/api/v1/notifications/{other_user_id}/read", headers=admin_headers).status_code == 200
+    )
 
 
 def test_cross_clinic_idor_using_another_clinics_patient_is_blocked(client):

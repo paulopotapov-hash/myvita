@@ -4,14 +4,16 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { NotificationsPage } from './NotificationsPage'
 
-const { markRead, useNotifications } = vi.hoisted(() => ({
+const { markRead, markAllRead, useNotifications } = vi.hoisted(() => ({
   markRead: vi.fn(),
+  markAllRead: vi.fn(),
   useNotifications: vi.fn(),
 }))
 
 vi.mock('../hooks/useClinicalData', () => ({
   useNotifications,
   useMarkNotificationRead: () => ({ mutate: markRead, isPending: false }),
+  useMarkAllNotificationsRead: () => ({ mutate: markAllRead, isPending: false }),
 }))
 vi.mock('../hooks/useSession', () => ({
   useSession: () => ({ user: { role: 'patient' } }),
@@ -37,5 +39,18 @@ describe('NotificationsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Seguinte' }))
     expect(useNotifications).toHaveBeenLastCalledWith(2, 20)
     expect(screen.getByText('Página seguinte')).toBeInTheDocument()
+  })
+
+  it('marks all visible unread notifications as read', async () => {
+    useNotifications.mockReturnValue({
+      data: { total: 1, items: [{ id: 'n3', title: 'Consulta', message: 'Atualização', is_read: false, read_at: null, created_at: '2026-09-24T10:00:00Z' }] },
+      isLoading: false,
+      isError: false,
+    })
+    const user = userEvent.setup()
+    render(<MemoryRouter><NotificationsPage /></MemoryRouter>)
+
+    await user.click(screen.getByRole('button', { name: 'Marcar todas como lidas' }))
+    expect(markAllRead).toHaveBeenCalledWith(undefined, expect.objectContaining({ onError: expect.any(Function) }))
   })
 })

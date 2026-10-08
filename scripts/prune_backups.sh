@@ -13,12 +13,14 @@ if [ ! -d "$backup_dir" ]; then
     exit 1
 fi
 
+# Only myVita database dumps and documents archives (and their .sha256);
+# today's backups are never eligible because of -mtime +N with N >= 1.
 removed=0
 while IFS= read -r -d '' dump_file; do
     checksum_file="${dump_file}.sha256"
     rm -f "$dump_file"
     [ ! -f "$checksum_file" ] || rm -f "$checksum_file"
     removed=$((removed + 1))
-done < <(find "$backup_dir" -maxdepth 1 -type f -name 'myvita_*.dump' -mtime "+${retention_days}" -print0)
+done < <(find "$backup_dir" -maxdepth 1 -type f \( -name 'myvita_[0-9]*.dump' -o -name 'myvita_documents_[0-9]*.tar.gz' \) -mtime "+${retention_days}" -print0)
 
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Retention completed: removed=${removed} retention_days=${retention_days}"

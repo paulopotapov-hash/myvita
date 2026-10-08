@@ -7,6 +7,7 @@ because our migrations rely on Postgres-specific features (UUID, native
 ENUM types, ON DELETE RESTRICT semantics) that SQLite doesn't replicate
 faithfully. Testing against a fake dialect would hide real bugs.
 """
+
 import os
 
 import pytest
@@ -90,6 +91,7 @@ def db_session(engine):
     session.close()
     transaction.rollback()
     connection.close()
+
 
 # Phase 1 two-clinic dataset (module-scoped); see tests/phase1_world.py.
 from tests.phase1_world import world  # noqa: E402, F401

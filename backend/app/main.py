@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.config import settings
 from app.core.database import engine
 from app.core.logging_setup import configure_logging
@@ -37,12 +37,15 @@ from app.core.request_context import (
 from app.models import AuditAction, AuditResult
 from app.modules.appointment_requests.router import router as appointment_requests_router
 from app.modules.appointments.router import router as appointments_router
+from app.modules.audit_logs.router import router as audit_logs_router
 from app.modules.auth.router import router as auth_router
 from app.modules.clinics.router import router as clinics_router
 from app.modules.consents.router import router as consents_router
+from app.modules.documents.router import router as documents_router
 from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
+from app.modules.messages.router import router as messages_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
 from app.modules.staff.router import router as staff_router
@@ -65,12 +68,12 @@ app.state.limiter = limiter
 
 async def _rate_limit_exceeded_with_audit(request: Request, exc: Exception) -> Response:
     rate_limit_events_total.inc()
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.RATE_LIMITED,
+        actor=None,
         result=AuditResult.DENIED,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={"path": request.url.path, "request_id": get_request_id()},
+        metadata={"path": request.url.path},
     )
     # slowapi's bundled handler is typed for its own decorator-based usage,
     # not Starlette's generic (Request, Exception) -> Response signature —
@@ -180,10 +183,16 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 declared_size = -1
             if declared_size < 0:
                 response = JSONResponse(status_code=400, content={"detail": "Content-Length inválido."})
-            elif declared_size > settings.MAX_REQUEST_BODY_BYTES:
-                response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
             else:
-                response = await call_next(request)
+                upload_limit = settings.MAX_REQUEST_BODY_BYTES
+                if request.url.path.startswith("/api/v1/patients/") and request.url.path.endswith(
+                    "/documents"
+                ):
+                    upload_limit = max(upload_limit, settings.DOCUMENT_MAX_UPLOAD_BYTES + 1_048_576)
+                if declared_size > upload_limit:
+                    response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
+                else:
+                    response = await call_next(request)
         elif response is None:
             response = await call_next(request)
         if response is None:  # Defensive invariant; should be unreachable after call_next above.
@@ -273,3 +282,6 @@ app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-reco
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
+app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])
+app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
+app.include_router(audit_logs_router, prefix="/api/v1/audit-logs", tags=["audit-logs"])

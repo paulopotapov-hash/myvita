@@ -32,10 +32,13 @@ docker compose -f docker-compose.prod.yml exec -T backup \
 
 docker compose -f docker-compose.prod.yml exec -T backup \
   /opt/myvita/download_offsite_backup.sh \
-  "${OFFSITE_S3_PREFIX}/myvita_YYYYMMDDTHHMMSSZ.dump" /backups/recovery
+  "${OFFSITE_S3_PREFIX}/postgres/myvita_YYYYMMDDTHHMMSSZ.dump" /backups/recovery
+# or the newest database dump + documents archive together:
+docker compose -f docker-compose.prod.yml exec -T backup \
+  /opt/myvita/download_offsite_backup.sh --latest /backups/recovery
 ```
 
-The download script uses temporary files, validates SHA-256 and `pg_restore --list`, then publishes the local recovery dump atomically.
+Off-site objects live under `<prefix>/postgres/` and `<prefix>/documents/` (older flat `<prefix>/myvita_*.dump` keys remain readable). The download script uses temporary files, validates SHA-256 and the archive (`pg_restore --list` or gzip/tar), then publishes atomically. Since Phase 7.1 the scheduled job also archives the private documents volume; database and documents must be recovered together — see [`p7-backup-and-restore.md`](p7-backup-and-restore.md) for the consistency model, documents restore and orphan checks.
 
 ### Restore drill / disaster recovery
 
@@ -45,16 +48,16 @@ Never restore into the production database as a drill.
 2. Download it with `download_offsite_backup.sh`.
 3. Create an isolated PostgreSQL database/container with no production traffic.
 4. Point `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `PGPASSWORD`/`PGPASSFILE` at that isolated target.
-5. Run `scripts/restore_db.sh <downloaded.dump> --yes`.
+5. Run `scripts/verify_restore.sh <downloaded.dump> --alembic-image <backend image> --documents <downloaded documents archive>` (restores both into throwaway infrastructure and reports `POSTGRES_RESTORE=OK DOCUMENTS_RESTORE=OK REFERENTIAL_INTEGRITY=OK`), or `scripts/restore_db.sh <downloaded.dump> --yes` into your own empty isolated database. `restore_db.sh` refuses a non-empty target unless `--replace-existing` is given.
 6. Run `alembic current` and, only if the dump predates the current release, `alembic upgrade head`.
 7. Verify the expected tables, migration revision, fixture row counts, foreign-key integrity, login with synthetic test data, and representative list/read queries. Never use real patient data for a drill.
 8. Destroy the isolated drill database and record duration, selected object, checks performed, and result.
 
-For total server loss: provision a clean host, restore deployment secrets, deploy the same application version, download the newest verified off-site dump, restore it before routing traffic, apply required migrations, check `/health` and `/ready`, and only then enable the proxy.
+For total server loss: provision a clean host, restore deployment secrets, deploy the same application version, download the newest verified off-site **dump and documents archive** (`--latest`), restore the database (`restore_db.sh`) and the documents volume (`restore_documents.sh`) before routing traffic, apply required migrations, run `verify_documents_storage.sh`, check `/health` and `/ready`, and only then enable the proxy. The full sequence is rehearsed by `scripts/test_offsite_recovery.sh`.
 
 Initial objectives are **RPO 24 hours** (daily backup schedule) and **RTO 4 hours** (provision, download, restore, verify). These are engineering targets, not contractual guarantees; measure drills and revise them as database size and operational staffing change.
 
-Without real object-storage credentials, upload and the off-site restore drill remain blocked. Mocked tests prove control flow only; they are not evidence that a provider, bucket policy, encryption, or network path works.
+Without real object-storage credentials, upload and the off-site restore drill remain blocked. The local S3-compatible recovery test (`test_offsite_recovery.sh`) proves the scripts against a real S3 API, and mocked tests prove control flow; they are not evidence that a provider, bucket policy, encryption, or network path works.
 
 ## Monitoring (P2.3)
 

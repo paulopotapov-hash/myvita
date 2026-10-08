@@ -67,9 +67,7 @@ def test_clinical_staff_can_manage_and_deactivate_medication(client):
     assert stopped.json()["status"] == "discontinued"
     assert stopped.json()["end_date"] is not None
     assert client.get(f"/api/v1/medications/{medication_id}").status_code == 200
-    assert client.get(
-        f"/api/v1/patients/{tenant['patient_id']}/medications?status=active"
-    ).json() == []
+    assert client.get(f"/api/v1/patients/{tenant['patient_id']}/medications?status=active").json() == []
 
 
 def test_patient_and_admin_are_read_only_for_medications(client):
@@ -98,11 +96,14 @@ def test_patient_and_admin_are_read_only_for_medications(client):
         f"/api/v1/medications/{medication_id}/deactivate", headers=patient_headers
     ).status_code in {403, 404}
 
-    assert client.post(
-        f"/api/v1/patients/{tenant['patient_id']}/medications",
-        headers=_use(client, tenant["admin"]),
-        json=_payload(),
-    ).status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/patients/{tenant['patient_id']}/medications",
+            headers=_use(client, tenant["admin"]),
+            json=_payload(),
+        ).status_code
+        == 403
+    )
 
 
 def test_tenant_isolation_validation_history_and_safe_audit(client):
@@ -116,32 +117,45 @@ def test_tenant_isolation_validation_history_and_safe_audit(client):
     medication_id = created.json()["id"]
     second_headers = _use(client, second["doctor"])
     assert client.get(f"/api/v1/medications/{medication_id}").status_code == 404
-    assert client.post(
-        f"/api/v1/patients/{first['patient_id']}/medications",
-        headers=second_headers,
-        json=_payload(),
-    ).status_code == 404
-    assert client.patch(
-        f"/api/v1/medications/{medication_id}",
-        headers=second_headers,
-        json={"dosage": "1 g"},
-    ).status_code == 404
+    assert (
+        client.post(
+            f"/api/v1/patients/{first['patient_id']}/medications",
+            headers=second_headers,
+            json=_payload(),
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            f"/api/v1/medications/{medication_id}",
+            headers=second_headers,
+            json={"dosage": "1 g"},
+        ).status_code
+        == 404
+    )
 
     first_headers = _use(client, first["doctor"])
-    assert client.patch(
-        f"/api/v1/medications/{medication_id}", headers=first_headers, json={}
-    ).status_code == 422
-    assert client.patch(
-        f"/api/v1/medications/{medication_id}",
-        headers=first_headers,
-        json={"patient_id": second["patient_id"]},
-    ).status_code == 422
+    assert (
+        client.patch(f"/api/v1/medications/{medication_id}", headers=first_headers, json={}).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/v1/medications/{medication_id}",
+            headers=first_headers,
+            json={"patient_id": second["patient_id"]},
+        ).status_code
+        == 422
+    )
     invalid = _payload() | {"end_date": (date.today() - timedelta(days=1)).isoformat()}
-    assert client.post(
-        f"/api/v1/patients/{first['patient_id']}/medications",
-        headers=first_headers,
-        json=invalid,
-    ).status_code == 422
+    assert (
+        client.post(
+            f"/api/v1/patients/{first['patient_id']}/medications",
+            headers=first_headers,
+            json=invalid,
+        ).status_code
+        == 422
+    )
     assert client.get("/api/v1/medications/not-a-uuid").status_code == 422
 
     db: Session = client.test_session()

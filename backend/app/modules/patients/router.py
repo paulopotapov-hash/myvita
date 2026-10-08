@@ -3,12 +3,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
-from app.models import AuditAction, AuditResult, Patient, User, UserRole
+from app.models import AuditAction, Patient, User, UserRole
 from app.modules.patients.schemas import (
     PatientPublic,
     PatientRegisterRequest,
@@ -64,16 +64,13 @@ def register(
         )
     patient, user = register_patient(db, payload)
     set_session_cookie(response, user)  # auto-login after successful registration
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.PATIENT_CREATED,
-        result=AuditResult.SUCCESS,
+        actor=user,
         clinic_id=patient.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
         resource_type="patient",
         resource_id=patient.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
     return PatientPublic(
         id=patient.id,
@@ -113,15 +110,11 @@ def list_mine(
         search=search,
     )
     response.headers["X-Total-Count"] = str(total)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.STAFF_VIEWED_PATIENT,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=staff_user.id,
-        actor_email=staff_user.email,
+        actor=staff_user,
         resource_type="patient_list",
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"count": len(patients)},
     )
     return [_summary(p) for p in patients]
@@ -135,20 +128,16 @@ def detail(
     user: User = Depends(get_current_user),
 ) -> PatientPublic:
     patient = get_patient_for_user(db, patient_id, user)
-    record_audit_event(
+    audit_request(
+        request,
         action=(
             AuditAction.PATIENT_VIEWED_OWN_RECORD
             if user.role == UserRole.PATIENT
             else AuditAction.STAFF_VIEWED_PATIENT
         ),
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="patient",
         resource_id=patient.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
     return _public(patient)
 
@@ -162,16 +151,12 @@ def update(
     user: User = Depends(get_current_user),
 ) -> PatientPublic:
     patient = update_patient(db, patient_id, payload, user)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.PATIENT_UPDATED,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="patient",
         resource_id=patient.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
     return _public(patient)
 
@@ -186,15 +171,12 @@ def deactivate(
     admin: User = Depends(_admin_only),
 ) -> PatientSummary:
     patient = deactivate_patient(db, patient_id, clinic_id)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.USER_DISABLED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=admin.id,
-        actor_email=admin.email,
+        actor=admin,
         resource_type="user",
         resource_id=patient.user_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": patient.id},
     )
     return _summary(patient)

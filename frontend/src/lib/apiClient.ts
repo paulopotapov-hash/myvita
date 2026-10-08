@@ -106,13 +106,17 @@ export interface RequestOptions {
   body?: unknown
   signal?: AbortSignal
   onResponse?: (response: Response) => void
+  /** Return the raw Response instead of parsing JSON (binary downloads). */
+  raw?: boolean
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? 'GET'
   const headers: Record<string, string> = {}
+  // FormData must set its own multipart boundary; never force a Content-Type on it.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
 
-  if (options.body !== undefined) {
+  if (options.body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json'
   }
   if (!SAFE_METHODS.has(method)) {
@@ -132,7 +136,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       method,
       credentials: 'include',
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: options.body === undefined ? undefined : isFormData ? (options.body as FormData) : JSON.stringify(options.body),
       signal: options.signal,
     })
   } catch {
@@ -144,6 +148,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (response.status === 204) {
     options.onResponse?.(response)
     return undefined as T
+  }
+
+  if (options.raw && response.ok) {
+    options.onResponse?.(response)
+    return response as T
   }
 
   const contentType = response.headers.get('content-type') ?? ''
@@ -175,6 +184,21 @@ export interface PageResult<T> {
   total: number
 }
 
+/** Reads `filename*=UTF-8''…` (preferred) or `filename="…"` from Content-Disposition. */
+export function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) return null
+  const encoded = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim())
+    } catch {
+      return null
+    }
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i)
+  return plain ? plain[1].trim() : null
+}
+
 export const api = {
   get: <T>(path: string, signal?: AbortSignal) => apiRequest<T>(path, { method: 'GET', signal }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
@@ -182,6 +206,12 @@ export const api = {
   patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     apiRequest<T>(path, { method: 'PATCH', body, signal }),
   delete: <T>(path: string, signal?: AbortSignal) => apiRequest<T>(path, { method: 'DELETE', signal }),
+  postForm: <T>(path: string, form: FormData, signal?: AbortSignal) =>
+    apiRequest<T>(path, { method: 'POST', body: form, signal }),
+  getBlob: async (path: string, signal?: AbortSignal): Promise<{ blob: Blob; filename: string | null }> => {
+    const response = await apiRequest<Response>(path, { method: 'GET', signal, raw: true })
+    return { blob: await response.blob(), filename: parseContentDispositionFilename(response.headers.get('content-disposition')) }
+  },
   getPage: async <T>(path: string, signal?: AbortSignal): Promise<PageResult<T>> => {
     let total = 0
     const items = await apiRequest<T[]>(path, {

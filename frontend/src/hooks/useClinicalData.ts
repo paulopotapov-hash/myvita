@@ -32,7 +32,14 @@ export function useUpdateMedication(patientId: string) {
 export function useNotifications(page: number, pageSize: number) {
   return useQuery({ queryKey: ['notifications', page, pageSize], queryFn: ({ signal }) => notificationsService.list(page, pageSize, signal) })
 }
+export function useUnreadNotificationCount() {
+  return useQuery({ queryKey: ['notifications', 'unread-count'], queryFn: ({ signal }) => notificationsService.unreadCount(signal) })
+}
 export function useMarkNotificationRead() {
   const client = useQueryClient()
   return useMutation({ mutationFn: (id: string) => notificationsService.markRead(id), onSuccess: () => client.invalidateQueries({ queryKey: ['notifications'] }) })
+}
+export function useMarkAllNotificationsRead() {
+  const client = useQueryClient()
+  return useMutation({ mutationFn: () => notificationsService.markAllRead(), onSuccess: () => client.invalidateQueries({ queryKey: ['notifications'] }) })
 }

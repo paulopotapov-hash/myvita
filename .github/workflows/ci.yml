@@ -79,6 +79,7 @@ jobs:
         run: |
           bash ../scripts/test_backup_scripts.sh
           bash ../scripts/test_offsite_backup_scripts.sh
+          bash ../scripts/test_documents_backup_scripts.sh
 
       - name: Type check (mypy)
         run: mypy app
@@ -159,6 +160,10 @@ jobs:
         run: docker build -t myvita-frontend:ci frontend
       - name: Build backup image
         run: docker build -f backup/Dockerfile -t myvita-backup:ci .
+      - name: Backup → isolated restore verification (real PostgreSQL)
+        run: bash scripts/test_restore_verification.sh
+      - name: Full disaster recovery via local S3-compatible store (no cloud credentials)
+        run: bash scripts/test_offsite_recovery.sh
       - name: Build public proxy image
         run: docker build -t myvita-proxy:ci proxy
       - name: Build metrics proxy image

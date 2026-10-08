@@ -7,20 +7,33 @@
 # fully replace. There is a confirmation prompt for exactly this reason —
 # pass --yes only from an already-reviewed, non-interactive DR runbook/script.
 #
+# A target that already contains tables is refused unless --replace-existing
+# is also given, so `--yes` alone can only ever populate an empty database
+# (the normal disaster-recovery and drill case). To prove a backup without
+# touching any real database, use scripts/verify_restore.sh instead.
+#
 # Required environment variables:
 #   DB_HOST, DB_PORT, DB_NAME, DB_USER, and either PGPASSWORD or PGPASSFILE
 #
 # Usage:
 #   DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita \
-#     PGPASSWORD=... ./scripts/restore_db.sh backups/myvita_20260101T000000Z.dump [--yes]
+#     PGPASSWORD=... ./scripts/restore_db.sh backups/myvita_20260101T000000Z.dump [--yes] [--replace-existing]
 #
 set -euo pipefail
 
 dump_file="${1:-}"
-confirm_flag="${2:-}"
+confirm_flag=""
+replace_existing=false
+for arg in "${@:2}"; do
+    case "$arg" in
+        --yes) confirm_flag="--yes" ;;
+        --replace-existing) replace_existing=true ;;
+        *) echo "ERROR: unknown option: $arg" >&2; exit 1 ;;
+    esac
+done
 
 if [ -z "$dump_file" ]; then
-    echo "Usage: $0 <dump_file> [--yes]" >&2
+    echo "Usage: $0 <dump_file> [--yes] [--replace-existing]" >&2
     exit 1
 fi
 if [ ! -f "$dump_file" ]; then
@@ -48,6 +61,18 @@ fi
 
 if ! pg_restore --list "$dump_file" > /dev/null; then
     echo "ERROR: backup archive is not readable; restore was not started." >&2
+    exit 1
+fi
+
+echo "Restore target: database='${DB_NAME}' host=${DB_HOST} port=${DB_PORT} user=${DB_USER}"
+if ! existing_tables="$(psql -X -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc \
+        "select count(*) from information_schema.tables where table_schema = 'public'")"; then
+    echo "ERROR: cannot connect to the restore target; restore was not started." >&2
+    exit 1
+fi
+if [ "$existing_tables" != "0" ] && [ "$replace_existing" != "true" ]; then
+    echo "ERROR: target database '${DB_NAME}' already contains ${existing_tables} tables. Refusing to overwrite it." >&2
+    echo "Restore into a new, empty database, or pass --replace-existing after confirming this is the database to replace." >&2
     exit 1
 fi
 

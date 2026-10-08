@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Logo } from '../components/Logo'
 import { useLogout } from '../hooks/useAuthMutations'
+import { useUnreadNotificationCount } from '../hooks/useClinicalData'
 import { useSession } from '../hooks/useSession'
 import { toUserMessage } from '../lib/errorMessages'
 
@@ -19,6 +20,7 @@ interface AuthenticatedLayoutProps {
 export function AuthenticatedLayout({ areaLabel, homePath, navItems }: AuthenticatedLayoutProps) {
   const { user } = useSession()
   const logout = useLogout()
+  const unreadCount = useUnreadNotificationCount()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   if (!user) return null
@@ -37,7 +39,12 @@ export function AuthenticatedLayout({ areaLabel, homePath, navItems }: Authentic
         className={navLinkClassName}
         onClick={mobile ? () => setMobileNavOpen(false) : undefined}
       >
-        {item.label}
+        <span>{item.label}</span>
+        {item.label === 'Notificações' && (unreadCount.data?.count ?? 0) > 0 && (
+          <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-teal-700 px-1.5 py-0.5 text-xs font-semibold text-white" aria-label={`${unreadCount.data?.count} não lidas`}>
+            {unreadCount.data?.count}
+          </span>
+        )}
       </NavLink>
     ))
 

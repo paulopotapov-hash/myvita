@@ -272,7 +272,8 @@ def test_privilege_changes_bump_token_epoch_and_revoke_sessions(world: World):
     with world.db() as db:
         before = db.get(User, doctor_session.user_id).token_epoch
     changed = world.a.admin.patch(
-        f"/api/v1/staff/{world.a.doctor.staff_id}/role", json={"staff_role": "doctor", "specialty": "Phase1 cardio"}
+        f"/api/v1/staff/{world.a.doctor.staff_id}/role",
+        json={"staff_role": "doctor", "specialty": "Phase1 cardio"},
     )
     assert changed.status_code == 200
     with world.db() as db:
@@ -303,6 +304,7 @@ def test_password_change_revokes_old_sessions_but_keeps_current_one(world: World
 # --------------------------------------------------------------------------
 # 6. CSRF
 # --------------------------------------------------------------------------
+
 
 def _csrf_target(world: World) -> tuple[Actor, str]:
     patient = world.a.patients["a1"]
@@ -354,7 +356,9 @@ def test_safe_methods_do_not_need_csrf_and_unsafe_methods_always_do(world: World
         response = patient.call(method, f"/api/v1/patients/{patient.patient_id}", {})
         assert response.status_code == 405, "no PUT/DELETE routes may exist"
     for method, path in _api_routes():
-        assert method not in {"PUT", "DELETE"}, f"{method} {path} widens the CSRF surface"
+        assert method != "PUT", f"{method} {path} widens the CSRF surface"
+        if method == "DELETE":
+            assert path == "/api/v1/documents/{document_id}", f"Unexpected DELETE surface: {path}"
 
 
 def test_every_state_changing_route_enforces_csrf_for_authenticated_callers(world: World):
@@ -429,37 +433,215 @@ def _rows(world: World):
         ("me", "GET", "/api/v1/auth/me", None, (200, 200, 200, 200, 200, 200, 401)),
         ("patient directory", "GET", "/api/v1/patients", None, (200, 200, 200, 200, 403, 403, 401)),
         ("patient detail", "GET", f"/api/v1/patients/{pid}", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("patient phone update", "PATCH", f"/api/v1/patients/{pid}", {"phone": "910000000"}, (403, 200, 200, 403, 200, 404, 401)),
-        ("patient demographics by patient", "PATCH", f"/api/v1/patients/{pid}", {"national_health_number": "1"}, (403, 200, 200, 403, 403, 404, 401)),
-        ("patient deactivate", "POST", f"/api/v1/patients/{pid}/deactivate", None, (None, 403, 403, 403, 403, 403, 401)),
-        ("record list", "GET", f"/api/v1/patients/{pid}/medical-records", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("record create", "POST", f"/api/v1/patients/{pid}/medical-records", {"title": "t", "content": "c"}, (403, 201, 201, 403, 404, 404, 401)),
-        ("record detail", "GET", f"/api/v1/medical-records/{res['record']}", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("record revisions", "GET", f"/api/v1/medical-records/{res['record']}/revisions", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("record update (stale version)", "PATCH", f"/api/v1/medical-records/{res['record']}", {"title": "t", "content": "c", "expected_version": 999}, (403, 409, 409, 403, 404, 404, 401)),
-        ("medication list", "GET", f"/api/v1/patients/{pid}/medications", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("medication create", "POST", f"/api/v1/patients/{pid}/medications", {"name": "M", "dosage": "1 mg", "start_date": "2031-01-01"}, (403, 201, 201, 403, 404, 404, 401)),
-        ("medication detail", "GET", f"/api/v1/medications/{res['medication']}", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("medication update", "PATCH", f"/api/v1/medications/{res['medication']}", {"instructions": "after food"}, (403, 200, 200, 403, 404, 404, 401)),
-        ("medication deactivate", "POST", f"/api/v1/medications/{res['medication']}/deactivate", None, (403, None, None, 403, 404, 404, 401)),
-        ("consent list", "GET", f"/api/v1/patients/{pid}/consents", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("consent grant", "POST", f"/api/v1/patients/{pid}/consents", lambda: {"consent_type": "research", "purpose": f"matrix-{uuid.uuid4().hex[:6]}"}, (403, 403, 403, 403, 201, 403, 401)),
-        ("consent detail", "GET", f"/api/v1/consents/{res['consent']}", None, (403, 200, 200, 403, 200, 404, 401)),
-        ("consent revoke", "POST", f"/api/v1/consents/{res['consent']}/revoke", None, (403, 403, 403, 403, None, 403, 401)),
+        (
+            "patient phone update",
+            "PATCH",
+            f"/api/v1/patients/{pid}",
+            {"phone": "910000000"},
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "patient demographics by patient",
+            "PATCH",
+            f"/api/v1/patients/{pid}",
+            {"national_health_number": "1"},
+            (403, 200, 200, 403, 403, 404, 401),
+        ),
+        (
+            "patient deactivate",
+            "POST",
+            f"/api/v1/patients/{pid}/deactivate",
+            None,
+            (None, 403, 403, 403, 403, 403, 401),
+        ),
+        (
+            "record list",
+            "GET",
+            f"/api/v1/patients/{pid}/medical-records",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "record create",
+            "POST",
+            f"/api/v1/patients/{pid}/medical-records",
+            {"title": "t", "content": "c"},
+            (403, 201, 201, 403, 404, 404, 401),
+        ),
+        (
+            "record detail",
+            "GET",
+            f"/api/v1/medical-records/{res['record']}",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "record revisions",
+            "GET",
+            f"/api/v1/medical-records/{res['record']}/revisions",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "record update (stale version)",
+            "PATCH",
+            f"/api/v1/medical-records/{res['record']}",
+            {"title": "t", "content": "c", "expected_version": 999},
+            (403, 409, 409, 403, 404, 404, 401),
+        ),
+        (
+            "medication list",
+            "GET",
+            f"/api/v1/patients/{pid}/medications",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "medication create",
+            "POST",
+            f"/api/v1/patients/{pid}/medications",
+            {"name": "M", "dosage": "1 mg", "start_date": "2031-01-01"},
+            (403, 201, 201, 403, 404, 404, 401),
+        ),
+        (
+            "medication detail",
+            "GET",
+            f"/api/v1/medications/{res['medication']}",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "medication update",
+            "PATCH",
+            f"/api/v1/medications/{res['medication']}",
+            {"instructions": "after food"},
+            (403, 200, 200, 403, 404, 404, 401),
+        ),
+        (
+            "medication deactivate",
+            "POST",
+            f"/api/v1/medications/{res['medication']}/deactivate",
+            None,
+            (403, None, None, 403, 404, 404, 401),
+        ),
+        (
+            "consent list",
+            "GET",
+            f"/api/v1/patients/{pid}/consents",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "consent grant",
+            "POST",
+            f"/api/v1/patients/{pid}/consents",
+            lambda: {"consent_type": "research", "purpose": f"matrix-{uuid.uuid4().hex[:6]}"},
+            (403, 403, 403, 403, 201, 403, 401),
+        ),
+        (
+            "consent detail",
+            "GET",
+            f"/api/v1/consents/{res['consent']}",
+            None,
+            (403, 200, 200, 403, 200, 404, 401),
+        ),
+        (
+            "consent revoke",
+            "POST",
+            f"/api/v1/consents/{res['consent']}/revoke",
+            None,
+            (403, 403, 403, 403, None, 403, 401),
+        ),
         ("appointment list", "GET", "/api/v1/appointments", None, (200, 200, 200, 200, 200, 200, 401)),
-        ("appointment detail", "GET", f"/api/v1/appointments/{res['appointment']}", None, (200, 200, 200, 200, 200, 404, 401)),
-        ("appointment create", "POST", "/api/v1/appointments", lambda: {"patient_id": pid, "staff_id": doc.staff_id, "scheduled_at": _slot()}, (201, 201, 201, 201, 403, 403, 401)),
-        ("appointment update", "PATCH", f"/api/v1/appointments/{res['appointment']}", {"duration_minutes": 30}, (200, 200, 200, 200, 403, 403, 401)),
-        ("appointment cancel", "POST", f"/api/v1/appointments/{res['appointment']}/cancel", None, (None, None, None, None, 403, 403, 401)),
+        (
+            "appointment detail",
+            "GET",
+            f"/api/v1/appointments/{res['appointment']}",
+            None,
+            (200, 200, 200, 200, 200, 404, 401),
+        ),
+        (
+            "appointment create",
+            "POST",
+            "/api/v1/appointments",
+            lambda: {"patient_id": pid, "staff_id": doc.staff_id, "scheduled_at": _slot()},
+            (201, 201, 201, 201, 403, 403, 401),
+        ),
+        (
+            "appointment update",
+            "PATCH",
+            f"/api/v1/appointments/{res['appointment']}",
+            {"duration_minutes": 30},
+            (200, 200, 200, 200, 403, 403, 401),
+        ),
+        (
+            "appointment cancel",
+            "POST",
+            f"/api/v1/appointments/{res['appointment']}/cancel",
+            None,
+            (None, None, None, None, 403, 403, 401),
+        ),
         ("staff directory", "GET", "/api/v1/staff", None, (200, 200, 200, 200, 200, 200, 401)),
-        ("staff create", "POST", "/api/v1/staff", lambda: {"full_name": "Matrix Nurse", "email": f"m-{uuid.uuid4().hex[:8]}@phase1.example", "password": PASSWORD, "staff_role": "nurse"}, (201, 403, 403, 403, 403, 403, 401)),
-        ("staff deactivate", "POST", f"/api/v1/staff/{world.a.nurse.staff_id}/deactivate", None, (None, 403, 403, 403, 403, 403, 401)),
-        ("staff activate", "POST", f"/api/v1/staff/{world.a.nurse.staff_id}/activate", None, (200, 403, 403, 403, 403, 403, 401)),
-        ("staff role change", "PATCH", f"/api/v1/staff/{world.a.nurse.staff_id}/role", {"staff_role": "nurse"}, (None, 403, 403, 403, 403, 403, 401)),
-        ("staff invitation", "POST", "/api/v1/invitations/staff", lambda: {"email": f"i-{uuid.uuid4().hex[:8]}@phase1.example", "full_name": "Invited Staff", "staff_role": "nurse"}, (201, 403, 403, 403, 403, 403, 401)),
-        ("patient invitation", "POST", "/api/v1/invitations/patients", lambda: {"email": f"i-{uuid.uuid4().hex[:8]}@phase1.example", "full_name": "Invited Patient"}, (201, 201, 201, 403, 403, 403, 401)),
+        (
+            "staff create",
+            "POST",
+            "/api/v1/staff",
+            lambda: {
+                "full_name": "Matrix Nurse",
+                "email": f"m-{uuid.uuid4().hex[:8]}@phase1.example",
+                "password": PASSWORD,
+                "staff_role": "nurse",
+            },
+            (201, 403, 403, 403, 403, 403, 401),
+        ),
+        (
+            "staff deactivate",
+            "POST",
+            f"/api/v1/staff/{world.a.nurse.staff_id}/deactivate",
+            None,
+            (None, 403, 403, 403, 403, 403, 401),
+        ),
+        (
+            "staff activate",
+            "POST",
+            f"/api/v1/staff/{world.a.nurse.staff_id}/activate",
+            None,
+            (200, 403, 403, 403, 403, 403, 401),
+        ),
+        (
+            "staff role change",
+            "PATCH",
+            f"/api/v1/staff/{world.a.nurse.staff_id}/role",
+            {"staff_role": "nurse"},
+            (None, 403, 403, 403, 403, 403, 401),
+        ),
+        (
+            "staff invitation",
+            "POST",
+            "/api/v1/invitations/staff",
+            lambda: {
+                "email": f"i-{uuid.uuid4().hex[:8]}@phase1.example",
+                "full_name": "Invited Staff",
+                "staff_role": "nurse",
+            },
+            (201, 403, 403, 403, 403, 403, 401),
+        ),
+        (
+            "patient invitation",
+            "POST",
+            "/api/v1/invitations/patients",
+            lambda: {"email": f"i-{uuid.uuid4().hex[:8]}@phase1.example", "full_name": "Invited Patient"},
+            (201, 201, 201, 403, 403, 403, 401),
+        ),
         ("notifications list", "GET", "/api/v1/notifications", None, (200, 200, 200, 200, 200, 200, 401)),
-        ("notification mark read", "POST", f"/api/v1/notifications/{res['notification']}/read", None, (404, 404, 404, 404, 200, 404, 401)),
+        (
+            "notification mark read",
+            "POST",
+            f"/api/v1/notifications/{res['notification']}/read",
+            None,
+            (404, 404, 404, 404, 200, 404, 401),
+        ),
+        ("audit log listing", "GET", "/api/v1/audit-logs", None, (200, 403, 403, 403, 403, 403, 401)),
     ]
 
 
@@ -475,7 +657,9 @@ def test_role_permission_matrix_is_enforced_by_the_backend(world: World):
             response = actors[role].call(method, path, payload)
             cells += 1
             if response.status_code != want:
-                failures.append(f"{name} [{role}] expected {want} got {response.status_code}: {response.text[:120]}")
+                failures.append(
+                    f"{name} [{role}] expected {want} got {response.status_code}: {response.text[:120]}"
+                )
     assert cells > 200
     assert not failures, "\n".join(failures)
     # leave the shared nurse in a known state for later tests
@@ -485,7 +669,15 @@ def test_role_permission_matrix_is_enforced_by_the_backend(world: World):
 def test_patient_never_sees_staff_only_or_administrative_data(world: World):
     patient = world.a.patients["a1"]
     own = patient.get(f"/api/v1/patients/{patient.patient_id}").json()
-    assert set(own) == {"id", "clinic_id", "full_name", "birth_date", "phone", "national_health_number", "is_active"}
+    assert set(own) == {
+        "id",
+        "clinic_id",
+        "full_name",
+        "birth_date",
+        "phone",
+        "national_health_number",
+        "is_active",
+    }
     for path in ("/api/v1/patients", "/api/v1/invitations/staff"):
         assert patient.get(path).status_code in {403, 405}
     listing = patient.get("/api/v1/appointments").json()
@@ -493,7 +685,12 @@ def test_patient_never_sees_staff_only_or_administrative_data(world: World):
     assert all(a["patient_id"] == patient.patient_id for a in listing)
     blob = " ".join(
         patient.get(p).text
-        for p in ("/api/v1/appointments", "/api/v1/notifications", "/api/v1/staff", f"/api/v1/patients/{patient.patient_id}")
+        for p in (
+            "/api/v1/appointments",
+            "/api/v1/notifications",
+            "/api/v1/staff",
+            f"/api/v1/patients/{patient.patient_id}",
+        )
     )
     for foreign in (world.a.patients["a2"], world.b.patients["b1"]):
         assert foreign.patient_id not in blob and foreign.user_id not in blob
@@ -512,7 +709,12 @@ def test_administrative_roles_cannot_read_clinical_content_or_appointment_reason
             assert actor.get(f"/api/v1/patients/{a1.patient_id}/{suffix}").status_code == 403
         denied = actor.post(
             "/api/v1/appointments",
-            json={"patient_id": a1.patient_id, "staff_id": world.a.doctor.staff_id, "scheduled_at": _slot(), "reason": "x"},
+            json={
+                "patient_id": a1.patient_id,
+                "staff_id": world.a.doctor.staff_id,
+                "scheduled_at": _slot(),
+                "reason": "x",
+            },
         )
         assert denied.status_code == 403
     doctor_view = world.a.doctor.get(f"/api/v1/appointments/{a1.res['appointment']}").json()
@@ -532,7 +734,11 @@ def _attacks(victim: Tenant, key: str, ghost: bool) -> list[tuple[str, str, obje
         return new() if new else value
 
     patient = victim.patients[key]
-    pid, record, medication = pick(patient.patient_id), pick(patient.res["record"]), pick(patient.res["medication"])
+    pid, record, medication = (
+        pick(patient.patient_id),
+        pick(patient.res["record"]),
+        pick(patient.res["medication"]),
+    )
     consent, appointment = pick(patient.res["consent"]), pick(patient.res["appointment"])
     notification, staff_id = pick(patient.res["notification"]), pick(victim.nurse.staff_id)
     doctor_id = pick(victim.doctor.staff_id)
@@ -546,7 +752,11 @@ def _attacks(victim: Tenant, key: str, ghost: bool) -> list[tuple[str, str, obje
         ("GET", f"/api/v1/medical-records/{record}/revisions", None),
         ("PATCH", f"/api/v1/medical-records/{record}", {"title": "x", "content": "x", "expected_version": 1}),
         ("GET", f"/api/v1/patients/{pid}/medications", None),
-        ("POST", f"/api/v1/patients/{pid}/medications", {"name": "x", "dosage": "x", "start_date": "2031-01-01"}),
+        (
+            "POST",
+            f"/api/v1/patients/{pid}/medications",
+            {"name": "x", "dosage": "x", "start_date": "2031-01-01"},
+        ),
         ("GET", f"/api/v1/medications/{medication}", None),
         ("PATCH", f"/api/v1/medications/{medication}", {"dosage": "999 g"}),
         ("POST", f"/api/v1/medications/{medication}/deactivate", None),
@@ -557,7 +767,11 @@ def _attacks(victim: Tenant, key: str, ghost: bool) -> list[tuple[str, str, obje
         ("GET", f"/api/v1/appointments/{appointment}", None),
         ("PATCH", f"/api/v1/appointments/{appointment}", {"duration_minutes": 60}),
         ("POST", f"/api/v1/appointments/{appointment}/cancel", None),
-        ("POST", "/api/v1/appointments", {"patient_id": pid, "staff_id": doctor_id, "scheduled_at": "2032-01-01T10:00:00+00:00"}),
+        (
+            "POST",
+            "/api/v1/appointments",
+            {"patient_id": pid, "staff_id": doctor_id, "scheduled_at": "2032-01-01T10:00:00+00:00"},
+        ),
         ("POST", f"/api/v1/notifications/{notification}/read", None),
         ("POST", f"/api/v1/staff/{staff_id}/deactivate", None),
         ("POST", f"/api/v1/staff/{staff_id}/activate", None),
@@ -565,7 +779,9 @@ def _attacks(victim: Tenant, key: str, ghost: bool) -> list[tuple[str, str, obje
     ]
 
 
-def _attack_everything(attackers: list[Actor], victim: Tenant, key: str, label: str, *, strict: bool = True) -> int:
+def _attack_everything(
+    attackers: list[Actor], victim: Tenant, key: str, label: str, *, strict: bool = True
+) -> int:
     real, ghosts = _attacks(victim, key, ghost=False), _attacks(victim, key, ghost=True)
     failures, calls = [], 0
     for attacker in attackers:
@@ -579,7 +795,9 @@ def _attack_everything(attackers: list[Actor], victim: Tenant, key: str, label: 
                     f"(nonexistent id -> {ghost.status_code})"
                 )
             elif strict and actual.status_code == 404 and actual.json() != ghost.json():
-                failures.append(f"{label} {attacker.key}: {method} {path} 404 body differs from nonexistent id")
+                failures.append(
+                    f"{label} {attacker.key}: {method} {path} 404 body differs from nonexistent id"
+                )
     assert not failures, "\n".join(failures)
     return calls
 
@@ -595,7 +813,9 @@ def test_patient_a1_cannot_touch_patient_a2_in_the_same_clinic(world: World):
     # Same clinic: denial is mandatory; the 403-vs-404 wording for existing ids is a known, low-risk
     # difference (UUIDv4 ids are unguessable) tracked in the Phase 2 report.
     a1, a2 = world.a.patients["a1"], world.a.patients["a2"]
-    assert _attack_everything([a1], world.a, "a2", "A1->A2", strict=False) == len(_attacks(world.a, "a2", False))
+    assert _attack_everything([a1], world.a, "a2", "A1->A2", strict=False) == len(
+        _attacks(world.a, "a2", False)
+    )
     assert _attack_everything([a2], world.a, "a1", "A2->A1", strict=False) > 0
 
 
@@ -634,25 +854,52 @@ def test_cross_tenant_ids_inside_bodies_and_mixed_requests_are_blocked(world: Wo
     for body, status in cases:
         assert doctor.post("/api/v1/appointments", json={**body, "scheduled_at": when}).status_code == status
 
-    mine = doctor.post("/api/v1/appointments", json={**own, "scheduled_at": "2032-05-06T10:00:00+00:00"}).json()
+    mine = doctor.post(
+        "/api/v1/appointments", json={**own, "scheduled_at": "2032-05-06T10:00:00+00:00"}
+    ).json()
     for patch in ({"patient_id": b1.patient_id}, {"staff_id": foreign_staff}):
         assert doctor.patch(f"/api/v1/appointments/{mine['id']}", json=patch).status_code == 404
     unchanged = doctor.get(f"/api/v1/appointments/{mine['id']}").json()
     assert unchanged["patient_id"] == a1.patient_id and unchanged["staff_id"] == doctor.staff_id
 
     injections = [
-        (f"/api/v1/patients/{a1.patient_id}/medical-records", {"title": "t", "content": "c", "clinic_id": world.b.clinic_id}),
-        (f"/api/v1/patients/{a1.patient_id}/medical-records", {"title": "t", "content": "c", "patient_id": b1.patient_id}),
-        (f"/api/v1/patients/{a1.patient_id}/medications", {"name": "n", "dosage": "d", "start_date": "2031-01-01", "clinic_id": world.b.clinic_id}),
-        (f"/api/v1/patients/{a1.patient_id}/medications", {"name": "n", "dosage": "d", "start_date": "2031-01-01", "prescribed_by_staff_id": foreign_staff}),
+        (
+            f"/api/v1/patients/{a1.patient_id}/medical-records",
+            {"title": "t", "content": "c", "clinic_id": world.b.clinic_id},
+        ),
+        (
+            f"/api/v1/patients/{a1.patient_id}/medical-records",
+            {"title": "t", "content": "c", "patient_id": b1.patient_id},
+        ),
+        (
+            f"/api/v1/patients/{a1.patient_id}/medications",
+            {"name": "n", "dosage": "d", "start_date": "2031-01-01", "clinic_id": world.b.clinic_id},
+        ),
+        (
+            f"/api/v1/patients/{a1.patient_id}/medications",
+            {"name": "n", "dosage": "d", "start_date": "2031-01-01", "prescribed_by_staff_id": foreign_staff},
+        ),
     ]
     for path, body in injections:
         assert doctor.post(path, json=body).status_code == 422, (path, body)
-    assert a1.patch(f"/api/v1/patients/{a1.patient_id}", json={"phone": "1", "clinic_id": world.b.clinic_id}).status_code == 422
-    assert a1.post(
-        f"/api/v1/patients/{a1.patient_id}/consents",
-        json={"consent_type": "research", "purpose": "x", "clinic_id": world.b.clinic_id, "patient_id": b1.patient_id},
-    ).status_code == 422
+    assert (
+        a1.patch(
+            f"/api/v1/patients/{a1.patient_id}", json={"phone": "1", "clinic_id": world.b.clinic_id}
+        ).status_code
+        == 422
+    )
+    assert (
+        a1.post(
+            f"/api/v1/patients/{a1.patient_id}/consents",
+            json={
+                "consent_type": "research",
+                "purpose": "x",
+                "clinic_id": world.b.clinic_id,
+                "patient_id": b1.patient_id,
+            },
+        ).status_code
+        == 422
+    )
 
 
 def test_list_endpoints_ignore_foreign_scope_in_query_strings(world: World):
@@ -675,7 +922,10 @@ def test_list_endpoints_ignore_foreign_scope_in_query_strings(world: World):
         for path in ("/api/v1/appointments", "/api/v1/patients", "/api/v1/staff", "/api/v1/notifications"):
             response = actor.get(path + f"?clinic_id={world.a.clinic_id}")
             if response.status_code == 200:
-                assert world.a.clinic_id not in response.text and world.a.patients["a1"].patient_id not in response.text
+                assert (
+                    world.a.clinic_id not in response.text
+                    and world.a.patients["a1"].patient_id not in response.text
+                )
 
 
 def test_admin_and_staff_listings_are_strictly_tenant_scoped(world: World):
@@ -714,25 +964,34 @@ def test_security_and_clinical_events_are_audited_with_correct_context(world: Wo
     assert patient.get("/api/v1/patients").status_code == 403  # permission denied
     appointment = doctor.post(
         "/api/v1/appointments",
-        json={"patient_id": patient.patient_id, "staff_id": doctor.staff_id, "scheduled_at": _slot(), "reason": "audit-reason"},
+        json={
+            "patient_id": patient.patient_id,
+            "staff_id": doctor.staff_id,
+            "scheduled_at": _slot(),
+            "reason": "audit-reason",
+        },
     ).json()
     doctor.get(f"/api/v1/appointments/{appointment['id']}")
     doctor.patch(f"/api/v1/appointments/{appointment['id']}", json={"status": "confirmed"})
     doctor.post(f"/api/v1/appointments/{appointment['id']}/cancel")
     record = doctor.post(
-        f"/api/v1/patients/{patient.patient_id}/medical-records", json={"title": "Audit", "content": f"{RECORD_MARKER}-audit"}
+        f"/api/v1/patients/{patient.patient_id}/medical-records",
+        json={"title": "Audit", "content": f"{RECORD_MARKER}-audit"},
     ).json()
     doctor.get(f"/api/v1/medical-records/{record['id']}")
     doctor.patch(
-        f"/api/v1/medical-records/{record['id']}", json={"title": "Audit2", "content": f"{RECORD_MARKER}-audit2", "expected_version": 1}
+        f"/api/v1/medical-records/{record['id']}",
+        json={"title": "Audit2", "content": f"{RECORD_MARKER}-audit2", "expected_version": 1},
     )
     medication = doctor.post(
-        f"/api/v1/patients/{patient.patient_id}/medications", json={"name": "Auditol", "dosage": "5 mg", "start_date": "2031-01-01"}
+        f"/api/v1/patients/{patient.patient_id}/medications",
+        json={"name": "Auditol", "dosage": "5 mg", "start_date": "2031-01-01"},
     ).json()
     doctor.patch(f"/api/v1/medications/{medication['id']}", json={"instructions": "audit"})
     doctor.post(f"/api/v1/medications/{medication['id']}/deactivate")
     consent = patient.post(
-        f"/api/v1/patients/{patient.patient_id}/consents", json={"consent_type": "treatment", "purpose": "audit"}
+        f"/api/v1/patients/{patient.patient_id}/consents",
+        json={"consent_type": "treatment", "purpose": "audit"},
     ).json()
     doctor.get(f"/api/v1/consents/{consent['id']}")
     patient.post(f"/api/v1/consents/{consent['id']}/revoke")
@@ -740,7 +999,13 @@ def test_security_and_clinical_events_are_audited_with_correct_context(world: Wo
     patient.post(f"/api/v1/notifications/{notification['id']}/read")
     patient.post("/api/v1/auth/logout")
 
-    def has(action: AuditAction, *, resource_id: str | None = None, actor: Actor | None = None, result=AuditResult.SUCCESS):
+    def has(
+        action: AuditAction,
+        *,
+        resource_id: str | None = None,
+        actor: Actor | None = None,
+        result=AuditResult.SUCCESS,
+    ):
         filters = {"action": action, "result": result}
         if resource_id:
             filters["resource_id"] = resource_id
@@ -750,7 +1015,11 @@ def test_security_and_clinical_events_are_audited_with_correct_context(world: Wo
         assert rows, f"missing audit event {action.value} {resource_id or ''}"
         return rows[-1]
 
-    assert [r.action for r in _audit_rows(world, actor_email=patient.email) if r.action == AuditAction.LOGIN_FAILURE]
+    assert [
+        r.action
+        for r in _audit_rows(world, actor_email=patient.email)
+        if r.action == AuditAction.LOGIN_FAILURE
+    ]
     ghost = _audit_rows(world, actor_email="ghost-audit@phase1.example")
     assert ghost and ghost[-1].action == AuditAction.LOGIN_FAILURE and ghost[-1].actor_user_id is None
     has(AuditAction.PATIENT_CREATED, resource_id=patient.patient_id, actor=patient)
@@ -775,7 +1044,12 @@ def test_security_and_clinical_events_are_audited_with_correct_context(world: Wo
         row = has(action, resource_id=resource, actor=actor)
         assert str(row.clinic_id) == world.a.clinic_id, action
 
-    for action in (AuditAction.LOGIN_SUCCESS, AuditAction.STAFF_CREATED, AuditAction.CLINIC_CREATED, AuditAction.INVITATION_CREATED):
+    for action in (
+        AuditAction.LOGIN_SUCCESS,
+        AuditAction.STAFF_CREATED,
+        AuditAction.CLINIC_CREATED,
+        AuditAction.INVITATION_CREATED,
+    ):
         assert _audit_rows(world, action=action), action
 
 
@@ -796,7 +1070,16 @@ def test_audit_trail_contains_no_secrets_or_clinical_content(world: World):
         )
         for r in rows
     )
-    for forbidden in (PASSWORD, wrong_password, RECORD_MARKER, "seed-reason", "Seedamol", "eyJ", settings.JWT_SECRET_KEY, *tokens):
+    for forbidden in (
+        PASSWORD,
+        wrong_password,
+        RECORD_MARKER,
+        "seed-reason",
+        "Seedamol",
+        "eyJ",
+        settings.JWT_SECRET_KEY,
+        *tokens,
+    ):
         assert forbidden not in dump, f"audit trail leaks {forbidden[:12]}..."
 
 
@@ -804,7 +1087,17 @@ def test_audit_trail_contains_no_secrets_or_clinical_content(world: World):
 # 17. API error behaviour
 # --------------------------------------------------------------------------
 
-_LEAK_MARKERS = ("Traceback", 'File "', "/app/", "sqlalchemy", "psycopg", "postgresql", "SELECT ", "INSERT ", "hunter2")
+_LEAK_MARKERS = (
+    "Traceback",
+    'File "',
+    "/app/",
+    "sqlalchemy",
+    "psycopg",
+    "postgresql",
+    "SELECT ",
+    "INSERT ",
+    "hunter2",
+)
 
 
 def _assert_clean_error(response, *, status: int) -> None:
@@ -828,20 +1121,33 @@ def test_error_statuses_are_well_formed_and_do_not_leak_internals(world: World):
     _assert_clean_error(
         admin.post(
             "/api/v1/staff",
-            json={"full_name": "Dup", "email": world.a.doctor.email, "password": PASSWORD, "staff_role": "nurse"},
+            json={
+                "full_name": "Dup",
+                "email": world.a.doctor.email,
+                "password": PASSWORD,
+                "staff_role": "nurse",
+            },
         ),
         status=400,
     )
     _assert_clean_error(
-        patient.post(f"/api/v1/patients/{a1_id}/consents", json={"consent_type": "treatment", "purpose": "seed-purpose-a-a1"}),
+        patient.post(
+            f"/api/v1/patients/{a1_id}/consents",
+            json={"consent_type": "treatment", "purpose": "seed-purpose-a-a1"},
+        ),
         status=409,
     )
     _assert_clean_error(
-        doctor.patch(f"/api/v1/medical-records/{patient.res['record']}", json={"title": "t", "content": "c", "expected_version": 77}),
+        doctor.patch(
+            f"/api/v1/medical-records/{patient.res['record']}",
+            json={"title": "t", "content": "c", "expected_version": 77},
+        ),
         status=409,
     )
     huge = doctor.client.post(
-        "/api/v1/appointments", content=b"{}", headers={"content-length": str(settings.MAX_REQUEST_BODY_BYTES + 1)}
+        "/api/v1/appointments",
+        content=b"{}",
+        headers={"content-length": str(settings.MAX_REQUEST_BODY_BYTES + 1)},
     )
     _assert_clean_error(huge, status=413)
 
@@ -859,7 +1165,12 @@ def test_login_rate_limit_returns_429_and_is_audited(world: World):
 
     limiter.reset()
     attacker = Actor("bruteforce", "rate-limit-probe@phase1.example")
-    codes = [attacker.client.post("/api/v1/auth/login", json={"email": attacker.email, "password": "x"}).status_code for _ in range(12)]
+    codes = [
+        attacker.client.post(
+            "/api/v1/auth/login", json={"email": attacker.email, "password": "x"}
+        ).status_code
+        for _ in range(12)
+    ]
     assert codes[:10] == [401] * 10 and set(codes[10:]) == {429}
     limited = attacker.client.post("/api/v1/auth/login", json={"email": attacker.email, "password": "x"})
     _assert_clean_error(limited, status=429)
@@ -870,7 +1181,9 @@ def test_login_rate_limit_returns_429_and_is_audited(world: World):
 def test_database_outage_returns_503_without_leaking_details(world: World):
     class BrokenSession:
         def get(self, *_args, **_kwargs):
-            raise OperationalError("SELECT * FROM users WHERE password='hunter2'", {}, Exception("postgresql://u:hunter2@db/x"))
+            raise OperationalError(
+                "SELECT * FROM users WHERE password='hunter2'", {}, Exception("postgresql://u:hunter2@db/x")
+            )
 
         def close(self):
             pass

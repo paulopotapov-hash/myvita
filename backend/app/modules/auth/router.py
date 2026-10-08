@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request, client_ip
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, LOGIN_RATE_LIMIT, limiter
 from app.core.security import (
@@ -13,7 +13,7 @@ from app.core.security import (
     set_session_cookie,
     verify_password,
 )
-from app.models import AuditAction, AuditResult, Patient, Staff, User
+from app.models import AuditAction, Patient, Staff, User
 from app.modules.auth.schemas import LoginRequest, PasswordChangeRequest, UserPublic
 from app.modules.auth.service import authenticate
 
@@ -24,7 +24,9 @@ router = APIRouter()
 
 @router.post("/login", response_model=UserPublic)
 @limiter.limit(LOGIN_RATE_LIMIT)
-def login(request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> UserPublic:
+def login(
+    request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)
+) -> UserPublic:
     user = authenticate(
         db,
         payload.email,
@@ -49,15 +51,7 @@ def logout(
     user.token_epoch += 1
     db.commit()
     logger.info("Logout: user_id=%s", user.id)
-    record_audit_event(
-        action=AuditAction.LOGOUT,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
+    audit_request(request, action=AuditAction.LOGOUT, actor=user)
     clear_session_cookie(response)
 
 
@@ -101,12 +95,6 @@ def change_password(
     db.commit()
     db.refresh(user)
     set_session_cookie(response, user)
-    record_audit_event(
-        action=AuditAction.PASSWORD_CHANGE,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+    audit_request(
+        request, action=AuditAction.PASSWORD_CHANGE, actor=user, resource_type="user", resource_id=user.id
     )

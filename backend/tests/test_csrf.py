@@ -6,6 +6,7 @@ app/core/security.py for the full design rationale).
 These tests exercise real HTTP behavior through the FastAPI TestClient,
 not just unit-level token generation/validation.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

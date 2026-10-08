@@ -75,4 +75,9 @@ describe('role-separated application routes', () => {
     renderPath('/patient/saude')
     await waitFor(() => expect(screen.getByText('Login page')).toBeInTheDocument())
   })
+
+  it.each(['/registo', '/nova-clinica'])('does not expose the public self-registration route %s', async (path) => {
+    renderPath(path)
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Página não encontrada' })).toBeInTheDocument())
+  })
 })

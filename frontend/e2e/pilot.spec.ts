@@ -14,18 +14,21 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   const staffEmail = `doctor-${suffix}@example.com`
   const patientEmail = `patient-${suffix}@example.com`
 
-  await page.goto('/nova-clinica')
-  await page.getByLabel('Nome da clínica').fill(`Clínica E2E ${suffix}`)
-  await page.getByLabel('O teu nome').fill('Admin E2E')
-  await page.getByLabel('Email').fill(adminEmail)
-  await page.getByLabel('Palavra-passe').fill(password)
-  const clinicResponsePromise = page.waitForResponse((response) =>
-    response.url().endsWith('/api/v1/clinics') && response.request().method() === 'POST')
-  await page.getByRole('button', { name: 'Criar clínica' }).click()
-  const clinicResponse = await clinicResponsePromise
+  const seed = await request.newContext({ baseURL })
+  const clinicResponse = await seed.post('/api/v1/clinics', { data: {
+    clinic_name: `Clínica E2E ${suffix}`,
+    admin_full_name: 'Admin E2E',
+    admin_email: adminEmail,
+    admin_password: password,
+  } })
   expect(clinicResponse.status()).toBe(201)
   const clinic = await clinicResponse.json() as { id: string }
-  await expect(page.getByText('Administrador da clínica')).toBeVisible()
+
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(adminEmail)
+  await page.getByLabel('Palavra-passe').fill(password)
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await expect(page).toHaveURL(/\/app/)
 
   const staffResponse = await page.request.post('/api/v1/staff', {
     headers: await csrf(page),
@@ -33,7 +36,6 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   })
   expect(staffResponse.status()).toBe(201)
 
-  const seed = await request.newContext({ baseURL })
   const patientResponse = await seed.post('/api/v1/patients/register', {
     data: { clinic_id: clinic.id, full_name: 'Paciente E2E', email: patientEmail, password },
   })

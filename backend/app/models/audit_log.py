@@ -65,6 +65,9 @@ class AuditAction(str, enum.Enum):
     MEDICATION_UPDATED = "medication_updated"
     MEDICATION_DEACTIVATED = "medication_deactivated"
     NOTIFICATION_READ = "notification_read"
+    CONVERSATION_CREATED = "conversation_created"
+    MESSAGE_SENT = "message_sent"
+    MESSAGE_READ = "message_read"
     PERMISSION_DENIED = "permission_denied"
     CSRF_FAILURE = "csrf_failure"
     RATE_LIMITED = "rate_limited"
@@ -75,6 +78,12 @@ class AuditAction(str, enum.Enum):
     CONSENT_VIEWED = "consent_viewed"
     MEDICAL_RECORD_VIEWED = "medical_record_viewed"
     MEDICATION_VIEWED = "medication_viewed"
+    CONVERSATION_VIEWED = "conversation_viewed"
+    DOCUMENT_UPLOADED = "document_uploaded"
+    DOCUMENT_DOWNLOADED = "document_downloaded"
+    DOCUMENT_DELETED = "document_deleted"
+    # Reading the audit trail is itself an audited administrative action.
+    AUDIT_LOG_VIEWED = "audit_log_viewed"
 
 
 class AuditResult(str, enum.Enum):
@@ -94,6 +103,8 @@ class AuditLog(Base):
         Index("ix_audit_logs_clinic_id", "clinic_id"),
         Index("ix_audit_logs_actor_user_id", "actor_user_id"),
         Index("ix_audit_logs_resource", "resource_type", "resource_id"),
+        # The administrator listing is always "this clinic, newest first".
+        Index("ix_audit_logs_clinic_timestamp", "clinic_id", "timestamp"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -127,6 +138,8 @@ class AuditLog(Base):
 
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # long enough for IPv6
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Correlates with the X-Request-ID echoed to the client and the request log line.
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Minimal identifiers only — see module docstring. JSONB, not JSON: we
     # never query into it in a hot path, but JSONB is the Postgres-idiomatic
     # choice and costs nothing extra here.

@@ -92,7 +92,10 @@ def main() -> int:
     domain = os.environ.get("STAGING_SEED_EMAIL_DOMAIN", "staging.example")
     with SessionLocal() as db:
         if db.query(Clinic).filter(~Clinic.name.like("Staging Clinic %")).first() is not None:
-            print("Refusing to run: non-seed clinics exist, this is not a synthetic-only database.", file=sys.stderr)
+            print(
+                "Refusing to run: non-seed clinics exist, this is not a synthetic-only database.",
+                file=sys.stderr,
+            )
             return 1
         created = seed(db, password, domain)
     print(f"Seed complete; {len(created)} identities created.")

@@ -21,6 +21,7 @@ class User(Base):
     A User has at most one Patient profile OR one Staff profile
     (never both), enforced at the service layer.
     """
+
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -52,5 +53,7 @@ class User(Base):
     )
 
     clinic = relationship("Clinic", back_populates="users")
-    patient_profile = relationship("Patient", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    patient_profile = relationship(
+        "Patient", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     staff_profile = relationship("Staff", back_populates="user", uselist=False, cascade="all, delete-orphan")

@@ -224,9 +224,12 @@ def test_appointment_status_transitions_are_explicit(client: TestClient):
     )
     assert completed.status_code == 200
     assert completed.json()["status"] == "completed"
-    assert client.patch(
-        f"/api/v1/appointments/{appointment_id}", headers=headers, json={"status": "confirmed"}
-    ).status_code == 409
+    assert (
+        client.patch(
+            f"/api/v1/appointments/{appointment_id}", headers=headers, json={"status": "confirmed"}
+        ).status_code
+        == 409
+    )
 
 
 def test_medical_record_and_medication_are_versioned_and_patient_readable(client: TestClient):

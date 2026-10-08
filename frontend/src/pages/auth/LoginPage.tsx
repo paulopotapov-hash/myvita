@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
 import { useLogin } from '../../hooks/useAuthMutations'
 import { useSession } from '../../hooks/useSession'
-import { usePublicConfig } from '../../hooks/usePublicConfig'
 import { toUserMessage } from '../../lib/errorMessages'
 import { safePostLoginPath } from '../../lib/navigation'
 import { loginSchema, zodErrorsToRecord } from '../../lib/validation'
@@ -14,7 +13,6 @@ export function LoginPage() {
   const { user } = useSession()
   const location = useLocation()
   const login = useLogin()
-  const publicConfig = usePublicConfig()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -69,18 +67,6 @@ export function LoginPage() {
           Entrar
         </Button>
       </form>
-      {publicConfig.data?.patient_registration_enabled && <p className="mt-6 text-center text-sm text-slate-500">
-        Ainda não tens conta?{' '}
-        <Link to="/registo" className="font-medium text-teal-700 hover:underline">
-          Regista-te como paciente
-        </Link>
-      </p>}
-      {publicConfig.data?.clinic_onboarding_enabled && <p className="mt-2 text-center text-sm text-slate-500">
-        Tens uma clínica?{' '}
-        <Link to="/nova-clinica" className="font-medium text-teal-700 hover:underline">
-          Cria a conta da tua clínica
-        </Link>
-      </p>}
     </AuthLayout>
   )
 }

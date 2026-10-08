@@ -46,6 +46,15 @@ server {
         return 404;
     }
 
+    # Document uploads only: DOCUMENT_MAX_UPLOAD_BYTES (10 MiB) plus multipart
+    # overhead, matching the backend's own body limit for this path. Every
+    # other request keeps the 1m limit above. Raise both together.
+    location ~ "^/api/v1/patients/[0-9a-fA-F-]{36}/documents$" {
+        client_max_body_size 11m;
+        proxy_pass http://backend:8000;
+        include /etc/nginx/proxy_params;
+    }
+
     location /api/ {
         proxy_pass http://backend:8000;
         include /etc/nginx/proxy_params;

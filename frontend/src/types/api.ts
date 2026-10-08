@@ -162,16 +162,36 @@ export interface NotificationPublic {
   created_at: string
 }
 
+export interface DocumentPublic {
+  id: string
+  patient_id: string
+  uploaded_by_user_id: string
+  original_filename: string
+  content_type: string
+  file_size: number
+  created_at: string
+}
+
+export type AuditResult = 'success' | 'failure' | 'denied'
+
+export interface AuditLogPublic {
+  id: string
+  timestamp: string
+  actor: { user_id: string | null; email: string | null; name: string | null }
+  action: string
+  result: AuditResult
+  resource_type: string | null
+  resource_id: string | null
+  ip_address: string | null
+  request_id: string | null
+  metadata: Record<string, unknown> | null
+}
+
 // --- Request payloads (mirrors backend *Request schemas) --------------------
 
 export interface LoginRequest {
   email: string
   password: string
-}
-
-export interface PublicConfig {
-  clinic_onboarding_enabled: boolean
-  patient_registration_enabled: boolean
 }
 
 export interface InvitationPreview {
@@ -228,25 +248,6 @@ export interface PasswordChangeRequest {
   new_password: string
 }
 
-export interface ClinicOnboardingRequest {
-  clinic_name: string
-  nif?: string
-  address?: string
-  phone?: string
-  admin_full_name: string
-  admin_email: string
-  admin_password: string
-}
-
-export interface PatientRegisterRequest {
-  clinic_id: string
-  full_name: string
-  email: string
-  password: string
-  birth_date?: string
-  phone?: string
-}
-
 export interface StaffCreateRequest {
   full_name: string
   email: string
@@ -301,3 +302,39 @@ export interface MedicationUpdateRequest {
   status?: MedicationStatus
   end_date?: string | null
 }
+
+// --- Messages (backend/app/modules/messages/schemas.py) ---
+
+/** Mirrors backend MESSAGE_MAX_LENGTH; the backend still validates. */
+export const MESSAGE_MAX_LENGTH = 5000
+
+export interface ConversationPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  staff_id: string
+  patient_name: string
+  staff_name: string
+  /** Messages addressed to the current user that they haven't read. */
+  unread_count: number
+  created_at: string
+  /** Latest activity (last message, or creation). */
+  updated_at: string
+}
+
+export interface MessagePublic {
+  id: string
+  conversation_id: string
+  sender_user_id: string
+  body: string
+  read_at: string | null
+  created_at: string
+}
+
+export interface ConversationDetail extends ConversationPublic {
+  /** One page, newest first. */
+  messages: MessagePublic[]
+}
+
+/** Clinical staff send patient_id; patients send staff_id. */
+export type ConversationCreateRequest = { patient_id: string } | { staff_id: string }

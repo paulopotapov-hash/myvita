@@ -67,27 +67,6 @@ export const passwordChangeSchema = z.object({
   message: 'As palavras-passe não coincidem.',
 })
 
-export const clinicOnboardingSchema = z.object({
-  clinic_name: z.string().min(2, 'Nome demasiado curto.').max(255),
-  nif: z.string().max(20).optional().or(z.literal('')),
-  address: z.string().max(500).optional().or(z.literal('')),
-  phone: z.string().max(30).optional().or(z.literal('')),
-  admin_full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
-  admin_email: z.email('Introduz um email válido.'),
-  admin_password: passwordSchema,
-})
-export type ClinicOnboardingFormValues = z.infer<typeof clinicOnboardingSchema>
-
-export const patientRegisterSchema = z.object({
-  clinic_id: z.string().min(1, 'Escolhe uma clínica.'),
-  full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
-  email: z.email('Introduz um email válido.'),
-  password: passwordSchema,
-  birth_date: z.string().optional().or(z.literal('')),
-  phone: z.string().max(30).optional().or(z.literal('')),
-})
-export type PatientRegisterFormValues = z.infer<typeof patientRegisterSchema>
-
 export const staffCreateSchema = z.object({
   full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
   email: z.email('Introduz um email válido.'),

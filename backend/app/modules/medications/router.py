@@ -4,7 +4,7 @@ from typing import Never
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import AuditAction, AuditResult, Medication, MedicationStatus, User
@@ -26,30 +26,24 @@ router = APIRouter()
 
 
 def _audit(request: Request, user: User, action: AuditAction, medication: Medication) -> None:
-    record_audit_event(
+    audit_request(
+        request,
         action=action,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="medication",
         resource_id=medication.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": medication.patient_id},
     )
 
 
 def _audit_denied(request: Request, user: User, resource_id: uuid.UUID) -> None:
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.PERMISSION_DENIED,
+        actor=user,
         result=AuditResult.DENIED,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
         resource_type="medication",
         resource_id=resource_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"path": request.url.path},
     )
 
@@ -83,16 +77,12 @@ def list_for_patient(
     except HTTPException as exc:
         _audit_and_raise(request, user, patient_id, exc)
     response.headers["X-Total-Count"] = str(total)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.MEDICATION_VIEWED,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="medication_list",
         resource_id=patient_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"count": len(medications)},
     )
     return medications

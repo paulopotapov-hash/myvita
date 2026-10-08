@@ -3,12 +3,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
-from app.models import AuditAction, AuditResult, Staff, User, UserRole
+from app.models import AuditAction, Staff, User, UserRole
 from app.modules.staff.schemas import StaffCreateRequest, StaffPublic, StaffRoleUpdateRequest
 from app.modules.staff.service import (
     activate_staff_member,
@@ -39,16 +39,8 @@ def create(
             detail="Criação direta desativada. Utilize um convite seguro.",
         )
     staff = create_staff_member(db, clinic_id, payload)
-    record_audit_event(
-        action=AuditAction.STAFF_CREATED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=_admin.id,
-        actor_email=_admin.email,
-        resource_type="staff",
-        resource_id=staff.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+    audit_request(
+        request, action=AuditAction.STAFF_CREATED, actor=_admin, resource_type="staff", resource_id=staff.id
     )
     return StaffPublic(
         id=staff.id,
@@ -73,10 +65,7 @@ def list_mine(
     staff member when creating an appointment.
     """
     staff_members = (
-        db.query(Staff)
-        .options(selectinload(Staff.user))
-        .filter(Staff.clinic_id == clinic_id)
-        .all()
+        db.query(Staff).options(selectinload(Staff.user)).filter(Staff.clinic_id == clinic_id).all()
     )
     return [
         StaffPublic(
@@ -101,16 +90,12 @@ def deactivate(
     admin: User = Depends(_clinic_admin_only),
 ) -> StaffPublic:
     staff = deactivate_staff_member(db, staff_id, clinic_id, admin.id)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.USER_DISABLED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=admin.id,
-        actor_email=admin.email,
+        actor=admin,
         resource_type="user",
         resource_id=staff.user_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
     return StaffPublic(
         id=staff.id,
@@ -132,16 +117,12 @@ def activate(
     admin: User = Depends(_clinic_admin_only),
 ) -> StaffPublic:
     staff = activate_staff_member(db, staff_id, clinic_id)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.STAFF_UPDATED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=admin.id,
-        actor_email=admin.email,
+        actor=admin,
         resource_type="user",
         resource_id=staff.user_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"active": True},
     )
     return StaffPublic(
@@ -165,16 +146,12 @@ def change_role(
     admin: User = Depends(_clinic_admin_only),
 ) -> StaffPublic:
     staff = update_staff_role(db, staff_id, clinic_id, payload)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.STAFF_UPDATED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=admin.id,
-        actor_email=admin.email,
+        actor=admin,
         resource_type="staff",
         resource_id=staff.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"staff_role": staff.staff_role.value},
     )
     return StaffPublic(

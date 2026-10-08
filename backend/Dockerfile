@@ -13,7 +13,10 @@ COPY . .
 RUN groupadd -r myvita && useradd -r -g myvita myvita \
     && chown -R myvita:myvita /app \
     && find /app -type d -exec chmod 0555 {} + \
-    && find /app -type f -exec chmod 0444 {} +
+    && find /app -type f -exec chmod 0444 {} + \
+    && mkdir -p /var/lib/myvita/documents \
+    && chown -R myvita:myvita /var/lib/myvita \
+    && chmod 0700 /var/lib/myvita/documents
 USER myvita
 
 EXPOSE 8000

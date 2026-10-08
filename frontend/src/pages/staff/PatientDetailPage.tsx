@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { DocumentsSection } from '../../components/DocumentsSection'
 import { ApiError } from '../../lib/apiClient'
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { Button } from '../../components/Button'
@@ -139,11 +140,11 @@ function MedicationsSection({ patientId, canWrite }: { patientId: string; canWri
   )
 }
 
-export function PatientDetailPage({ own = false, section: initialSection = 'overview' }: { own?: boolean; section?: 'overview' | 'consents' }) {
+export function PatientDetailPage({ own = false, section: initialSection = 'overview' }: { own?: boolean; section?: 'overview' | 'consents' | 'documents' }) {
   const { id: routeId = '' } = useParams()
   const location = useLocation()
   const { user } = useSession()
-  const [activeSection, setActiveSection] = useState<'personal' | 'appointments' | 'records' | 'medications' | 'consents'>(initialSection === 'consents' ? 'consents' : 'personal')
+  const [activeSection, setActiveSection] = useState<'personal' | 'appointments' | 'records' | 'medications' | 'documents' | 'consents'>(initialSection === 'consents' ? 'consents' : initialSection === 'documents' ? 'documents' : 'personal')
   const id = own ? (user?.patient_id ?? '') : routeId
   const patientQuery = usePatient(id)
   const appointments = useAppointments()
@@ -177,7 +178,7 @@ export function PatientDetailPage({ own = false, section: initialSection = 'over
       <nav role="tablist" aria-label="Secções da ficha" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
         {([
           ['personal', 'Dados pessoais'], ['appointments', 'Consultas'],
-          ...(canReadClinical ? [['records', 'Registos clínicos'], ['medications', 'Medicamentos']] : []),
+          ...(canReadClinical ? [['records', 'Registos clínicos'], ['medications', 'Medicamentos'], ['documents', 'Documentos']] : []),
           ['consents', 'Consentimentos'],
         ] as Array<[typeof activeSection, string]>).map(([key, label]) => (
           <button key={key} id={`patient-tab-${key}`} type="button" role="tab" aria-controls={`patient-panel-${key}`} aria-selected={activeSection === key} onClick={() => setActiveSection(key)} className={`rounded-md px-3 py-2 text-sm font-medium focus-visible:outline-2 ${activeSection === key ? 'bg-teal-50 text-teal-800' : 'text-slate-600 hover:bg-slate-100'}`}>
@@ -221,6 +222,7 @@ export function PatientDetailPage({ own = false, section: initialSection = 'over
 
       {canReadClinical && activeSection === 'records' && <div id="patient-panel-records" role="tabpanel" aria-labelledby="patient-tab-records"><MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} /></div>}
       {canReadClinical && activeSection === 'medications' && <div id="patient-panel-medications" role="tabpanel" aria-labelledby="patient-tab-medications"><MedicationsSection patientId={patient.id} canWrite={canWriteClinical} /></div>}
+      {canReadClinical && activeSection === 'documents' && <div id="patient-panel-documents" role="tabpanel" aria-labelledby="patient-tab-documents"><DocumentsSection patientId={patient.id} canManage={canWriteClinical} patientName={own ? undefined : patient.full_name} /></div>}
       {activeSection === 'consents' && <div id="patient-panel-consents" role="tabpanel" aria-labelledby="patient-tab-consents"><ConsentSection patientId={patient.id} canManage={user?.role === 'patient'} /></div>}
     </div>
   )

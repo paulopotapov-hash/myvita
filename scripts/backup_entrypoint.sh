@@ -42,7 +42,11 @@ EOF
     chown postgres:postgres /run/myvita/aws_credentials
 fi
 
-cat > /etc/crontabs/postgres <<EOF
+# The job runs as root only so it can read the backend-owned, read-only
+# documents mount; database steps drop to the postgres user (see
+# run_scheduled_backup.sh).
+rm -f /etc/crontabs/postgres
+cat > /etc/crontabs/root <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 TZ=${TZ}
@@ -52,6 +56,8 @@ DB_NAME=${DB_NAME}
 DB_USER=${DB_USER}
 PGPASSFILE=/run/myvita/pgpass
 BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}
+DOCUMENTS_BACKUP_ENABLED=${DOCUMENTS_BACKUP_ENABLED:-false}
+DOCUMENT_STORAGE_DIR=${DOCUMENT_STORAGE_DIR:-/documents}
 OFFSITE_BACKUP_ENABLED=${OFFSITE_BACKUP_ENABLED:-false}
 OFFSITE_S3_BUCKET=${OFFSITE_S3_BUCKET:-}
 OFFSITE_S3_PREFIX=${OFFSITE_S3_PREFIX:-myvita}
@@ -62,13 +68,13 @@ OFFSITE_RETENTION_DAYS=${OFFSITE_RETENTION_DAYS:-30}
 AWS_SHARED_CREDENTIALS_FILE=/run/myvita/aws_credentials
 ${BACKUP_SCHEDULE} /opt/myvita/run_scheduled_backup.sh >> /proc/1/fd/1 2>> /proc/1/fd/2
 EOF
-chmod 600 /etc/crontabs/postgres
+chmod 600 /etc/crontabs/root
 
 /opt/myvita/write_backup_metrics.sh init
 
 if [ "${BACKUP_RUN_ON_START:-true}" = "true" ]; then
-    su-exec postgres /opt/myvita/run_scheduled_backup.sh
+    /opt/myvita/run_scheduled_backup.sh || echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) WARNING: initial backup run failed; the scheduler starts anyway" >&2
 fi
 
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backup scheduler started: schedule='${BACKUP_SCHEDULE}' timezone=${TZ} retention_days=${BACKUP_RETENTION_DAYS:-14}"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backup scheduler started: schedule='${BACKUP_SCHEDULE}' timezone=${TZ} retention_days=${BACKUP_RETENTION_DAYS:-14} documents_backup=${DOCUMENTS_BACKUP_ENABLED:-false}"
 exec crond -f -l 5 -c /etc/crontabs

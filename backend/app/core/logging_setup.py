@@ -7,6 +7,7 @@ Every log record gets a `request_id` field via RequestIdLogFilter, whether
 or not the code that logged it bothered to pass one — this is what lets an
 operator grep every log line for one request across every logger in the app.
 """
+
 import json
 import logging
 from datetime import UTC, datetime

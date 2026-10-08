@@ -21,6 +21,13 @@ htmlcov/
 *.sql.gz
 *.sha256
 backups/
+# Interrupted backup_db.sh runs leave .myvita_<ts>.dump.tmp.<rand> files.
+*.dump.tmp.*
+# Documents archives and their staging/temp files (backup_documents.sh).
+*.tar.gz
+.myvita_documents_*
+.myvita-restore-*
+*.sha256.tmp
 
 .DS_Store
 node_modules/
