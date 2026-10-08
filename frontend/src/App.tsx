@@ -4,10 +4,8 @@ import { RoleRoute } from './app/RoleRoute'
 import { RootRedirect } from './app/RootRedirect'
 import { AppLayout } from './layouts/AppLayout'
 import { PatientLayout } from './layouts/PatientLayout'
-import { ClinicOnboardingPage } from './pages/auth/ClinicOnboardingPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { InvitationAcceptPage } from './pages/auth/InvitationAcceptPage'
-import { PatientRegisterPage } from './pages/auth/PatientRegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PatientProfilePage } from './pages/patient/PatientProfilePage'
@@ -28,8 +26,6 @@ export default function App() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/registo" element={<PatientRegisterPage />} />
-      <Route path="/nova-clinica" element={<ClinicOnboardingPage />} />
       <Route path="/convite" element={<InvitationAcceptPage />} />
 
       <Route

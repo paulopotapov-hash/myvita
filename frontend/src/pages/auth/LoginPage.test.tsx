@@ -7,17 +7,11 @@ import { LoginPage } from './LoginPage'
 import { ApiError } from '../../lib/apiClient'
 import { safePostLoginPath } from '../../lib/navigation'
 import { authService } from '../../services/auth'
-import { publicConfigService } from '../../services/publicConfig'
 
 vi.mock('../../services/auth')
-vi.mock('../../services/publicConfig')
 
 function renderLoginPage() {
   vi.mocked(authService.me).mockRejectedValue(new ApiError(401, 'unauthorized'))
-  vi.mocked(publicConfigService.get).mockResolvedValue({
-    clinic_onboarding_enabled: false,
-    patient_registration_enabled: false,
-  })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const rendered = render(
     <QueryClientProvider client={queryClient}>
@@ -34,11 +28,16 @@ function renderLoginPage() {
 }
 
 describe('LoginPage', () => {
-  it('does not expose public registration links when registration is disabled', async () => {
+  it('renders login without public clinic or patient registration options', () => {
     renderLoginPage()
-    await waitFor(() => expect(publicConfigService.get).toHaveBeenCalled())
-    expect(screen.queryByRole('link', { name: 'Regista-te como paciente' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Cria a conta da tua clínica' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Iniciar sessão' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+    expect(screen.getByLabelText('Palavra-passe')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument()
+    expect(screen.queryByText(/registo como clínica/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/registo como paciente/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /regist/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /cria a conta/i })).not.toBeInTheDocument()
   })
 
   it('only accepts internal protected routes as post-login destinations', () => {

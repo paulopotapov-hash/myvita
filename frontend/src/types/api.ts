@@ -194,11 +194,6 @@ export interface LoginRequest {
   password: string
 }
 
-export interface PublicConfig {
-  clinic_onboarding_enabled: boolean
-  patient_registration_enabled: boolean
-}
-
 export interface InvitationPreview {
   clinic_name: string
   email: string
@@ -251,25 +246,6 @@ export interface InvitationPublic {
 export interface PasswordChangeRequest {
   current_password: string
   new_password: string
-}
-
-export interface ClinicOnboardingRequest {
-  clinic_name: string
-  nif?: string
-  address?: string
-  phone?: string
-  admin_full_name: string
-  admin_email: string
-  admin_password: string
-}
-
-export interface PatientRegisterRequest {
-  clinic_id: string
-  full_name: string
-  email: string
-  password: string
-  birth_date?: string
-  phone?: string
 }
 
 export interface StaffCreateRequest {
