@@ -4,4 +4,5 @@ import type { ClinicOnboardingRequest, ClinicPublic, ClinicSummary } from '../ty
 export const clinicsService = {
   onboard: (payload: ClinicOnboardingRequest) => api.post<ClinicPublic>('/api/v1/clinics', payload),
   list: (signal?: AbortSignal) => api.get<ClinicSummary[]>('/api/v1/clinics', signal),
+  get: (clinicId: string, signal?: AbortSignal) => api.get<ClinicSummary>(`/api/v1/clinics/${encodeURIComponent(clinicId)}`, signal),
 }

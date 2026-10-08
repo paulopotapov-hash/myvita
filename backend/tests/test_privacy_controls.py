@@ -38,6 +38,10 @@ def test_request_logs_never_contain_query_strings_such_as_patient_search_terms(w
 def test_clinic_directory_is_not_enumerable_without_public_registration(world: World, monkeypatch):
     anon = Actor("anon")
     monkeypatch.setattr(settings, "ALLOW_PUBLIC_PATIENT_REGISTRATION", True)
+    # Registration being open is not enough: no clinic is public until it is allowlisted (P2.1).
+    monkeypatch.setattr(settings, "PUBLIC_CLINIC_IDS", [])
+    assert anon.get("/api/v1/clinics").json() == []
+    monkeypatch.setattr(settings, "PUBLIC_CLINIC_IDS", [uuid.UUID(world.a.clinic_id), uuid.UUID(world.b.clinic_id)])
     ids = {clinic["id"] for clinic in anon.get("/api/v1/clinics").json()}
     assert {world.a.clinic_id, world.b.clinic_id} <= ids
 

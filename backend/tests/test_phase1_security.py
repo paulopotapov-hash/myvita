@@ -47,6 +47,7 @@ PUBLIC_ROUTES = {
     ("GET", "/metrics"),
     ("GET", "/api/v1/config/public"),
     ("GET", "/api/v1/clinics"),
+    ("GET", "/api/v1/clinics/{clinic_id}"),
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/clinics"),
     ("POST", "/api/v1/patients/register"),

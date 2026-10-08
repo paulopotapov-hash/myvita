@@ -52,7 +52,7 @@ Appointment `reason`/`notes`, medical records and their revisions, medications, 
 | `audit_logs.actor_email` | restrict | See gap 2 |
 | `notifications.message` | retain (keep generic) | Verified: current texts are fixed generic Portuguese sentences ("Foi criada uma consulta na sua agenda.") with no clinical detail; keep it that way |
 | Backups | restrict | Same data as production; see retention matrix |
-| `GET /api/v1/clinics` public directory | restrict (done) | Now empty for anonymous callers and limited to the caller's own clinic unless public patient registration is enabled |
+| `GET /api/v1/clinics` public directory | restrict (done) | Empty for anonymous callers and limited to the caller's own clinic unless public patient registration is enabled **and** the clinic is listed in `PUBLIC_CLINIC_IDS` (P2.1; empty by default). Paginated; `id` + `name` only; `GET /api/v1/clinics/{id}` applies the same policy |
 
 ## Fixes made in this phase (commit `5d49174`)
 

@@ -5,13 +5,25 @@ import { patientsService } from '../services/patients'
 import { staffService } from '../services/staff'
 import type { AppointmentCreateRequest, AppointmentUpdateRequest, PatientUpdateRequest, StaffCreateRequest, StaffRole } from '../types/api'
 
-/** Public clinic directory — used by the patient sign-up clinic picker.
- * No auth required, matches GET /api/v1/clinics being an open endpoint. */
+/** Clinics the caller may see: allowlisted public clinics (only while public
+ * registration is on) plus their own. First page only (backend default 50);
+ * visibility is decided by the backend, never here. */
 export function useClinics() {
   return useQuery({
     queryKey: ['clinics'],
     queryFn: ({ signal }) => clinicsService.list(signal),
     staleTime: 5 * 60_000, // clinic directory changes rarely
+  })
+}
+
+/** One clinic under the same backend visibility policy (404 when not visible). */
+export function useClinic(clinicId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['clinics', clinicId],
+    queryFn: ({ signal }) => clinicsService.get(clinicId as string, signal),
+    enabled: Boolean(clinicId),
+    staleTime: 5 * 60_000,
+    retry: false,
   })
 }
 

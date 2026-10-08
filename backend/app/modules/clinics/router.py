@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
@@ -8,7 +10,7 @@ from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_optional_user, set_session_cookie
 from app.models import AuditAction, AuditResult, Clinic, User
 from app.modules.clinics.schemas import ClinicOnboardingRequest, ClinicPublic, ClinicSummary
-from app.modules.clinics.service import onboard_clinic
+from app.modules.clinics.service import get_visible_clinic, list_visible_clinics, onboard_clinic
 
 router = APIRouter()
 
@@ -40,15 +42,30 @@ def create_clinic(
 
 
 @router.get("", response_model=list[ClinicSummary])
-def list_clinics(db: Session = Depends(get_db), user: User | None = Depends(get_optional_user)) -> list[Clinic]:
+def list_clinics(
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+) -> list[Clinic]:
     """
-    Minimal clinic directory (id + name). Anyone may list it only while public
-    patient registration is enabled; otherwise a signed-in user sees just their
-    own clinic, so the client list of the platform is not enumerable.
+    Clinic directory limited to what the caller may see: clinics that opted in
+    via PUBLIC_CLINIC_IDS (only while public patient registration is enabled)
+    plus the caller's own clinic. Anonymous callers with nothing public get an
+    empty page, so the platform's client list is not enumerable. Paginated;
+    total in `X-Total-Count`.
     """
-    query = db.query(Clinic)
-    if not settings.ALLOW_PUBLIC_PATIENT_REGISTRATION:
-        if user is None or user.clinic_id is None:
-            return []
-        query = query.filter(Clinic.id == user.clinic_id)
-    return query.order_by(Clinic.name).all()
+    clinics, total = list_visible_clinics(db, user, offset=(page - 1) * page_size, limit=page_size)
+    response.headers["X-Total-Count"] = str(total)
+    return clinics
+
+
+@router.get("/{clinic_id}", response_model=ClinicSummary)
+def clinic_detail(
+    clinic_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+) -> Clinic:
+    """One clinic under the same visibility policy as the list. 404 whether the clinic is private or absent."""
+    return get_visible_clinic(db, clinic_id, user)

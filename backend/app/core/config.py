@@ -7,6 +7,7 @@ Nothing sensitive is hardcoded here.
 
 from functools import lru_cache
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -58,6 +59,13 @@ class Settings(BaseSettings):
     ALLOW_PUBLIC_PATIENT_REGISTRATION: bool = False
     ALLOW_DIRECT_STAFF_CREATION: bool = False
     INVITATION_EXPIRE_HOURS: int = Field(default=24, ge=1, le=168)
+
+    # Clinics that opted in to appear in the anonymous clinic directory (GET
+    # /api/v1/clinics[/{id}]). Empty by default = no clinic is public (fail
+    # closed). Only consulted while ALLOW_PUBLIC_PATIENT_REGISTRATION is true;
+    # a signed-in user always sees their own clinic regardless. JSON list of
+    # UUIDs, e.g. PUBLIC_CLINIC_IDS=["3f2a..."]; a malformed value fails startup.
+    PUBLIC_CLINIC_IDS: list[UUID] = Field(default_factory=list)
 
     # CSRF (double-submit cookie, HMAC-bound to the session)
     CSRF_COOKIE_NAME: str = "myvita_csrf"
