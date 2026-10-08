@@ -8,9 +8,36 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import AuditAction, AuditResult, Notification, User
 from app.modules.notifications.schemas import NotificationPublic
-from app.modules.notifications.service import list_notifications, mark_notification_read
+from app.modules.notifications.service import (
+    list_notifications,
+    mark_all_notifications_read,
+    mark_notification_read,
+    unread_notification_count,
+)
 
 router = APIRouter()
+
+
+@router.get("/unread-count")
+def unread_count(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, int]:
+    return {"count": unread_notification_count(db, user)}
+
+
+@router.post("/read-all")
+def mark_all_read(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    updated_count = mark_all_notifications_read(db, user)
+    audit_request(
+        request,
+        action=AuditAction.NOTIFICATION_READ,
+        actor=user,
+        resource_type="notification",
+        metadata={"operation": "read_all", "updated_count": updated_count},
+    )
+    return {"updated_count": updated_count}
 
 
 @router.get("", response_model=list[NotificationPublic])

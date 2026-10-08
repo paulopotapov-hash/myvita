@@ -49,6 +49,17 @@ def _add_patient_notification(db: Session, patient: Patient, *, title: str, mess
     )
 
 
+def _add_staff_notification(db: Session, staff: Staff, *, title: str, message: str) -> None:
+    db.add(
+        Notification(
+            clinic_id=staff.clinic_id,
+            user_id=staff.user_id,
+            title=title,
+            message=message,
+        )
+    )
+
+
 def _ensure_no_conflict(
     db: Session,
     *,
@@ -122,6 +133,12 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
         title="Consulta criada",
         message="Foi criada uma consulta na sua agenda.",
     )
+    _add_staff_notification(
+        db,
+        staff,
+        title="Consulta atribuída",
+        message="Foi atribuída uma consulta à sua agenda.",
+    )
     db.commit()
     db.refresh(appointment)
     return appointment
@@ -158,6 +175,10 @@ def update_appointment(
                 detail=f"Transição de {appointment.status.value} para {payload.status.value} não permitida.",
             )
 
+    old_patient_id = appointment.patient_id
+    old_staff_id = appointment.staff_id
+    old_scheduled_at = appointment.scheduled_at
+    old_status = appointment.status
     patient_id = payload.patient_id or appointment.patient_id
     staff_id = payload.staff_id or appointment.staff_id
     patient = db.get(Patient, patient_id)
@@ -181,6 +202,14 @@ def update_appointment(
         duration_minutes=duration,
         exclude_id=appointment.id,
     )
+    meaningful_change = any(
+        (
+            patient_id != old_patient_id,
+            staff_id != old_staff_id,
+            scheduled_at != old_scheduled_at,
+            payload.status is not None and payload.status != old_status,
+        )
+    )
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(appointment, field, value)
     status_messages = {
@@ -195,7 +224,21 @@ def update_appointment(
         appointment.status,
         ("Consulta atualizada", "Uma consulta da sua agenda foi atualizada."),
     )
-    _add_patient_notification(db, patient, title=title, message=message)
+    if meaningful_change:
+        recipient_patients = {patient.id: patient}
+        recipient_staff = {staff.id: staff}
+        if old_patient_id != patient.id:
+            old_patient = db.get(Patient, old_patient_id)
+            if old_patient is not None and str(old_patient.clinic_id) == str(clinic_id):
+                recipient_patients[old_patient.id] = old_patient
+        if old_staff_id != staff.id:
+            old_staff = db.get(Staff, old_staff_id)
+            if old_staff is not None and str(old_staff.clinic_id) == str(clinic_id):
+                recipient_staff[old_staff.id] = old_staff
+        for patient_recipient in recipient_patients.values():
+            _add_patient_notification(db, patient_recipient, title=title, message=message)
+        for staff_recipient in recipient_staff.values():
+            _add_staff_notification(db, staff_recipient, title=title, message=message)
     db.commit()
     db.refresh(appointment)
     return appointment
@@ -218,6 +261,14 @@ def cancel_appointment(db: Session, appointment_id: uuid.UUID, clinic_id: str) -
         title="Consulta cancelada",
         message="Uma consulta da sua agenda foi cancelada.",
     )
+    staff = db.get(Staff, appointment.staff_id)
+    if staff is not None and str(staff.clinic_id) == str(clinic_id):
+        _add_staff_notification(
+            db,
+            staff,
+            title="Consulta cancelada",
+            message="Uma consulta atribuída à sua agenda foi cancelada.",
+        )
     db.commit()
     db.refresh(appointment)
     return appointment

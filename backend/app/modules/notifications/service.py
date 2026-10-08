@@ -41,3 +41,34 @@ def mark_notification_read(db: Session, notification_id: uuid.UUID, user: User) 
         db.commit()
         db.refresh(notification)
     return notification
+
+
+def unread_notification_count(db: Session, user: User) -> int:
+    return (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user.id,
+            Notification.clinic_id == user.clinic_id,
+            Notification.is_read.is_(False),
+        )
+        .count()
+    )
+
+
+def mark_all_notifications_read(db: Session, user: User) -> int:
+    notifications = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user.id,
+            Notification.clinic_id == user.clinic_id,
+            Notification.is_read.is_(False),
+        )
+        .all()
+    )
+    read_at = datetime.now(UTC)
+    for notification in notifications:
+        notification.is_read = True
+        notification.read_at = read_at
+    if notifications:
+        db.commit()
+    return len(notifications)

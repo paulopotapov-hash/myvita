@@ -5,7 +5,7 @@ import { Button } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSpinner } from '../components/LoadingSpinner'
-import { useMarkNotificationRead, useNotifications } from '../hooks/useClinicalData'
+import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from '../hooks/useClinicalData'
 import { toUserMessage } from '../lib/errorMessages'
 import { formatDateTime } from '../lib/formatDate'
 
@@ -16,6 +16,7 @@ export function NotificationsPage() {
   const pageSize = 20
   const notifications = useNotifications(page, pageSize)
   const markRead = useMarkNotificationRead()
+  const markAllRead = useMarkAllNotificationsRead()
   const total = notifications.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / pageSize))
 
@@ -23,9 +24,12 @@ export function NotificationsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Notificações</h1>
-        {notifications.data && <p className="rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800" aria-label={`${notifications.data.items.filter((item) => !item.is_read).length} não lidas nesta página`}>
-          {notifications.data.items.filter((item) => !item.is_read).length} não lidas nesta página
-        </p>}
+        {notifications.data && <div className="flex items-center gap-3">
+          <p className="rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800" aria-label={`${notifications.data.items.filter((item) => !item.is_read).length} não lidas nesta página`}>
+            {notifications.data.items.filter((item) => !item.is_read).length} não lidas nesta página
+          </p>
+          {notifications.data.items.some((item) => !item.is_read) && <Button variant="secondary" isLoading={markAllRead.isPending} onClick={() => { setActionError(''); markAllRead.mutate(undefined, { onError: (error) => setActionError(toUserMessage(error)) }) }}>Marcar todas como lidas</Button>}
+        </div>}
       </div>
       <section className="rounded-xl border border-slate-200 bg-white p-6">
         {actionError && <p role="alert" className="mb-3 text-sm text-red-700">{actionError}</p>}
