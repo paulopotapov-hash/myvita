@@ -79,6 +79,9 @@ class AuditAction(str, enum.Enum):
     MEDICAL_RECORD_VIEWED = "medical_record_viewed"
     MEDICATION_VIEWED = "medication_viewed"
     CONVERSATION_VIEWED = "conversation_viewed"
+    DOCUMENT_UPLOADED = "document_uploaded"
+    DOCUMENT_DOWNLOADED = "document_downloaded"
+    DOCUMENT_DELETED = "document_deleted"
 
 
 class AuditResult(str, enum.Enum):

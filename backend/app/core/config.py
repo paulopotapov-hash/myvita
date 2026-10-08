@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = True  # False only for local http dev
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
     MAX_REQUEST_BODY_BYTES: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
+    DOCUMENT_STORAGE_DIR: str = "/var/lib/myvita/documents"
+    DOCUMENT_MAX_UPLOAD_BYTES: int = Field(default=10_485_760, ge=1_024, le=104_857_600)
 
     # Public account creation is useful during local development, but must
     # be an explicit operational decision for a controlled clinic rollout.

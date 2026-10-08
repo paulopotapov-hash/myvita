@@ -5,6 +5,7 @@ const PATIENT_NAV: NavItem[] = [
   { to: '/patient/consultas', label: 'Consultas' },
   { to: '/patient/perfil', label: 'Perfil' },
   { to: '/patient/saude', label: 'Dados clínicos' },
+  { to: '/patient/documentos', label: 'Documentos' },
   { to: '/patient/consentimentos', label: 'Consentimentos' },
   { to: '/patient/notificacoes', label: 'Notificações' },
   { to: '/patient/mensagens', label: 'Mensagens' },

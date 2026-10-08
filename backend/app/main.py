@@ -40,6 +40,7 @@ from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
 from app.modules.clinics.router import router as clinics_router
 from app.modules.consents.router import router as consents_router
+from app.modules.documents.router import router as documents_router
 from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
@@ -181,10 +182,16 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 declared_size = -1
             if declared_size < 0:
                 response = JSONResponse(status_code=400, content={"detail": "Content-Length inválido."})
-            elif declared_size > settings.MAX_REQUEST_BODY_BYTES:
-                response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
             else:
-                response = await call_next(request)
+                upload_limit = settings.MAX_REQUEST_BODY_BYTES
+                if request.url.path.startswith("/api/v1/patients/") and request.url.path.endswith(
+                    "/documents"
+                ):
+                    upload_limit = max(upload_limit, settings.DOCUMENT_MAX_UPLOAD_BYTES + 1_048_576)
+                if declared_size > upload_limit:
+                    response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
+                else:
+                    response = await call_next(request)
         elif response is None:
             response = await call_next(request)
         if response is None:  # Defensive invariant; should be unreachable after call_next above.
@@ -275,3 +282,4 @@ app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])
+app.include_router(documents_router, prefix="/api/v1", tags=["documents"])

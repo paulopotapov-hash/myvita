@@ -90,6 +90,7 @@ export default function App() {
         <Route path="consentimentos" element={<PatientDetailPage own section="consents" />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route path="saude" element={<PatientDetailPage own />} />
+        <Route path="documentos" element={<PatientDetailPage own section="documents" />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
         <Route path="mensagens" element={<MessagesInboxPage />} />
         <Route path="mensagens/:conversationId" element={<ConversationPage />} />

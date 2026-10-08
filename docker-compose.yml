@@ -31,6 +31,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/migrations:/app/migrations
+      - myvita_documents:/var/lib/myvita/documents
 
   frontend:
     build:
@@ -57,4 +58,5 @@ services:
 
 volumes:
   myvita_pg_data:
+  myvita_documents:
   frontend_node_modules:

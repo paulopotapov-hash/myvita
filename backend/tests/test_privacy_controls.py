@@ -58,7 +58,9 @@ def test_there_is_no_platform_support_role_export_or_audit_read_surface():
     assert {role.value for role in UserRole} == {"patient", "staff", "clinic_admin"}
     for path, operations in app.openapi()["paths"].items():
         assert not any(word in path.lower() for word in ("export", "audit", "support", "admin/")), path
-        assert not set(operations) & {"delete", "put"}, path
+        assert "put" not in operations, path
+        if "delete" in operations:
+            assert path == "/api/v1/documents/{document_id}", path
 
 
 def test_list_endpoints_return_only_the_minimum_fields(world: World):

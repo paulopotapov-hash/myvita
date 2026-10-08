@@ -162,6 +162,16 @@ export interface NotificationPublic {
   created_at: string
 }
 
+export interface DocumentPublic {
+  id: string
+  patient_id: string
+  uploaded_by_user_id: string
+  original_filename: string
+  content_type: string
+  file_size: number
+  created_at: string
+}
+
 // --- Request payloads (mirrors backend *Request schemas) --------------------
 
 export interface LoginRequest {

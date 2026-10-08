@@ -41,6 +41,13 @@ vi.mock('../../hooks/useClinicalData', () => ({
   useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
+vi.mock('../../hooks/useDocuments', () => ({
+  usePatientDocuments: () => ({ data: { items: [], total: 0 }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useUploadDocument: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteDocument: () => ({ mutate: vi.fn(), isPending: false }),
+  useDownloadDocument: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
 vi.mock('../../hooks/useConsents', () => ({
   usePatientConsents: () => ({
     data: [{
@@ -120,5 +127,42 @@ describe('PatientDetailPage consent workflow', () => {
     renderOwnPage()
     expect(usePatient).toHaveBeenCalledWith('patient-1')
     expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
+  })
+})
+
+describe('PatientDetailPage documents tab', () => {
+  beforeEach(() => {
+    sessionState.role = 'clinic_admin'
+    sessionState.staff_role = null
+    sessionState.patient_id = null
+  })
+
+  it('hides Documentos from clinic_admin, who has no clinical access in the backend', () => {
+    renderPage()
+    expect(screen.queryByRole('tab', { name: 'Documentos' })).not.toBeInTheDocument()
+  })
+
+  it('lets a doctor open the patient documents with upload controls and the patient name', async () => {
+    sessionState.role = 'staff'
+    sessionState.staff_role = 'doctor'
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Documentos' }))
+    expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
+    expect(screen.getByText('Documentos de Ana Silva')).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Carregar documento' })).toBeInTheDocument()
+  })
+
+  it('opens the documents section directly for a patient without upload controls', () => {
+    sessionState.role = 'patient'
+    sessionState.patient_id = 'patient-1'
+    render(
+      <MemoryRouter initialEntries={['/patient/documentos']}>
+        <Routes><Route path="/patient/documentos" element={<PatientDetailPage own section="documents" />} /></Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: 'Documentos', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Carregar documento' })).not.toBeInTheDocument()
   })
 })

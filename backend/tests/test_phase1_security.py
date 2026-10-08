@@ -356,7 +356,9 @@ def test_safe_methods_do_not_need_csrf_and_unsafe_methods_always_do(world: World
         response = patient.call(method, f"/api/v1/patients/{patient.patient_id}", {})
         assert response.status_code == 405, "no PUT/DELETE routes may exist"
     for method, path in _api_routes():
-        assert method not in {"PUT", "DELETE"}, f"{method} {path} widens the CSRF surface"
+        assert method != "PUT", f"{method} {path} widens the CSRF surface"
+        if method == "DELETE":
+            assert path == "/api/v1/documents/{document_id}", f"Unexpected DELETE surface: {path}"
 
 
 def test_every_state_changing_route_enforces_csrf_for_authenticated_callers(world: World):

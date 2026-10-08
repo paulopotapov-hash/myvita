@@ -103,6 +103,8 @@ services:
       DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
+      DOCUMENT_STORAGE_DIR: /var/lib/myvita/documents
+      DOCUMENT_MAX_UPLOAD_BYTES: ${DOCUMENT_MAX_UPLOAD_BYTES:-10485760}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY — generate one, never reuse the dev value}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
@@ -115,6 +117,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
+    volumes:
+      - myvita_documents:/var/lib/myvita/documents
     cap_drop:
       - ALL
     security_opt:
@@ -223,6 +227,7 @@ volumes:
   myvita_pg_data:
   myvita_backups:
   myvita_backup_metrics:
+  myvita_documents:
 
 networks:
   edge:
