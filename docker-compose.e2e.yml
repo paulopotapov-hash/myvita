@@ -7,7 +7,7 @@ services:
   backend:
     environment:
       ALLOW_PUBLIC_CLINIC_ONBOARDING: "true"
-      ALLOW_PUBLIC_PATIENT_REGISTRATION: "true"
+      ALLOW_PUBLIC_PATIENT_REGISTRATION: "false"
       ALLOW_DIRECT_STAFF_CREATION: "true"
       CORS_ORIGINS: '["http://127.0.0.1:15173","http://localhost:15173"]'
     ports: !override

@@ -4,19 +4,32 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.clinical_access import accessible_patient, is_clinical_staff
+from app.core.config import settings
 from app.core.security import hash_password
 from app.models import Clinic, Patient, User, UserRole
 from app.modules.patients.schemas import PatientRegisterRequest, PatientUpdateRequest
 
 
 def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Patient, User]:
+    """Public self-registration (POST /patients/register)."""
     clinic = db.get(Clinic, payload.clinic_id)
-    if clinic is None:
+    # Only clinics that opted in (PUBLIC_CLINIC_IDS, same allowlist as the public
+    # directory) accept self-registration. A non-public clinic gets exactly the
+    # unknown-clinic response, so registration is not a clinic-existence oracle.
+    if clinic is None or clinic.id not in settings.PUBLIC_CLINIC_IDS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Clínica não encontrada.",
         )
+    return create_patient_account(db, clinic, payload)
 
+
+def create_patient_account(
+    db: Session, clinic: Clinic, payload: PatientRegisterRequest
+) -> tuple[Patient, User]:
+    """Creates a patient user + profile in `clinic`. No public-registration policy
+    is applied here: callers are trusted (the public endpoint above, after its
+    allowlist check, and operator tooling such as scripts/seed_staging.py)."""
     if db.query(User).filter(User.email == payload.email).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

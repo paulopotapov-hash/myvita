@@ -22,7 +22,7 @@ avoiding existence disclosure.
 | `/api/v1/clinics` | POST | Public; 5/min/IP | Creates one clinic/admin atomically |
 | `/api/v1/clinics` | GET | Public (restricted) | Paginated `id` + `name` only; lists just clinics in `PUBLIC_CLINIC_IDS` (and only while public patient registration is on) plus the caller's own clinic |
 | `/api/v1/clinics/{id}` | GET | Public (restricted) | Same visibility policy as the list; 404 for private and nonexistent clinics alike |
-| `/api/v1/patients/register` | POST | Public; 5/min/IP | Joins an existing clinic; cannot set role |
+| `/api/v1/patients/register` | POST | Public; 5/min/IP; off unless `ALLOW_PUBLIC_PATIENT_REGISTRATION` (disabled for the pilot — patients join by invitation) | Only clinics in `PUBLIC_CLINIC_IDS`; private and nonexistent clinics get the same 404; cannot set role |
 | `/api/v1/patients` | GET | Staff or clinic admin | Session clinic only; paginated |
 | `/api/v1/patients/{id}` | GET/PATCH | Authenticated | Session clinic; patients restricted to self |
 | `/api/v1/staff` | POST | Clinic admin; 20/min/IP | Session clinic; cannot set clinic ownership |

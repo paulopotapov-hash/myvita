@@ -8,6 +8,29 @@ async function csrf(page: import('@playwright/test').Page) {
   return { 'X-CSRF-Token': cookie!.value }
 }
 
+/** Patients join by invitation (P2.2): an authenticated clinic member invites,
+ * the patient accepts anonymously. Returns the new patient's id. */
+async function invitePatient(
+  inviter: import('@playwright/test').APIRequestContext,
+  baseURL: string | undefined,
+  data: { full_name: string; email: string },
+) {
+  const csrfCookie = (await inviter.storageState()).cookies.find((item) => item.name === 'myvita_csrf')
+  expect(csrfCookie).toBeDefined()
+  const invitation = await inviter.post('/api/v1/invitations/patients', {
+    headers: { 'X-CSRF-Token': csrfCookie!.value },
+    data,
+  })
+  expect(invitation.status()).toBe(201)
+  const { token } = await invitation.json() as { token: string }
+  const anonymous = await request.newContext({ baseURL })
+  const accepted = await anonymous.post('/api/v1/invitations/accept', { data: { token, password } })
+  expect(accepted.status()).toBe(200)
+  const user = await accepted.json() as { patient_id: string }
+  await anonymous.dispose()
+  return { id: user.patient_id }
+}
+
 test('pilot flow and cross-tenant security through browser proxy', async ({ page, baseURL }) => {
   const suffix = Date.now().toString()
   const adminEmail = `admin-${suffix}@example.com`
@@ -22,7 +45,6 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
     admin_password: password,
   } })
   expect(clinicResponse.status()).toBe(201)
-  const clinic = await clinicResponse.json() as { id: string }
 
   await page.goto('/login')
   await page.getByLabel('Email').fill(adminEmail)
@@ -36,21 +58,16 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   })
   expect(staffResponse.status()).toBe(201)
 
-  const patientResponse = await seed.post('/api/v1/patients/register', {
-    data: { clinic_id: clinic.id, full_name: 'Paciente E2E', email: patientEmail, password },
-  })
-  expect(patientResponse.status()).toBe(201)
-  const patient = await patientResponse.json() as { id: string }
+  const patient = await invitePatient(page.request, baseURL, { full_name: 'Paciente E2E', email: patientEmail })
+  // Onboarding a second clinic signs `seed` in as that clinic's admin, who invites its patient.
   const otherClinic = await seed.post('/api/v1/clinics', { data: {
     clinic_name: `Outra Clínica ${suffix}`, admin_full_name: 'Outro Admin',
     admin_email: `other-admin-${suffix}@example.com`, admin_password: password,
   } })
-  const otherClinicBody = await otherClinic.json() as { id: string }
-  const otherPatient = await seed.post('/api/v1/patients/register', { data: {
-    clinic_id: otherClinicBody.id, full_name: 'Paciente Outra Clínica',
-    email: `other-patient-${suffix}@example.com`, password,
-  } })
-  const otherPatientBody = await otherPatient.json() as { id: string }
+  expect(otherClinic.status()).toBe(201)
+  const otherPatientBody = await invitePatient(seed, baseURL, {
+    full_name: 'Paciente Outra Clínica', email: `other-patient-${suffix}@example.com`,
+  })
   await seed.dispose()
 
   await page.getByRole('button', { name: 'Sair' }).click()

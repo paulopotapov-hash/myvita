@@ -21,7 +21,7 @@ Environment inventory:
 
 Production Compose fixes `ENVIRONMENT=production`, `DEBUG=false`, `COOKIE_SECURE=true`, and the trusted proxy network address. Do not override these controls without a reviewed topology change. `backend/.env.example` documents application defaults; Compose files are the source of truth for container-only variables.
 
-Do not enable `ALLOW_PUBLIC_CLINIC_ONBOARDING` or `ALLOW_PUBLIC_PATIENT_REGISTRATION` for normal operation. Controlled onboarding uses invitations as described in `clinic-onboarding.md`.
+Do not enable `ALLOW_PUBLIC_CLINIC_ONBOARDING` or `ALLOW_PUBLIC_PATIENT_REGISTRATION` for normal operation. Pilot policy: patients join **only by clinic invitation** (`POST /api/v1/invitations/patients`, accepted at `/convite`); public patient registration stays disabled everywhere, including development and E2E. Controlled onboarding uses invitations as described in `clinic-onboarding.md`.
 
 ## Release sequence
 

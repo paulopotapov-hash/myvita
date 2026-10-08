@@ -11,6 +11,7 @@ The script is idempotent: identities that already exist are left untouched.
 
 import os
 import sys
+import uuid
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,7 @@ from app.models import Clinic, StaffRole, User
 from app.modules.clinics.schemas import ClinicOnboardingRequest
 from app.modules.clinics.service import onboard_clinic
 from app.modules.patients.schemas import PatientRegisterRequest
-from app.modules.patients.service import register_patient
+from app.modules.patients.service import create_patient_account
 from app.modules.staff.schemas import StaffCreateRequest
 from app.modules.staff.service import create_staff_member
 
@@ -65,11 +66,14 @@ def seed(db: Session, password: str, domain: str) -> list[str]:
                     ),
                 )
                 created.append(email)
+        clinic_row = db.get(Clinic, uuid.UUID(clinic_id))
+        assert clinic_row is not None  # just created or found via its admin above
         for name in spec["patients"]:
             email = f"{name}-{key}@{domain}"
             if not _exists(db, email):
-                register_patient(
+                create_patient_account(
                     db,
+                    clinic_row,
                     PatientRegisterRequest(
                         clinic_id=clinic_id,
                         full_name=f"{name.title()} {key.upper()}",

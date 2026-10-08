@@ -231,7 +231,7 @@ Diferenças chave em relação ao dev:
 - Backend e frontend correm como utilizadores não-root; a imagem final do frontend contém apenas Nginx e os assets compilados.
 - A rede `data` é interna e liga apenas backend/PostgreSQL. A rede `edge` liga proxy/frontend/backend. Só o proxy publica uma porta.
 - O serviço one-shot `migrate` executa `alembic upgrade head` depois de o PostgreSQL ficar saudável; o backend só arranca se as migrations terminarem com sucesso.
-- `ALLOW_PUBLIC_CLINIC_ONBOARDING` e `ALLOW_PUBLIC_PATIENT_REGISTRATION` são `false` por omissão. Para o bootstrap inicial, ativa apenas o onboarding de clínica durante uma janela supervisionada e volta a desativá-lo imediatamente. Um piloto controlado não deve aceitar autoinscrição pública de pacientes sem um processo de convite/verificação aprovado.
+- `ALLOW_PUBLIC_CLINIC_ONBOARDING` e `ALLOW_PUBLIC_PATIENT_REGISTRATION` são `false` por omissão. Para o bootstrap inicial, ativa apenas o onboarding de clínica durante uma janela supervisionada e volta a desativá-lo imediatamente. Durante o piloto, os pacientes entram **apenas por convite da clínica** (`POST /api/v1/invitations/patients` → link de uso único em `/convite`); `ALLOW_PUBLIC_PATIENT_REGISTRATION` fica `false` em todos os ambientes, incluindo `backend/.env.example` e o E2E. O endpoint de autoinscrição mantém-se no código, mas mesmo ativo só aceita clínicas em `PUBLIC_CLINIC_IDS` e responde 404 idêntico para clínicas privadas ou inexistentes.
 
 ### Ativar HTTPS quando existirem domínio e certificados
 

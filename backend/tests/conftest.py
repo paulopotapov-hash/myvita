@@ -102,3 +102,37 @@ def _reset_audit_pool():
     """Tests drop and recreate tables/enum types; pooled audit connections must not outlive them."""
     yield
     audit_engine.dispose()
+
+
+class _AnyClinicMayRegister(list):
+    """Test-only stand-in for settings.PUBLIC_CLINIC_IDS. Never use outside tests.
+
+    Why it exists: POST /api/v1/patients/register only accepts clinics listed in
+    PUBLIC_CLINIC_IDS (see patients/service.register_patient), but many fixtures
+    (tests/phase1_world.py and ~12 test modules) create a clinic at runtime and
+    then self-register patients into it, so its id cannot be known up front.
+    This value is an *empty* list, so the public clinic directory behaves exactly
+    as with the production default `[]`, yet reports every clinic as a member, so
+    those registration fixtures keep working.
+
+    Registration-security tests MUST override it with a real list via
+    monkeypatch.setattr(settings, "PUBLIC_CLINIC_IDS", [...]); otherwise they
+    would silently test this shim instead of the allowlist (see
+    tests/test_registration_controls.py and tests/test_public_clinic_directory.py).
+
+    TODO(follow-up): create test patients through a DB/service factory or the
+    invitation flow instead of public self-registration, then delete this shim.
+    """
+
+    def __contains__(self, item: object) -> bool:
+        return True
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_clinics_accept_self_registration():
+    from app.core.config import settings
+
+    original = settings.PUBLIC_CLINIC_IDS
+    settings.PUBLIC_CLINIC_IDS = _AnyClinicMayRegister()
+    yield
+    settings.PUBLIC_CLINIC_IDS = original

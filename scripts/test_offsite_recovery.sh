@@ -79,7 +79,7 @@ wait_for_db() {
 }
 backend_env=(
     -e ENVIRONMENT=development -e COOKIE_SECURE=false -e "JWT_SECRET_KEY=${jwt}"
-    -e ALLOW_PUBLIC_CLINIC_ONBOARDING=true -e ALLOW_PUBLIC_PATIENT_REGISTRATION=true
+    -e ALLOW_PUBLIC_CLINIC_ONBOARDING=true
     -e ALLOW_DIRECT_STAFF_CREATION=true -e 'ALLOWED_HOSTS=["localhost","127.0.0.1"]'
 )
 start_api() { # name db documents_volume
@@ -149,10 +149,14 @@ clinic_id="$(api "$admin" "$src_port" POST /api/v1/clinics -H 'Content-Type: app
     -d '{"clinic_name":"DR Clinic","admin_full_name":"DR Admin","admin_email":"admin@dr-recovery.example.pt","admin_password":"SenhaForte123!"}' | json_field id)"
 api "$admin" "$src_port" POST /api/v1/staff -H 'Content-Type: application/json' \
     -d '{"full_name":"DR Doctor","email":"doctor@dr-recovery.example.pt","password":"SenhaForte123!","staff_role":"doctor"}' >/dev/null
-patient_id="$(api "$patient" "$src_port" POST /api/v1/patients/register -H 'Content-Type: application/json' \
-    -d "{\"clinic_id\":\"${clinic_id}\",\"full_name\":\"DR Patient\",\"email\":\"patient@dr-recovery.example.pt\",\"password\":\"SenhaForte123!\"}" | json_field id)"
 api "$doctor" "$src_port" POST /api/v1/auth/login -H 'Content-Type: application/json' \
     -d '{"email":"doctor@dr-recovery.example.pt","password":"SenhaForte123!"}' >/dev/null
+# Patients join by invitation (P2.2): the doctor invites, the patient accepts anonymously.
+invite_token="$(api "$doctor" "$src_port" POST /api/v1/invitations/patients -H 'Content-Type: application/json' \
+    -d '{"full_name":"DR Patient","email":"patient@dr-recovery.example.pt"}' | json_field token)"
+patient_id="$(api "$patient" "$src_port" POST /api/v1/invitations/accept -H 'Content-Type: application/json' \
+    -d "{\"token\":\"${invite_token}\",\"password\":\"SenhaForte123!\"}" | json_field patient_id)"
+[ -n "$patient_id" ] && [ "$patient_id" != None ] || die "patient invitation was not accepted"
 printf '%%PDF-1.7\nsynthetic disaster-recovery report %s\n' "$sfx" > "${work}/report.pdf"
 printf '\x89PNG\r\n\x1a\n' > "${work}/scan.png"; head -c 50000 /dev/urandom >> "${work}/scan.png"
 sha_list="${work}/original_sha.txt"; : > "$sha_list"
