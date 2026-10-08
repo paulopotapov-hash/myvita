@@ -1,4 +1,5 @@
 import { useSession } from '../hooks/useSession'
+import { canUseMessaging } from '../lib/messaging'
 import { AuthenticatedLayout, type NavItem } from './AuthenticatedLayout'
 
 const STAFF_NAV: NavItem[] = [
@@ -6,6 +7,7 @@ const STAFF_NAV: NavItem[] = [
   { to: '/app/consultas', label: 'Consultas' },
   { to: '/app/pacientes', label: 'Pacientes' },
   { to: '/app/notificacoes', label: 'Notificações' },
+  { to: '/app/mensagens', label: 'Mensagens' },
   { to: '/app/perfil', label: 'Perfil' },
   { to: '/app/seguranca', label: 'Segurança' },
 ]
@@ -29,7 +31,8 @@ export function AppLayout() {
     <AuthenticatedLayout
       areaLabel={isAdmin ? 'Administrador da clínica' : 'Profissional de saúde'}
       homePath="/app"
-      navItems={isAdmin ? ADMIN_NAV : STAFF_NAV}
+      // Messaging is for doctors/nurses only (the backend enforces it too).
+      navItems={isAdmin ? ADMIN_NAV : STAFF_NAV.filter((item) => item.to !== '/app/mensagens' || canUseMessaging(user))}
     />
   )
 }

@@ -19,6 +19,8 @@ import { StaffManagementPage } from './pages/admin/StaffManagementPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
 import { AccountProfilePage } from './pages/AccountProfilePage'
 import { PatientDashboard } from './pages/patient/PatientDashboard'
+import { MessagesInboxPage } from './pages/messages/MessagesInboxPage'
+import { ConversationPage } from './pages/messages/ConversationPage'
 
 export default function App() {
   return (
@@ -42,6 +44,8 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route path="mensagens" element={<MessagesInboxPage />} />
+        <Route path="mensagens/:conversationId" element={<ConversationPage />} />
         <Route path="perfil" element={<AccountProfilePage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route
@@ -87,6 +91,8 @@ export default function App() {
         <Route path="seguranca" element={<AccountSecurityPage />} />
         <Route path="saude" element={<PatientDetailPage own />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
+        <Route path="mensagens" element={<MessagesInboxPage />} />
+        <Route path="mensagens/:conversationId" element={<ConversationPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

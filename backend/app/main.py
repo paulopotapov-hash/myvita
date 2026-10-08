@@ -43,6 +43,7 @@ from app.modules.consents.router import router as consents_router
 from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
+from app.modules.messages.router import router as messages_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
 from app.modules.staff.router import router as staff_router
@@ -273,3 +274,4 @@ app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-reco
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
+app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])

@@ -65,6 +65,9 @@ class AuditAction(str, enum.Enum):
     MEDICATION_UPDATED = "medication_updated"
     MEDICATION_DEACTIVATED = "medication_deactivated"
     NOTIFICATION_READ = "notification_read"
+    CONVERSATION_CREATED = "conversation_created"
+    MESSAGE_SENT = "message_sent"
+    MESSAGE_READ = "message_read"
     PERMISSION_DENIED = "permission_denied"
     CSRF_FAILURE = "csrf_failure"
     RATE_LIMITED = "rate_limited"
@@ -75,6 +78,7 @@ class AuditAction(str, enum.Enum):
     CONSENT_VIEWED = "consent_viewed"
     MEDICAL_RECORD_VIEWED = "medical_record_viewed"
     MEDICATION_VIEWED = "medication_viewed"
+    CONVERSATION_VIEWED = "conversation_viewed"
 
 
 class AuditResult(str, enum.Enum):

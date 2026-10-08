@@ -301,3 +301,39 @@ export interface MedicationUpdateRequest {
   status?: MedicationStatus
   end_date?: string | null
 }
+
+// --- Messages (backend/app/modules/messages/schemas.py) ---
+
+/** Mirrors backend MESSAGE_MAX_LENGTH; the backend still validates. */
+export const MESSAGE_MAX_LENGTH = 5000
+
+export interface ConversationPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  staff_id: string
+  patient_name: string
+  staff_name: string
+  /** Messages addressed to the current user that they haven't read. */
+  unread_count: number
+  created_at: string
+  /** Latest activity (last message, or creation). */
+  updated_at: string
+}
+
+export interface MessagePublic {
+  id: string
+  conversation_id: string
+  sender_user_id: string
+  body: string
+  read_at: string | null
+  created_at: string
+}
+
+export interface ConversationDetail extends ConversationPublic {
+  /** One page, newest first. */
+  messages: MessagePublic[]
+}
+
+/** Clinical staff send patient_id; patients send staff_id. */
+export type ConversationCreateRequest = { patient_id: string } | { staff_id: string }
