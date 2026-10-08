@@ -96,6 +96,11 @@ export const staffCreateSchema = z.object({
 })
 export type StaffCreateFormValues = z.infer<typeof staffCreateSchema>
 
+export const patientInvitationSchema = z.object({
+  full_name: z.string().trim().min(2, 'Nome demasiado curto.').max(255),
+  email: z.email('Introduz um email válido.'),
+})
+
 export const appointmentCreateSchema = z.object({
   patient_id: z.string().min(1, 'Escolhe um paciente.'),
   staff_id: z.string().min(1, 'Escolhe um profissional.'),

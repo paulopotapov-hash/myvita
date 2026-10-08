@@ -9,6 +9,8 @@ import { PatientsPage } from './PatientsPage'
 const { usePatientsPage } = vi.hoisted(() => ({ usePatientsPage: vi.fn() }))
 
 vi.mock('../../hooks/useClinicData', () => ({ usePatientsPage }))
+// The invitation panel has its own tests (PatientInvitationsPanel.test.tsx).
+vi.mock('../../components/PatientInvitationsPanel', () => ({ PatientInvitationsPanel: () => null }))
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({ user: { role: 'staff', staff_role: 'doctor' } }),
 }))

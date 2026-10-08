@@ -41,6 +41,7 @@ class AuditAction(str, enum.Enum):
     PASSWORD_CHANGE = "password_change"  # nosec B105
     INVITATION_CREATED = "invitation_created"
     INVITATION_ACCEPTED = "invitation_accepted"
+    INVITATION_REVOKED = "invitation_revoked"
     USER_CREATED = "user_created"
     USER_DISABLED = "user_disabled"
     PATIENT_CREATED = "patient_created"

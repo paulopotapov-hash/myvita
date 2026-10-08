@@ -6,6 +6,8 @@ import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { TextField } from '../../components/TextField'
 import { SESSION_QUERY_KEY } from '../../hooks/useSession'
+import { ApiError } from '../../lib/apiClient'
+import { homePathForRole } from '../../lib/navigation'
 import { toUserMessage } from '../../lib/errorMessages'
 import { invitationAcceptSchema, zodErrorsToRecord } from '../../lib/validation'
 import { AuthLayout } from '../../layouts/AuthLayout'
@@ -54,7 +56,18 @@ export function InvitationAcceptPage() {
   return (
     <AuthLayout title="Aceitar convite" subtitle="Define a tua palavra-passe para ativar a conta">
       {preview.isLoading && <LoadingSpinner />}
-      {preview.isError && <ErrorState message={toUserMessage(preview.error)} onRetry={() => preview.refetch()} />}
+      {preview.isError && (
+        // 404/410/422 are final (unknown, used, revoked or expired): retrying cannot help.
+        preview.error instanceof ApiError && [404, 410, 422].includes(preview.error.status) ? (
+          <div role="alert" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-medium">{preview.error.status === 410 ? toUserMessage(preview.error) : 'Este convite não é válido.'}</p>
+            <p>Peça à clínica um novo convite. Se já ativou a conta, inicie sessão.</p>
+            <Link className="font-medium underline" to="/login">Ir para o início de sessão</Link>
+          </div>
+        ) : (
+          <ErrorState message={toUserMessage(preview.error)} onRetry={() => preview.refetch()} />
+        )
+      )}
       {preview.data && !accept.isSuccess && (
         <>
           <div className="mb-5 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
@@ -70,7 +83,7 @@ export function InvitationAcceptPage() {
         </>
       )}
       {accept.isSuccess && (
-        <p className="text-sm text-teal-700">Conta ativada. <Link className="font-medium underline" to="/app">Continuar</Link></p>
+        <p className="text-sm text-teal-700">Conta ativada. <Link className="font-medium underline" to={homePathForRole(accept.data.role)}>Continuar</Link></p>
       )}
     </AuthLayout>
   )

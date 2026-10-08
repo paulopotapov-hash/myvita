@@ -177,6 +177,24 @@ export interface InvitationCreated extends StaffInvitationRequest {
   created_at: string
 }
 
+export interface PatientInvitationRequest {
+  full_name: string
+  email: string
+}
+
+/** Invitation as listed for management: never carries the token. */
+export interface InvitationPublic {
+  id: string
+  clinic_id: string
+  email: string
+  full_name: string
+  role: Exclude<UserRole, 'clinic_admin'>
+  staff_role: StaffRole | null
+  status: 'pending' | 'accepted' | 'revoked'
+  expires_at: string
+  created_at: string
+}
+
 export interface PasswordChangeRequest {
   current_password: string
   new_password: string

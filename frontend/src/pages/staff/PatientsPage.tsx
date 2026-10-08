@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
+import { PatientInvitationsPanel } from '../../components/PatientInvitationsPanel'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
@@ -40,6 +41,8 @@ function useFilterComposer() {
 export function PatientsPage() {
   const { user } = useSession()
   const canOpenClinicalRecord = user?.role === 'staff' && (user.staff_role === 'doctor' || user.staff_role === 'nurse')
+  // Same rule as POST /api/v1/invitations/patients (the backend enforces it).
+  const canInvitePatients = user?.role === 'clinic_admin' || canOpenClinicalRecord
 
   const { params, update } = useFilterComposer()
 
@@ -95,6 +98,8 @@ export function PatientsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold text-slate-900">Pacientes</h1>
+
+      {canInvitePatients && <PatientInvitationsPanel />}
 
       <label className="flex max-w-md flex-col gap-1 text-sm font-medium text-slate-700">
         Pesquisar por nome
