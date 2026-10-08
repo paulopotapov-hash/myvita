@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request, client_ip, record_audit_event
 from app.core.clinical_access import clinical_staff
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, INVITATION_PUBLIC_RATE_LIMIT, limiter
@@ -40,16 +40,13 @@ def _audit(
     invitation_id: uuid.UUID,
     clinic_id: uuid.UUID,
 ) -> None:
-    record_audit_event(
+    audit_request(
+        request,
         action=action,
-        result=AuditResult.SUCCESS,
+        actor=actor,
         clinic_id=clinic_id,
-        actor_user_id=actor.id,
-        actor_email=actor.email,
         resource_type="invitation",
         resource_id=invitation_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
 
 

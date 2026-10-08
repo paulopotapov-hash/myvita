@@ -55,8 +55,13 @@ def test_clinic_directory_is_not_enumerable_without_public_registration(world: W
 
 
 def test_there_is_no_platform_support_role_export_or_audit_read_surface():
+    """No platform-wide support/export surface. The one audit read path is the
+    clinic-scoped administrator listing (see tests/test_audit_infrastructure.py)."""
     assert {role.value for role in UserRole} == {"patient", "staff", "clinic_admin"}
     for path, operations in app.openapi()["paths"].items():
+        if path == "/api/v1/audit-logs":
+            assert set(operations) == {"get"}, path
+            continue
         assert not any(word in path.lower() for word in ("export", "audit", "support", "admin/")), path
         assert "put" not in operations, path
         if "delete" in operations:

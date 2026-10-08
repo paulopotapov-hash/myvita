@@ -172,6 +172,21 @@ export interface DocumentPublic {
   created_at: string
 }
 
+export type AuditResult = 'success' | 'failure' | 'denied'
+
+export interface AuditLogPublic {
+  id: string
+  timestamp: string
+  actor: { user_id: string | null; email: string | null; name: string | null }
+  action: string
+  result: AuditResult
+  resource_type: string | null
+  resource_id: string | null
+  ip_address: string | null
+  request_id: string | null
+  metadata: Record<string, unknown> | null
+}
+
 // --- Request payloads (mirrors backend *Request schemas) --------------------
 
 export interface LoginRequest {

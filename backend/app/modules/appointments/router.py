@@ -3,11 +3,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.clinical_access import is_clinical_staff
 from app.core.database import get_db
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
-from app.models import Appointment, AuditAction, AuditResult, Patient, Staff, User, UserRole
+from app.models import Appointment, AuditAction, Patient, Staff, User, UserRole
 from app.modules.appointments.schemas import (
     AppointmentCreateRequest,
     AppointmentPublic,
@@ -90,16 +90,13 @@ def create(
     _hide_cross_tenant_targets(payload, clinic_id, db)
     _reject_admin_reason(payload, _staff_user, db)
     appointment = create_appointment(db, clinic_id, payload)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.APPOINTMENT_CREATED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=_staff_user.id,
-        actor_email=_staff_user.email,
+        actor=_staff_user,
         resource_type="appointment",
         resource_id=appointment.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id},
     )
     return _public(appointment, _staff_user, db)
 
@@ -125,19 +122,15 @@ def list_mine(
     # event is "the appointment list this user is entitled to see", not
     # each individual row, which would flood the table for no
     # investigative benefit.
-    record_audit_event(
+    audit_request(
+        request,
         action=(
             AuditAction.PATIENT_VIEWED_OWN_RECORD
             if user.role == UserRole.PATIENT
             else AuditAction.STAFF_VIEWED_APPOINTMENT
         ),
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="appointment_list",
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"count": len(appointments)},
     )
     may_read_reason = _may_read_reason(user, db)  # once per request, not once per row
@@ -157,20 +150,16 @@ def detail(
         patient = db.query(Patient).filter(Patient.user_id == _user.id).first()
         if patient is None or appointment.patient_id != patient.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consulta não encontrada.")
-    record_audit_event(
+    audit_request(
+        request,
         action=(
             AuditAction.PATIENT_VIEWED_OWN_RECORD
             if _user.role == UserRole.PATIENT
             else AuditAction.STAFF_VIEWED_APPOINTMENT
         ),
-        result=AuditResult.SUCCESS,
-        clinic_id=_user.clinic_id,
-        actor_user_id=_user.id,
-        actor_email=_user.email,
+        actor=_user,
         resource_type="appointment",
         resource_id=appointment.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
     return _public(appointment, _user, db)
 
@@ -187,16 +176,13 @@ def update(
     get_appointment_for_clinic(db, appointment_id, clinic_id)
     _reject_admin_reason(payload, staff_user, db)
     appointment = update_appointment(db, appointment_id, clinic_id, payload)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.APPOINTMENT_UPDATED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=staff_user.id,
-        actor_email=staff_user.email,
+        actor=staff_user,
         resource_type="appointment",
         resource_id=appointment.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id, "status": appointment.status},
     )
     return _public(appointment, staff_user, db)
 
@@ -210,15 +196,12 @@ def cancel(
     staff_user: User = Depends(_staff_or_admin_only),
 ) -> AppointmentPublic:
     appointment = cancel_appointment(db, appointment_id, clinic_id)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.APPOINTMENT_CANCELLED,
-        result=AuditResult.SUCCESS,
-        clinic_id=clinic_id,
-        actor_user_id=staff_user.id,
-        actor_email=staff_user.email,
+        actor=staff_user,
         resource_type="appointment",
         resource_id=appointment.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id},
     )
     return _public(appointment, staff_user, db)

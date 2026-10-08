@@ -3,10 +3,10 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_request
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, AuditResult, MedicalRecord, MedicalRecordRevision, User
+from app.models import AuditAction, MedicalRecord, MedicalRecordRevision, User
 from app.modules.medical_records.schemas import (
     MedicalRecordCreateRequest,
     MedicalRecordPublic,
@@ -19,16 +19,13 @@ router = APIRouter()
 
 
 def _audit(request: Request, user: User, action: AuditAction, record: MedicalRecord) -> None:
-    record_audit_event(
+    audit_request(
+        request,
         action=action,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="medical_record",
         resource_id=record.id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": record.patient_id},
     )
 
 
@@ -44,16 +41,12 @@ def list_for_patient(
 ) -> list[MedicalRecord]:
     records, total = list_records(db, patient_id, user, offset=(page - 1) * page_size, limit=page_size)
     response.headers["X-Total-Count"] = str(total)
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.MEDICAL_RECORD_VIEWED,
-        result=AuditResult.SUCCESS,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
+        actor=user,
         resource_type="medical_record_list",
         resource_id=patient_id,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"count": len(records)},
     )
     return records

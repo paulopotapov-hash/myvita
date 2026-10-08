@@ -16,6 +16,7 @@ import { PatientsPage } from './pages/staff/PatientsPage'
 import { PatientDetailPage } from './pages/staff/PatientDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { StaffManagementPage } from './pages/admin/StaffManagementPage'
+import { AuditLogPage } from './pages/admin/AuditLogPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
 import { AccountProfilePage } from './pages/AccountProfilePage'
 import { PatientDashboard } from './pages/patient/PatientDashboard'
@@ -69,6 +70,14 @@ export default function App() {
           element={
             <RoleRoute allow={['clinic_admin']}>
               <StaffManagementPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="auditoria"
+          element={
+            <RoleRoute allow={['clinic_admin']}>
+              <AuditLogPage />
             </RoleRoute>
           }
         />

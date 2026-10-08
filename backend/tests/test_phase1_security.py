@@ -641,6 +641,7 @@ def _rows(world: World):
             None,
             (404, 404, 404, 404, 200, 404, 401),
         ),
+        ("audit log listing", "GET", "/api/v1/audit-logs", None, (200, 403, 403, 403, 403, 403, 401)),
     ]
 
 

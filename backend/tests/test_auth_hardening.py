@@ -206,8 +206,11 @@ def test_email_longer_than_database_column_is_rejected(client):
     assert r.status_code == 422
 
 
-def test_audit_log_has_no_tenant_facing_api(client):
-    assert client.get("/api/v1/audit-logs").status_code == 404
+def test_audit_log_api_is_never_reachable_anonymously(client):
+    # Phase 8 added a clinic_admin-only, clinic-scoped listing (see
+    # tests/test_audit_infrastructure.py for RBAC/tenant tests); it must still
+    # default-deny unauthenticated callers.
+    assert client.get("/api/v1/audit-logs").status_code == 401
 
 
 # --- Settings validation (unit-level, no HTTP client needed) -----------------

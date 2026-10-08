@@ -9,7 +9,7 @@ from functools import lru_cache
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # jwt.encode/decode also accepts "none" and asymmetric algorithms (RS*, ES*,
@@ -94,12 +94,33 @@ class Settings(BaseSettings):
     # network-level ACL to be configured before the app is usable at all.
     METRICS_TOKEN: str | None = None
 
+    # Optional SIEM export (see docs/audit-logging.md § SIEM export). Disabled by
+    # default: with SIEM_ENABLED=false nothing in the app opens a connection to
+    # SIEM_ENDPOINT. Export runs out-of-band (scripts/export_audit_siem.py),
+    # never inside a clinical request.
+    SIEM_ENABLED: bool = False
+    SIEM_ENDPOINT: str | None = None
+    SIEM_API_KEY: SecretStr | None = None
+    SIEM_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=60)
+    SIEM_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
+    SIEM_CURSOR_FILE: str = "/var/lib/myvita/siem-cursor.json"
+
     @field_validator("JWT_ALGORITHM")
     @classmethod
     def _jwt_algorithm_must_be_hmac(cls, v: str) -> str:
         if v not in _ALLOWED_JWT_ALGORITHMS:
             raise ValueError(f"JWT_ALGORITHM must be one of {sorted(_ALLOWED_JWT_ALGORITHMS)}, got {v!r}.")
         return v
+
+    @model_validator(mode="after")
+    def _siem_config_is_coherent(self) -> "Settings":
+        if not self.SIEM_ENABLED:
+            return self
+        if not self.SIEM_ENDPOINT or not self.SIEM_ENDPOINT.startswith(("http://", "https://")):
+            raise ValueError("SIEM_ENDPOINT must be an http(s) URL when SIEM_ENABLED=true.")
+        if self.is_production and not self.SIEM_ENDPOINT.startswith("https://"):
+            raise ValueError("SIEM_ENDPOINT must use HTTPS in production.")
+        return self
 
     @model_validator(mode="after")
     def _refuse_insecure_production_config(self) -> "Settings":

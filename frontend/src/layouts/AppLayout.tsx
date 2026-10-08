@@ -17,6 +17,7 @@ const ADMIN_NAV: NavItem[] = [
   { to: '/app/consultas', label: 'Consultas' },
   { to: '/app/pacientes', label: 'Pacientes' },
   { to: '/app/equipa', label: 'Equipa' },
+  { to: '/app/auditoria', label: 'Auditoria' },
   { to: '/app/notificacoes', label: 'Notificações' },
   { to: '/app/perfil', label: 'Perfil' },
   { to: '/app/seguranca', label: 'Segurança' },
