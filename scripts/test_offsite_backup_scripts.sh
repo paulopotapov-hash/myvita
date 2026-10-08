@@ -41,7 +41,9 @@ elif [ "$service" = s3api ] && [ "$action" = head-object ]; then
     if [ "$content_length" = true ]; then wc -c < "${MOCK_S3_ROOT}/${key}" | tr -d ' '; fi
 elif [ "$service" = s3api ] && [ "$action" = list-objects-v2 ]; then
     query="$*"
-    find "$MOCK_S3_ROOT" -type f -name '*.dump' -print | sed "s#^${MOCK_S3_ROOT}/##" | paste -sd '\t' -
+    prefix=""
+    while [ "$#" -gt 0 ]; do [ "$1" != --prefix ] || prefix="$2"; shift; done
+    find "$MOCK_S3_ROOT" -type f -print | sed "s#^${MOCK_S3_ROOT}/##" | grep "^${prefix}" | paste -sd '\t' -
 elif [ "$service" = s3api ] && [ "$action" = delete-object ]; then
     key=""
     while [ "$#" -gt 0 ]; do [ "$1" != --key ] || key="$2"; shift; done
@@ -60,11 +62,11 @@ printf 'valid archive fixture\n' > "$dump"
 (cd "$backups" && sha256sum "$(basename "$dump")" > "$(basename "$dump").sha256")
 
 "${repo_root}/scripts/upload_offsite_backup.sh" "$dump" >/dev/null
-[ -s "${store}/myvita/$(basename "$dump")" ]
-[ -s "${store}/myvita/$(basename "$dump").sha256" ]
+[ -s "${store}/myvita/postgres/$(basename "$dump")" ]
+[ -s "${store}/myvita/postgres/$(basename "$dump").sha256" ]
 
 download_dir="${test_root}/download"
-"${repo_root}/scripts/download_offsite_backup.sh" "myvita/$(basename "$dump")" "$download_dir" >/dev/null
+"${repo_root}/scripts/download_offsite_backup.sh" "myvita/postgres/$(basename "$dump")" "$download_dir" >/dev/null
 (cd "$download_dir" && sha256sum -c "$(basename "$dump").sha256" >/dev/null)
 
 if MOCK_AWS_FAIL=true "${repo_root}/scripts/upload_offsite_backup.sh" "$dump" >/dev/null 2>&1; then
@@ -72,9 +74,50 @@ if MOCK_AWS_FAIL=true "${repo_root}/scripts/upload_offsite_backup.sh" "$dump" >/
 fi
 [ -s "$dump" ]
 
-second="${store}/myvita/myvita_20000101T000000Z.dump"
-printf old > "$second"; (cd "$(dirname "$second")" && sha256sum "$(basename "$second")" > "$(basename "$second").sha256")
+# Documents archives go to <prefix>/documents/ and are verified before upload.
+documents="${backups}/myvita_documents_20260925T000000Z.tar.gz"
+mkdir -p "${test_root}/docsrc/files"; printf 'fixture' > "${test_root}/docsrc/files/0123456789abcdef0123456789abcdef"
+tar -C "${test_root}/docsrc" -czf "$documents" files
+(cd "$backups" && sha256sum "$(basename "$documents")" > "$(basename "$documents").sha256")
+"${repo_root}/scripts/upload_offsite_backup.sh" "$documents" >/dev/null
+[ -s "${store}/myvita/documents/$(basename "$documents")" ] && [ -s "${store}/myvita/documents/$(basename "$documents").sha256" ]
+printf 'not gzip' > "${backups}/myvita_documents_20260926T000000Z.tar.gz"
+(cd "$backups" && sha256sum myvita_documents_20260926T000000Z.tar.gz > myvita_documents_20260926T000000Z.tar.gz.sha256)
+if "${repo_root}/scripts/upload_offsite_backup.sh" "${backups}/myvita_documents_20260926T000000Z.tar.gz" >/dev/null 2>&1; then
+    echo "ERROR: an unreadable documents archive was uploaded" >&2; exit 1
+fi
+if "${repo_root}/scripts/upload_offsite_backup.sh" "${test_root}/docsrc/files/0123456789abcdef0123456789abcdef" >/dev/null 2>&1; then
+    echo "ERROR: a non-backup file was uploaded" >&2; exit 1
+fi
+
+"${repo_root}/scripts/download_offsite_backup.sh" --latest "${test_root}/latest" >/dev/null
+[ -s "${test_root}/latest/$(basename "$dump")" ] && [ -s "${test_root}/latest/$(basename "$documents")" ]
+
+# Retention: expired legacy and new-layout objects go; the newest of each kind,
+# anything outside the prefix and unrelated names under the prefix stay.
+add_object() { mkdir -p "$(dirname "${store}/$1")"; printf old > "${store}/$1"; printf sum > "${store}/$1.sha256"; }
+add_object myvita/myvita_20000101T000000Z.dump
+add_object myvita/postgres/myvita_20000102T000000Z.dump
+add_object myvita/documents/myvita_documents_20000101T000000Z.tar.gz
+add_object other-app/myvita_20000101T000000Z.dump
+add_object myvita/notes/myvita_20000101T000000Z.dump
+printf keep > "${store}/myvita/unrelated.txt"
 "${repo_root}/scripts/prune_offsite_backups.sh" >/dev/null
-[ "$(find "${store}/myvita" -type f -name '*.dump' | wc -l | tr -d ' ')" = 1 ]
+[ ! -e "${store}/myvita/myvita_20000101T000000Z.dump" ] && [ ! -e "${store}/myvita/myvita_20000101T000000Z.dump.sha256" ]
+[ ! -e "${store}/myvita/postgres/myvita_20000102T000000Z.dump" ]
+[ ! -e "${store}/myvita/documents/myvita_documents_20000101T000000Z.tar.gz" ]
+[ -e "${store}/myvita/postgres/$(basename "$dump")" ] && [ -e "${store}/myvita/documents/$(basename "$documents")" ]
+[ -e "${store}/other-app/myvita_20000101T000000Z.dump" ] && [ -e "${store}/myvita/notes/myvita_20000101T000000Z.dump" ]
+[ -e "${store}/myvita/unrelated.txt" ]
+
+# Only old backups left: the newest of each kind is still kept.
+rm -f "${store}/myvita/postgres/$(basename "$dump")"*
+add_object myvita/postgres/myvita_20000103T000000Z.dump
+"${repo_root}/scripts/prune_offsite_backups.sh" >/dev/null
+[ -e "${store}/myvita/postgres/myvita_20000103T000000Z.dump" ]
+
+if OFFSITE_S3_PREFIX=/ "${repo_root}/scripts/prune_offsite_backups.sh" >/dev/null 2>&1; then
+    echo "ERROR: pruning with an empty prefix was allowed" >&2; exit 1
+fi
 
 echo "Off-site backup script tests passed."

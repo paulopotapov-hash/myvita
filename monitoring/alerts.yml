@@ -108,3 +108,29 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: No verified off-site backup exists within the last 36 hours
+      - alert: MyVitaDocumentsBackupLastRunFailed
+        expr: myvita_documents_backup_enabled == 1 and myvita_documents_backup_last_run_success == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: The last documents storage backup failed
+      - alert: MyVitaDocumentsBackupMissingOrStale
+        expr: myvita_documents_backup_enabled == 1 and (myvita_documents_backup_last_success_timestamp_seconds == 0 or time() - myvita_documents_backup_last_success_timestamp_seconds > 129600)
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: No verified documents backup exists within the last 36 hours
+      # Recovery verification usually runs on a separate host/CI; these only fire
+      # once it has reported at least once to this Prometheus.
+      - alert: MyVitaRecoveryVerificationFailed
+        expr: myvita_recovery_verification_last_success_timestamp_seconds > 0 and myvita_recovery_verification_last_run_success == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: The last full recovery verification failed
+      - alert: MyVitaRecoveryVerificationStale
+        expr: myvita_recovery_verification_last_success_timestamp_seconds > 0 and time() - myvita_recovery_verification_last_success_timestamp_seconds > 691200
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: No successful recovery verification within the last 8 days

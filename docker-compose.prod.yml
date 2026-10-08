@@ -62,6 +62,8 @@ services:
       BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 3 * * *}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-true}
+      DOCUMENTS_BACKUP_ENABLED: ${DOCUMENTS_BACKUP_ENABLED:-true}
+      DOCUMENT_STORAGE_DIR: /documents
       TZ: ${BACKUP_TIMEZONE:-UTC}
       OFFSITE_BACKUP_ENABLED: ${OFFSITE_BACKUP_ENABLED:-false}
       OFFSITE_S3_BUCKET: ${OFFSITE_S3_BUCKET:-}
@@ -81,6 +83,8 @@ services:
     volumes:
       - myvita_backups:/backups
       - myvita_backup_metrics:/metrics
+      # Read-only: the backup job archives documents but can never change them.
+      - myvita_documents:/documents:ro
     networks:
       - data
 
