@@ -3,14 +3,19 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.audit import client_ip, record_audit_event
+from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles
 from app.models import AuditAction, AuditResult, Staff, User, UserRole
-from app.modules.staff.schemas import StaffCreateRequest, StaffPublic
-from app.modules.staff.service import create_staff_member, deactivate_staff_member
+from app.modules.staff.schemas import StaffCreateRequest, StaffPublic, StaffRoleUpdateRequest
+from app.modules.staff.service import (
+    activate_staff_member,
+    create_staff_member,
+    deactivate_staff_member,
+    update_staff_role,
+)
 
 router = APIRouter()
 
@@ -57,16 +62,19 @@ def create(
 
 @router.get("", response_model=list[StaffPublic])
 def list_mine(
+    request: Request,
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> list[StaffPublic]:
     """
-    Staff directory for the caller's own clinic. Open to any authenticated
-    role in the clinic (patients included) — this is "who are our doctors",
-    not sensitive clinical data, and staff/clinic_admin need it to pick a
-    staff member when creating an appointment.
+    Staff directory for the caller's own clinic, for staff roles only
+    (staff/clinic_admin pick a professional when booking or triaging).
+    Patients get 404: they never choose a professional to message (M4).
     """
+    with audit_denials(request, user, "staff", user.id):
+        if user.role not in (UserRole.STAFF, UserRole.CLINIC_ADMIN):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Não encontrado.")
     staff_members = (
         db.query(Staff)
         .options(selectinload(Staff.user))
@@ -107,6 +115,10 @@ def deactivate(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
+    return _staff_public(staff)
+
+
+def _staff_public(staff: Staff) -> StaffPublic:
     return StaffPublic(
         id=staff.id,
         clinic_id=staff.clinic_id,
@@ -115,3 +127,53 @@ def deactivate(
         specialty=staff.specialty,
         is_active=staff.user.is_active,
     )
+
+
+@router.post("/{staff_id}/activate", response_model=StaffPublic)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def activate(
+    staff_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_clinic_admin_only),
+) -> StaffPublic:
+    staff = activate_staff_member(db, staff_id, clinic_id, admin)
+    record_audit_event(
+        action=AuditAction.USER_ENABLED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="user",
+        resource_id=staff.user_id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return _staff_public(staff)
+
+
+@router.patch("/{staff_id}/role", response_model=StaffPublic)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def change_role(
+    staff_id: uuid.UUID,
+    payload: StaffRoleUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    admin: User = Depends(_clinic_admin_only),
+) -> StaffPublic:
+    staff = update_staff_role(db, staff_id, clinic_id, payload)
+    record_audit_event(
+        action=AuditAction.STAFF_UPDATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=admin.id,
+        actor_email=admin.email,
+        resource_type="staff",
+        resource_id=staff.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"staff_role": staff.staff_role.value},
+    )
+    return _staff_public(staff)

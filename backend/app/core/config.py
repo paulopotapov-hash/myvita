@@ -9,8 +9,10 @@ import base64
 import binascii
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
+from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # jwt.encode/decode also accepts "none" and asymmetric algorithms (RS*, ES*,
@@ -18,6 +20,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # actually use closes off both a misconfiguration (typo'd env var silently
 # picking "none") and the classic "alg confusion" class of JWT bugs.
 _ALLOWED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def siem_endpoint_problem(endpoint: str | None) -> str | None:
+    """Why a SIEM endpoint is unacceptable, or None when it is fine.
+
+    Only absolute HTTPS URLs, plus plain HTTP to a loopback host (local tests and
+    a sidecar collector). This rules out file:, ftp: and other urllib schemes and
+    cleartext audit export over a network. Shared by the settings validator and
+    the HTTP sink so both enforce exactly the same rule.
+    """
+    parts = urlsplit(endpoint or "")
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        return "SIEM_ENDPOINT must be an absolute http(s) URL."
+    if parts.scheme == "http" and parts.hostname not in _LOOPBACK_HOSTS:
+        return "SIEM_ENDPOINT must use HTTPS (plain HTTP is only allowed to a loopback host)."
+    return None
 _DEVELOPMENT_DATABASE_URL = "postgresql+psycopg://myvita:myvita@db:5432/myvita"
 
 
@@ -59,7 +78,10 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
     MAX_REQUEST_BODY_BYTES: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
     DOCUMENT_STORAGE_DIR: str = "./var/documents"
-    DOCUMENT_MAX_FILE_BYTES: int = Field(default=5_242_880, ge=1_024, le=10_485_760)
+    # Upload limit for the private patient documents API (app/main.py exempts that
+    # route from MAX_REQUEST_BODY_BYTES up to this size). The default aligns with
+    # the production reverse-proxy allowance.
+    DOCUMENT_MAX_UPLOAD_BYTES: int = Field(default=10_485_760, ge=1_024, le=104_857_600)
 
     # Public account creation is useful during local development, but must
     # be an explicit operational decision for a controlled clinic rollout.
@@ -69,6 +91,12 @@ class Settings(BaseSettings):
     ALLOW_PUBLIC_PATIENT_REGISTRATION: bool = False
     ALLOW_DIRECT_STAFF_CREATION: bool = False
     INVITATION_EXPIRE_HOURS: int = Field(default=24, ge=1, le=168)
+    # Clinics that opted in to appear in the anonymous clinic directory (GET
+    # /api/v1/clinics[/{id}]). Empty by default = no clinic is public (fail
+    # closed). Only consulted while ALLOW_PUBLIC_PATIENT_REGISTRATION is true;
+    # a signed-in user always sees their own clinic regardless. JSON list of
+    # UUIDs, e.g. PUBLIC_CLINIC_IDS=["3f2a..."]; a malformed value fails startup.
+    PUBLIC_CLINIC_IDS: list[UUID] = Field(default_factory=list)
 
     # Account lifecycle. Reset links are issued by a clinic admin and handed
     # over out of band; self-service delivery (e-mail/SMS) is deliberately
@@ -118,12 +146,36 @@ class Settings(BaseSettings):
     # network-level ACL to be configured before the app is usable at all.
     METRICS_TOKEN: str | None = None
 
+    # Optional SIEM export (see docs/audit-logging.md § SIEM export). Disabled by
+    # default: with SIEM_ENABLED=false nothing in the app opens a connection to
+    # SIEM_ENDPOINT. Export runs out-of-band (scripts/export_audit_siem.py),
+    # never inside a clinical request.
+    SIEM_ENABLED: bool = False
+    SIEM_ENDPOINT: str | None = None
+    SIEM_API_KEY: SecretStr | None = None
+    SIEM_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=60)
+    SIEM_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
+    SIEM_CURSOR_FILE: str = "/var/lib/myvita/siem-cursor.json"
+
     @field_validator("JWT_ALGORITHM")
     @classmethod
     def _jwt_algorithm_must_be_hmac(cls, v: str) -> str:
         if v not in _ALLOWED_JWT_ALGORITHMS:
             raise ValueError(f"JWT_ALGORITHM must be one of {sorted(_ALLOWED_JWT_ALGORITHMS)}, got {v!r}.")
         return v
+
+    @model_validator(mode="after")
+    def _siem_config_is_coherent(self) -> "Settings":
+        if not self.SIEM_ENABLED:
+            return self
+        if not self.SIEM_ENDPOINT or not self.SIEM_ENDPOINT.startswith(("http://", "https://")):
+            raise ValueError("SIEM_ENDPOINT must be an http(s) URL when SIEM_ENABLED=true.")
+        if self.is_production and not self.SIEM_ENDPOINT.startswith("https://"):
+            raise ValueError("SIEM_ENDPOINT must use HTTPS in production.")
+        problem = siem_endpoint_problem(self.SIEM_ENDPOINT)
+        if problem:
+            raise ValueError(problem)
+        return self
 
     @model_validator(mode="after")
     def _refuse_insecure_production_config(self) -> "Settings":

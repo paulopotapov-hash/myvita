@@ -94,19 +94,82 @@ def test_runtime_role_can_append_but_never_rewrite_audit_history(runtime_role):
     _expect_denied(runtime, "TRUNCATE audit_logs")
 
 
-def test_runtime_role_can_append_but_not_rewrite_clinical_messages(runtime_role):
+_TABLE_PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")
+
+
+def _table_privileges(connection, table: str) -> tuple[bool, ...]:
+    return tuple(
+        connection.execute(
+            text("SELECT has_table_privilege(current_user, :table, :privilege)"),
+            {"table": table, "privilege": privilege},
+        ).scalar_one()
+        for privilege in _TABLE_PRIVILEGES
+    )
+
+
+def test_runtime_role_has_no_access_to_deprecated_tables(runtime_role):
+    """Phase 5.4: Parent A's deprecated tables (and the target archive) are never used by
+    the app, so the runtime role holds no privilege on them (A granted append on clinical_messages)."""
     _, runtime, _ = runtime_role
     with runtime.connect() as connection:
-        privileges = connection.execute(
+        for table in (
+            "clinical_conversations",
+            "clinical_messages",
+            "clinical_documents",
+            "clinical_document_versions",
+            "deprecated_notification_targets",
+        ):
+            assert _table_privileges(connection, table) == (False,) * len(_TABLE_PRIVILEGES), table
+    _expect_denied(runtime, "SELECT 1 FROM clinical_messages")
+    _expect_denied(runtime, "SELECT 1 FROM deprecated_notification_targets")
+
+
+# (SELECT, INSERT, table-wide UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER), and the columns
+# the role may UPDATE. Exactly what the services write; nothing table-wide beyond that.
+_NEW_TABLE_GRANTS = {
+    "documents": ((True, True, False, False, False, False, False), set()),
+    "conversations": ((True, True, False, False, False, False, False), {"updated_at"}),
+    "messages": ((True, True, False, False, False, False, False), {"read_at"}),
+    "invitations": ((True, True, False, False, False, False, False), {"status", "accepted_at"}),
+    "appointment_requests": (
+        (True, True, False, False, False, False, False),
+        {"status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at"},
+    ),
+}
+
+
+def test_runtime_role_grants_on_new_tables_are_exactly_what_the_app_needs(runtime_role):
+    """Phase 5.4: least privilege on the tables/columns added by the merge."""
+    _, runtime, _ = runtime_role
+    with runtime.connect() as connection:
+        for table, (table_privileges, update_columns) in _NEW_TABLE_GRANTS.items():
+            assert _table_privileges(connection, table) == table_privileges, table
+            columns = connection.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name = :table"),
+                {"table": table},
+            ).scalars().all()
+            updatable = {
+                column
+                for column in columns
+                if connection.execute(
+                    text("SELECT has_column_privilege(current_user, :table, :column, 'UPDATE')"),
+                    {"table": table, "column": column},
+                ).scalar_one()
+            }
+            assert updatable == update_columns, table
+        # The restored document title (D5) is readable and insertable, never editable.
+        assert connection.execute(
             text(
-                "SELECT has_table_privilege(current_user, 'clinical_messages', 'SELECT'), "
-                "has_table_privilege(current_user, 'clinical_messages', 'INSERT'), "
-                "has_table_privilege(current_user, 'clinical_messages', 'UPDATE'), "
-                "has_table_privilege(current_user, 'clinical_messages', 'DELETE'), "
-                "has_table_privilege(current_user, 'clinical_messages', 'TRUNCATE')"
+                "SELECT has_column_privilege(current_user, 'documents', 'title', 'SELECT') "
+                "AND has_column_privilege(current_user, 'documents', 'title', 'INSERT') "
+                "AND NOT has_column_privilege(current_user, 'documents', 'title', 'UPDATE')"
             )
-        ).one()
-    assert tuple(privileges) == (True, True, False, False, False)
+        ).scalar_one()
+    # Message bodies and document rows can never be rewritten or removed by the app role.
+    _expect_denied(runtime, "UPDATE messages SET body = 'x'")
+    _expect_denied(runtime, "DELETE FROM messages")
+    _expect_denied(runtime, "DELETE FROM documents")
+    _expect_denied(runtime, "UPDATE documents SET title = 'x'")
 
 
 def test_runtime_role_has_application_dml_but_no_ddl(runtime_role):

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_denials, client_ip, record_audit_event
@@ -30,13 +30,16 @@ router = APIRouter()
 _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
 
 
-def _public(appointment: Appointment, user: User, db: Session) -> AppointmentPublic:
-    staff = staff_profile(db, user)
-    may_read_reason = user.role == UserRole.PATIENT or (
-        staff is not None
-        and has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENT_REASON)
-        and _has_assignment(db, appointment.patient_id, staff.id, user.clinic_id)
-    )
+def _public(
+    appointment: Appointment, user: User, db: Session, *, may_read_reason: bool | None = None
+) -> AppointmentPublic:
+    if may_read_reason is None:
+        staff = staff_profile(db, user)
+        may_read_reason = user.role == UserRole.PATIENT or (
+            staff is not None
+            and has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENT_REASON)
+            and _has_assignment(db, appointment.patient_id, staff.id, user.clinic_id)
+        )
     return AppointmentPublic(
         id=appointment.id,
         clinic_id=appointment.clinic_id,
@@ -128,20 +131,28 @@ def create(
         resource_id=appointment.id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id},
     )
     return _public(appointment, _staff_user, db)
 
 
 @router.get("", response_model=list[AppointmentPublic])
 def list_mine(
-    request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    request: Request,
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[AppointmentPublic]:
     """
-    Patients get their own appointments; staff/clinic_admin get every
-    appointment in their own clinic. Scoping happens entirely server-side
-    based on the authenticated session — see service.list_appointments_for_user.
+    Patients get their own appointments; clinic admins and administrative staff
+    every appointment in their own clinic; clinicians only their care team's.
+    Scoping happens entirely server-side based on the authenticated session —
+    see service.list_appointments_for_user. Total in `X-Total-Count`.
     """
-    appointments = list_appointments_for_user(db, user)
+    appointments, total = list_appointments_for_user(db, user, offset=(page - 1) * page_size, limit=page_size)
+    response.headers["X-Total-Count"] = str(total)
     # Clinical access log: who looked at appointment data, and whose.
     # One row per request (not per appointment) — the "resource" for this
     # event is "the appointment list this user is entitled to see", not
@@ -162,7 +173,13 @@ def list_mine(
         user_agent=request.headers.get("user-agent"),
         metadata={"count": len(appointments)},
     )
-    return [_public(appointment, user, db) for appointment in appointments]
+    # Once per request, not once per row: the listing is already restricted to
+    # the clinician's care team, so the per-row assignment check is implied.
+    staff = staff_profile(db, user)
+    may_read_reason = user.role == UserRole.PATIENT or (
+        staff is not None and has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENT_REASON)
+    )
+    return [_public(appointment, user, db, may_read_reason=may_read_reason) for appointment in appointments]
 
 
 @router.get("/{appointment_id}", response_model=AppointmentPublic)
@@ -229,6 +246,7 @@ def update(
         resource_id=appointment.id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id, "status": appointment.status},
     )
     return _public(appointment, staff_user, db)
 
@@ -257,5 +275,6 @@ def cancel(
         resource_id=appointment.id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id},
     )
     return _public(appointment, staff_user, db)

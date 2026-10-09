@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token, generate_csrf_token, hash_password
 from app.main import app
@@ -206,9 +207,7 @@ def test_password_change_requires_current_password_and_revokes_old_session(clien
         assert attacker.get("/api/v1/auth/me").status_code == 401
 
     client.cookies.clear()
-    old_login = client.post(
-        "/api/v1/auth/login", json={"email": admin.email, "password": PASSWORD}
-    )
+    old_login = client.post("/api/v1/auth/login", json={"email": admin.email, "password": PASSWORD})
     new_login = client.post(
         "/api/v1/auth/login", json={"email": admin.email, "password": "NovaSenhaForte123!"}
     )
@@ -249,9 +248,41 @@ def test_admin_deactivation_revokes_staff_session_and_is_tenant_scoped(client, d
     assert deactivated.status_code == 200
     assert deactivated.json()["is_active"] is False
 
-    client.cookies.clear()
-    from app.core.config import settings
+    reactivated = client.post(
+        f"/api/v1/staff/{staff.id}/activate",
+        headers=_authenticate(client, admin),
+    )
+    assert reactivated.status_code == 200
+    assert reactivated.json()["is_active"] is True
+    role_change_token = create_access_token(doctor)
 
+    changed_role = client.patch(
+        f"/api/v1/staff/{staff.id}/role",
+        headers=_authenticate(client, admin),
+        json={"staff_role": "nurse", "specialty": "Saúde familiar"},
+    )
+    assert changed_role.status_code == 200
+    assert changed_role.json()["staff_role"] == "nurse"
+    assert changed_role.json()["specialty"] == "Saúde familiar"
+
+    client.cookies.clear()
+    client.cookies.set(settings.COOKIE_NAME, role_change_token)
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+    cross_tenant_role_change = client.patch(
+        f"/api/v1/staff/{staff.id}/role",
+        headers=_authenticate(client, other_admin),
+        json={"staff_role": "doctor"},
+    )
+    assert cross_tenant_role_change.status_code == 404
+
+    cross_tenant_reactivation = client.post(
+        f"/api/v1/staff/{staff.id}/activate",
+        headers=_authenticate(client, other_admin),
+    )
+    assert cross_tenant_reactivation.status_code == 404
+
+    client.cookies.clear()
     client.cookies.set(settings.COOKIE_NAME, doctor_token)
     assert client.get("/api/v1/auth/me").status_code == 401
 
@@ -291,15 +322,21 @@ def test_admin_can_deactivate_patient_but_not_cross_tenant(client, db_session):
         clinic=clinic,
     )
     _, other_admin = _clinic_user(
-        db_session, name="Other Patient Clinic", email="other-patient-admin@example.com", role=UserRole.CLINIC_ADMIN
+        db_session,
+        name="Other Patient Clinic",
+        email="other-patient-admin@example.com",
+        role=UserRole.CLINIC_ADMIN,
     )
     patient = patient_user.patient_profile
     old_token = create_access_token(patient_user)
 
-    assert client.post(
-        f"/api/v1/patients/{patient.id}/deactivate",
-        headers=_authenticate(client, other_admin),
-    ).status_code == 404
+    assert (
+        client.post(
+            f"/api/v1/patients/{patient.id}/deactivate",
+            headers=_authenticate(client, other_admin),
+        ).status_code
+        == 404
+    )
     response = client.post(
         f"/api/v1/patients/{patient.id}/deactivate",
         headers=_authenticate(client, admin),

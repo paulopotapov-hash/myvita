@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   backend:
     environment:
@@ -12,6 +18,7 @@ services:
   metrics-proxy:
     build: ./monitoring/metrics-proxy
     restart: always
+    logging: *default-logging
     environment:
       METRICS_TOKEN: ${METRICS_TOKEN:?Set the same dedicated METRICS_TOKEN used by the backend}
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}
@@ -25,6 +32,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     restart: always
+    logging: *default-logging
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -48,6 +56,7 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.28.1
     restart: always
+    logging: *default-logging
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
@@ -60,6 +69,7 @@ services:
   grafana:
     image: grafana/grafana:12.1.0
     restart: always
+    logging: *default-logging
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD via the deployment secret store}
@@ -80,6 +90,7 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.17.1
     restart: always
+    logging: *default-logging
     environment:
       DATA_SOURCE_URI: db:5432/${POSTGRES_DB}?sslmode=disable
       DATA_SOURCE_USER: ${POSTGRES_USER}
@@ -94,6 +105,7 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.9.1
     restart: always
+    logging: *default-logging
     command:
       - --path.rootfs=/host
       - --collector.textfile.directory=/metrics
@@ -106,6 +118,7 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.52.1
     restart: always
+    logging: *default-logging
     privileged: true
     devices:
       - /dev/kmsg:/dev/kmsg
@@ -121,6 +134,7 @@ services:
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.27.0
     restart: always
+    logging: *default-logging
     command:
       - --config.file=/etc/blackbox_exporter/config.yml
     volumes:

@@ -223,3 +223,32 @@ def test_attacker_controlled_audit_fields_are_bounded(client):
     failures = _audit_events(AuditAction.LOGIN_FAILURE)
     assert len(failures) == 1
     assert failures[0].user_agent == "A" * 255
+
+
+def test_audit_write_does_not_need_a_connection_from_the_request_pool(client):
+    """Regression (Phase 6 load test): audit writes shared the request pool, so under
+    concurrency every connection was held by a request waiting for its audit connection
+    (QueuePool timeout after 30 s). With the request pool exhausted, audit must still work."""
+    import time
+
+    from app.core.audit import record_audit_event
+    from app.core.config import settings
+    from app.core.database import engine
+
+    capacity = settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW
+    held = [engine.connect() for _ in range(capacity)]
+    try:
+        started = time.monotonic()
+        record_audit_event(
+            action=AuditAction.LOGIN_FAILURE,
+            result=AuditResult.FAILURE,
+            actor_email="pool-saturated@example.test",
+        )
+        assert time.monotonic() - started < 5
+    finally:
+        for connection in held:
+            connection.close()
+    assert any(
+        event.actor_email == "pool-saturated@example.test"
+        for event in _audit_events(AuditAction.LOGIN_FAILURE)
+    )

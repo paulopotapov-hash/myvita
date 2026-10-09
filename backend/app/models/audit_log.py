@@ -56,6 +56,7 @@ class AuditAction(str, enum.Enum):
     MFA_RECOVERY_CODES_REGENERATED = "mfa_recovery_codes_regenerated"
     INVITATION_CREATED = "invitation_created"
     INVITATION_ACCEPTED = "invitation_accepted"
+    INVITATION_REVOKED = "invitation_revoked"
     USER_CREATED = "user_created"
     USER_DISABLED = "user_disabled"
     USER_ENABLED = "user_enabled"
@@ -67,6 +68,10 @@ class AuditAction(str, enum.Enum):
     APPOINTMENT_CREATED = "appointment_created"
     APPOINTMENT_UPDATED = "appointment_updated"
     APPOINTMENT_CANCELLED = "appointment_cancelled"
+    APPOINTMENT_REQUEST_CREATED = "appointment_request_created"
+    APPOINTMENT_REQUEST_ACCEPTED = "appointment_request_accepted"
+    APPOINTMENT_REQUEST_REJECTED = "appointment_request_rejected"
+    APPOINTMENT_REQUEST_CANCELLED = "appointment_request_cancelled"
     CLINIC_CREATED = "clinic_created"
     CONSENT_GRANTED = "consent_granted"
     CONSENT_REVOKED = "consent_revoked"
@@ -79,6 +84,9 @@ class AuditAction(str, enum.Enum):
     PERMISSION_DENIED = "permission_denied"
     CSRF_FAILURE = "csrf_failure"
     RATE_LIMITED = "rate_limited"
+    # Unused since integration: the tenant-facing audit listing was removed (Parent A's
+    # rule). Kept because the PostgreSQL enum label exists and historical rows may hold it.
+    AUDIT_LOG_VIEWED = "audit_log_viewed"
     # --- clinical access (who looked at what) ---
     STAFF_VIEWED_PATIENT = "staff_viewed_patient"
     STAFF_VIEWED_APPOINTMENT = "staff_viewed_appointment"
@@ -92,9 +100,12 @@ class AuditAction(str, enum.Enum):
     DOCUMENT_UPDATED = "document_updated"
     DOCUMENT_VIEWED = "document_viewed"
     DOCUMENT_DOWNLOADED = "document_downloaded"
+    DOCUMENT_UPLOADED = "document_uploaded"
+    DOCUMENT_DELETED = "document_deleted"
     CONVERSATION_CREATED = "conversation_created"
     CONVERSATION_VIEWED = "conversation_viewed"
     MESSAGE_SENT = "message_sent"
+    MESSAGE_READ = "message_read"
     CONVERSATION_STATUS_CHANGED = "conversation_status_changed"
     CONVERSATION_ESCALATED = "conversation_escalated"
     CONVERSATION_ESCALATION_CLEARED = "conversation_escalation_cleared"
@@ -117,6 +128,8 @@ class AuditLog(Base):
         Index("ix_audit_logs_clinic_id", "clinic_id"),
         Index("ix_audit_logs_actor_user_id", "actor_user_id"),
         Index("ix_audit_logs_resource", "resource_type", "resource_id"),
+        # The administrator listing is always "this clinic, newest first".
+        Index("ix_audit_logs_clinic_timestamp", "clinic_id", "timestamp"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -150,6 +163,8 @@ class AuditLog(Base):
 
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # long enough for IPv6
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Correlates with the X-Request-ID echoed to the client and the request log line.
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Minimal identifiers only — see module docstring. JSONB, not JSON: we
     # never query into it in a hot path, but JSONB is the Postgres-idiomatic
     # choice and costs nothing extra here.

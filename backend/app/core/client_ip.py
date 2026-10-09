@@ -17,6 +17,7 @@ The fix used here is the standard one: only read X-Forwarded-For when the
 immediate TCP peer (`request.client.host`) is itself a proxy we've been
 told to trust. Otherwise, the raw socket peer is the answer — full stop.
 """
+
 import ipaddress
 
 from fastapi import Request

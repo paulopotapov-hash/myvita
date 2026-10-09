@@ -3,6 +3,7 @@ Request ID: generated (or validated-and-reused) once per request, made
 available to structured logging via a ContextVar, and echoed back in the
 response so a client/support ticket can reference the exact request.
 """
+
 import contextvars
 import re
 import uuid
@@ -16,9 +17,7 @@ REQUEST_ID_HEADER = "X-Request-ID"
 # treated as absent — we generate our own instead of trying to sanitize it.
 _VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
-_current_request_id: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "myvita_request_id", default="-"
-)
+_current_request_id: contextvars.ContextVar[str] = contextvars.ContextVar("myvita_request_id", default="-")
 
 
 def get_request_id() -> str:

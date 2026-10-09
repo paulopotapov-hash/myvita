@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, String, func, text
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +31,11 @@ class Consent(Base):
             "(status = 'revoked' AND revoked_at IS NOT NULL AND revoked_at >= granted_at)",
             name="ck_consents_lifecycle",
         ),
+        CheckConstraint(
+            "(policy_version IS NULL AND policy_text IS NULL) OR "
+            "(policy_version IS NOT NULL AND policy_text IS NOT NULL)",
+            name="ck_consents_policy_snapshot_complete",
+        ),
         Index("ix_consents_clinic_patient_created", "clinic_id", "patient_id", "created_at"),
         Index(
             "uq_consents_active_patient_type_purpose",
@@ -54,6 +59,8 @@ class Consent(Base):
         nullable=False,
     )
     purpose: Mapped[str] = mapped_column(String(500), nullable=False)
+    policy_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    policy_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[ConsentStatus] = mapped_column(
         Enum(ConsentStatus, name="consent_status", values_callable=lambda e: [m.value for m in e]),
         default=ConsentStatus.GRANTED,

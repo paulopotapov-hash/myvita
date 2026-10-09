@@ -14,6 +14,7 @@ table before each test instead of dropping the schema.
 """
 
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,11 @@ except UnsafeTestDatabaseError as exc:  # pragma: no cover - exercised manually 
 # database — never to whatever DATABASE_URL happens to be in the environment.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["MIGRATION_DATABASE_URL"] = TEST_DATABASE_URL
+# Audit timestamps are asserted as UTC; psycopg honours PGTZ for the session
+# timezone, so the suite does not depend on the local cluster's default.
+os.environ.setdefault("PGTZ", "UTC")
+# Document uploads need a writable directory; the production default is not.
+os.environ.setdefault("DOCUMENT_STORAGE_DIR", tempfile.mkdtemp(prefix="myvita-test-documents-"))
 
 # Public registration is enabled only for synthetic test fixtures. Production
 # Compose explicitly defaults these controls to false.
@@ -46,6 +52,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.core import mfa  # noqa: E402
 from app.core.config import settings  # noqa: E402
+from app.core.database import audit_engine  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -108,10 +115,25 @@ def _migrated_schema():
     yield
 
 
+# Set by tests/phase1_world.world while its module-scoped two-clinic dataset is
+# alive; per-test truncation would wipe it. Other fixtures named `world`
+# (e.g. test_clinical_security_matrix) are function-scoped and unaffected.
+module_world_active = False
+
+
 @pytest.fixture(autouse=True)
 def _clean_database(_migrated_schema):
-    truncate_all_tables(TEST_DATABASE_URL)
+    if not module_world_active:
+        truncate_all_tables(TEST_DATABASE_URL)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_audit_pool():
+    """The audit logger has its own pool; drop its connections between tests so a
+    truncated/reset schema never meets a stale pooled connection."""
+    yield
+    audit_engine.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -194,3 +216,7 @@ def totp_clock(monkeypatch):
     clock = TotpClock()
     monkeypatch.setattr(mfa, "current_step", lambda now=None: clock.step)
     return clock
+
+
+# Phase 1 two-clinic dataset (module-scoped); see tests/phase1_world.py.
+from tests.phase1_world import world  # noqa: E402, F401

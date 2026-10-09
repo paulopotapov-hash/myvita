@@ -26,7 +26,7 @@ router = APIRouter()
 
 
 def _audit(request: Request, user: User, action: AuditAction, medication: Medication) -> None:
-    record_access(request, user, action, "medication", medication.id)
+    record_access(request, user, action, "medication", medication.id, metadata={"patient_id": medication.patient_id})
 
 
 def _audit_and_raise(request: Request, user: User, resource_id: uuid.UUID, exc: HTTPException) -> Never:

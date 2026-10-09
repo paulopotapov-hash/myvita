@@ -69,6 +69,10 @@ ROLE_ACTIONS: dict[StaffRole, frozenset[ClinicalAction]] = {
     StaffRole.ADMIN: frozenset({ClinicalAction.VIEW_APPOINTMENTS, ClinicalAction.EDIT_APPOINTMENTS}),
 }
 
+# Exposed for message-recipient filtering.  Keep it aligned with roles that
+# are allowed any clinical action above.
+CLINICAL_STAFF_ROLES = frozenset({StaffRole.DOCTOR, StaffRole.NURSE})
+
 PATIENT_OWN_ACTIONS = frozenset(
     {
         ClinicalAction.VIEW_PATIENT,
@@ -155,6 +159,16 @@ def clinical_staff(
     else:
         clinical_access(db, patient_id, user, action)
     return staff
+
+
+def accessible_patient(db: Session, patient_id: uuid.UUID, user: User, *, write: bool = False) -> Patient:
+    """Compatibility helper for the documents API, backed by the central policy."""
+    return clinical_access(
+        db,
+        patient_id,
+        user,
+        ClinicalAction.EDIT_DOCUMENTS if write else ClinicalAction.VIEW_DOCUMENTS,
+    )
 
 
 def is_clinical_staff(db: Session, user: User, patient_id: uuid.UUID, action: ClinicalAction) -> bool:

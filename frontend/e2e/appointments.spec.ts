@@ -3,8 +3,11 @@ import { authState, futureSlot, loadSeed } from './support'
 
 const seed = loadSeed()
 
+// Merged UI: the patient select only lists results of the "Pesquisar paciente" search box,
+// so search first and match the select exactly.
 async function fillAppointment(page: import('@playwright/test').Page, slot: string, reason: string) {
-  await page.getByLabel('Paciente').selectOption({ label: seed.names.patient })
+  await page.getByLabel('Pesquisar paciente').fill(seed.names.patient)
+  await page.getByLabel('Paciente', { exact: true }).selectOption({ label: seed.names.patient })
   await page.getByLabel('Profissional').selectOption({ label: seed.names.doctor })
   await page.getByLabel('Data e hora').fill(slot)
   await page.getByLabel('Motivo (opcional)').fill(reason)
@@ -21,8 +24,8 @@ test.describe.serial('appointments', () => {
       await expect(page.getByText('Escolhe um paciente.')).toBeVisible()
       await expect(page.getByText('Escolhe um profissional.')).toBeVisible()
       await expect(page.getByText('Escolhe data e hora.')).toBeVisible()
-      await expect(page.getByLabel('Paciente')).toBeFocused()
-      await expect(page.getByLabel('Paciente')).toHaveAccessibleDescription('Escolhe um paciente.')
+      await expect(page.getByLabel('Paciente', { exact: true })).toBeFocused()
+      await expect(page.getByLabel('Paciente', { exact: true })).toHaveAccessibleDescription('Escolhe um paciente.')
 
       await fillAppointment(page, futureSlot(30), 'E2E validação')
       await page.getByLabel('Duração (minutos)').fill('3')
@@ -59,9 +62,9 @@ test.describe.serial('appointments', () => {
       await row.getByRole('button', { name: 'Detalhes' }).click()
       await expect(page.getByRole('dialog').getByLabel('Duração (minutos)')).toHaveValue('45')
 
-      // Cancel (confirmation required)
-      page.once('dialog', (confirm) => confirm.accept())
+      // Cancel (confirmation required). Merged UI: an in-app confirmation dialog, not window.confirm.
       await page.getByRole('dialog').getByRole('button', { name: 'Cancelar consulta' }).click()
+      await page.getByRole('alertdialog', { name: 'Cancelar consulta' }).getByRole('button', { name: 'Cancelar consulta' }).click()
       await expect(page.getByRole('status').filter({ hasText: 'Consulta cancelada.' })).toBeVisible()
       await expect(row.getByText('Cancelada')).toBeVisible()
       await row.getByRole('button', { name: 'Detalhes' }).click()
@@ -85,7 +88,8 @@ test.describe.serial('appointments', () => {
     test.use({ storageState: authState('patient') })
 
     test('sees only their own appointments and cannot create or change them', async ({ page }) => {
-      await page.goto('/app/consultas')
+      // Merged UI: the patient area lives under /patient.
+      await page.goto('/patient/consultas')
       await expect(page.getByRole('heading', { name: 'Consultas', level: 1 })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Marcar consulta' })).toHaveCount(0)
       const row = page.getByRole('listitem').filter({ hasText: 'E2E primeira' })

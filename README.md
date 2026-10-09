@@ -162,10 +162,10 @@ Para um restore, identifica primeiro o dump dentro do serviço e executa o scrip
 ```bash
 docker compose -f docker-compose.prod.yml exec backup sh -lc 'ls -lh /backups/myvita_*.dump'
 docker compose -f docker-compose.prod.yml exec -T backup \
-  su-exec postgres /opt/myvita/restore_db.sh /backups/myvita_YYYYMMDDTHHMMSSZ.dump --yes
+  su-exec postgres /opt/myvita/restore_db.sh /backups/myvita_YYYYMMDDTHHMMSSZ.dump --yes --replace-existing
 ```
 
-O segundo comando é destrutivo para `POSTGRES_DB`; revê o alvo e o ficheiro antes de usar `--yes`. Para operações manuais fora do container continuam disponíveis os scripts:
+O segundo comando é destrutivo para `POSTGRES_DB`; revê o alvo e o ficheiro antes de usar `--yes`. Sem `--replace-existing` o script recusa substituir uma base de dados que já tenha tabelas. Para provar que um backup é recuperável sem tocar em nenhuma base de dados real, usa `scripts/verify_restore.sh` (ver `docs/p7-backup-and-restore.md`). Para operações manuais fora do container continuam disponíveis os scripts:
 
 ```bash
 # Backup (produz um .dump em ./backups, ou no diretório indicado)
@@ -176,6 +176,8 @@ DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita PGPASSWORD=... \
 DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita PGPASSWORD=... \
   ./scripts/restore_db.sh ./backups/myvita_20260101T000000Z.dump
 ```
+
+Os documentos privados (volume `myvita_documents`) não estão no `pg_dump`: o serviço de backup arquiva-os no mesmo agendamento (`myvita_documents_<ts>.tar.gz`, montagem só de leitura) e envia ambos para off-site em `<prefix>/postgres/` e `<prefix>/documents/`. Restauro de documentos, modelo de consistência BD↔ficheiros e verificação de órfãos: [`docs/p7-backup-and-restore.md`](docs/p7-backup-and-restore.md).
 
 O volume PostgreSQL (`myvita_pg_data`) **não é um backup**. O volume separado `myvita_backups` permite recuperar de uma migration ou `DELETE` acidental, mas continua no mesmo host. Não protege contra perda, corrupção ou comprometimento do host; cópias off-site ficam deliberadamente para P2.2. Os backups também não são cifrados pela aplicação, portanto o acesso ao host e ao volume deve ser restrito.
 

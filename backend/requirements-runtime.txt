@@ -1,5 +1,5 @@
 fastapi==0.141.1
-python-multipart==0.0.31
+python-multipart==0.0.32
 uvicorn==0.32.1
 sqlalchemy==2.0.36
 alembic==1.14.0
@@ -8,7 +8,7 @@ pydantic==2.10.3
 pydantic[email]==2.10.3
 pydantic-settings==2.7.0
 argon2-cffi==25.1.0
-pyjwt==2.15.0
+pyjwt==2.15.1
 # AES-GCM encryption of staff TOTP seeds at rest (app/core/mfa.py).
 cryptography==50.0.2
 slowapi==0.1.10

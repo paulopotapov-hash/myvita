@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import hash_password
 from app.models import Staff, User, UserRole
-from app.modules.staff.schemas import StaffCreateRequest
+from app.modules.staff.schemas import StaffCreateRequest, StaffRoleUpdateRequest
 from app.modules.users import service as users_service
 
 
@@ -52,4 +52,38 @@ def deactivate_staff_member(db: Session, staff_id: uuid.UUID, clinic_id: str, ac
     # Shared lifecycle rules: revoke sessions and outstanding reset links.
     users_service.deactivate(db, staff.user, actor)
     db.refresh(staff)
+    return staff
+
+
+def _staff_in_clinic(db: Session, staff_id: uuid.UUID, clinic_id: str) -> Staff:
+    staff = (
+        db.query(Staff)
+        .options(selectinload(Staff.user))
+        .filter(Staff.id == staff_id, Staff.clinic_id == clinic_id)
+        .first()
+    )
+    if staff is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profissional não encontrado.")
+    return staff
+
+
+def activate_staff_member(db: Session, staff_id: uuid.UUID, clinic_id: str, actor: User) -> Staff:
+    staff = _staff_in_clinic(db, staff_id, clinic_id)
+    # Shared lifecycle rules: reactivation starts a fresh token epoch.
+    users_service.reactivate(db, staff.user, actor)
+    db.refresh(staff)
+    return staff
+
+
+def update_staff_role(
+    db: Session, staff_id: uuid.UUID, clinic_id: str, payload: StaffRoleUpdateRequest
+) -> Staff:
+    staff = _staff_in_clinic(db, staff_id, clinic_id)
+    if staff.staff_role != payload.staff_role or staff.specialty != payload.specialty:
+        staff.staff_role = payload.staff_role
+        staff.specialty = payload.specialty
+        # A privilege change invalidates every existing session of the account.
+        staff.user.token_epoch += 1
+        db.commit()
+        db.refresh(staff)
     return staff

@@ -29,7 +29,12 @@ expect_status 200 "$base_url/health"
 expect_status 200 "$base_url/ready"
 expect_status 200 "$base_url/"
 expect_status 404 "$base_url/metrics"
-expect_status 404 "$base_url/openapi.json"
+# The SPA fallback answers unknown paths with index.html, so assert the API schema is absent
+# (not JSON) rather than a 404 status.
+openapi_type="$(curl --silent --output /dev/null --write-out '%{content_type}' "$base_url/openapi.json")"
+case "$openapi_type" in
+    application/json*) echo "FAIL: $base_url/openapi.json exposes the API schema" >&2; exit 1 ;;
+esac
 
 curl --silent --show-error --head --output "$headers" "$base_url/"
 for header in content-security-policy x-content-type-options x-frame-options referrer-policy strict-transport-security; do

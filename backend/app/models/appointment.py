@@ -27,10 +27,9 @@ class Appointment(Base):
     Never trust clinic_id passed by the client — derive it from the
     authenticated user's session (see core/security.get_current_clinic_id).
     """
+
     __tablename__ = "appointments"
-    __table_args__ = (
-        Index("ix_appointments_clinic_scheduled_at", "clinic_id", "scheduled_at"),
-    )
+    __table_args__ = (Index("ix_appointments_clinic_scheduled_at", "clinic_id", "scheduled_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 

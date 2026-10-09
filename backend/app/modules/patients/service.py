@@ -50,12 +50,14 @@ def register_patient(db: Session, payload: PatientRegisterRequest) -> tuple[Pati
 
 
 def list_patients_for_clinic(
-    db: Session, clinic_id: str, user: User, *, offset: int = 0, limit: int = 50
+    db: Session, clinic_id: str, user: User, *, offset: int = 0, limit: int = 50, search: str | None = None
 ) -> tuple[list[Patient], int]:
     """
     Staff/clinic_admin only (enforced in the router) — the patient directory
     for their own clinic. `clinic_id` always comes from the authenticated
     staff member's own session, never from a client-supplied filter.
+    `search` is a case-insensitive substring match on the name, applied after
+    the role/assignment scoping so it can never widen what the caller may see.
     """
     query = (
         db.query(Patient)
@@ -83,6 +85,9 @@ def list_patients_for_clinic(
             )
     elif user.role != UserRole.CLINIC_ADMIN:
         return [], 0
+    if search:
+        escaped = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(User.full_name.ilike(f"%{escaped}%", escape="\\"))
     total = query.count()
     patients = query.order_by(User.full_name, Patient.id).offset(offset).limit(limit).all()
     return patients, total

@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 from tests.conftest import TEST_DATABASE_URL, alembic_config
@@ -59,7 +60,8 @@ def test_upgrade_stops_on_case_duplicates_and_changes_nothing():
         engine.dispose()
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d1e2f3a4b5c6"
+        (head,) = ScriptDirectory.from_config(config).get_heads()
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
         triggers = (
             connection.execute(
                 text(

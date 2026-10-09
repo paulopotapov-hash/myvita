@@ -22,3 +22,23 @@ regexes = ['''encryption/immutability''']
 description = "P4.1 prose-only privacy review phrase; contains no assigned value"
 regexTarget = "secret"
 regexes = ['''DPIA/privacy/legal''']
+
+# Integration 2026-10 (Phase 6.2): three test-only fixtures from feature/messages-backend.
+# Each entry is pinned to one file and the exact synthetic value.
+[[allowlists]]
+description = "Test marker string (clinical-content canary), not a credential"
+paths = ['''backend/tests/test_appointment_requests_p2_3\.py''']
+regexTarget = "match"
+regexes = ['''SECRET_REASON = "P23-CLINICAL-REASON-MARKER"''']
+
+[[allowlists]]
+description = "Synthetic JWT key (keyboard sequence) used only to build a production Settings object in a validation test"
+paths = ['''backend/tests/test_audit_siem_export\.py''']
+regexTarget = "match"
+regexes = ['''JWT_SECRET_KEY="qwertyuiopasdfghjklzxcvbnm1234567890QWERTY"''']
+
+[[allowlists]]
+description = "Synthetic document storage keys (hex file names) in the backup script test, not credentials"
+paths = ['''scripts/test_documents_backup_scripts\.sh''']
+regexTarget = "match"
+regexes = ['''key1=0123456789abcdef0123456789abcdef''', '''key2=fedcba9876543210fedcba9876543210''']

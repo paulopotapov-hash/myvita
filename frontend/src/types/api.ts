@@ -10,60 +10,6 @@ export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cance
 export type ConsentType = 'treatment' | 'data_processing' | 'communications' | 'research'
 export type ConsentStatus = 'granted' | 'revoked'
 export type MedicationStatus = 'active' | 'discontinued' | 'completed'
-export type DocumentKind = 'note' | 'file'
-export type ConversationStatus = 'open' | 'waiting_for_patient' | 'waiting_for_team' | 'closed'
-export type MessageSenderRole = 'patient' | 'doctor' | 'nurse'
-
-export interface ClinicalMessagePublic {
-  id: string
-  sender_name: string
-  sender_role: MessageSenderRole
-  body: string
-  created_at: string
-}
-
-export interface ConversationListItem {
-  id: string
-  patient_id: string
-  patient_name: string
-  subject: string
-  status: ConversationStatus
-  needs_doctor_review: boolean
-  updated_at: string
-  closed_at: string | null
-  last_message: ClinicalMessagePublic
-  unread: boolean
-}
-
-export interface ConversationDetail extends ConversationListItem {
-  messages: ClinicalMessagePublic[]
-}
-
-export interface ClinicalDocumentPublic {
-  id: string
-  clinic_id: string
-  patient_id: string
-  kind: DocumentKind
-  title: string
-  current_version: number
-  created_at: string
-  updated_at: string
-  current_content: string | null
-  current_author: string | null
-}
-
-export interface ClinicalDocumentVersionPublic {
-  id: string
-  document_id: string
-  author_name: string
-  version: number
-  content: string | null
-  original_filename: string | null
-  media_type: string | null
-  file_size: number | null
-  created_at: string
-  is_current: boolean
-}
 
 /** What the account must do before anything else works
  * (backend/app/core/security.py pending_account_action). While set, every
@@ -175,12 +121,42 @@ export interface AppointmentPublic {
   reason: string | null
 }
 
+export type AppointmentRequestStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled'
+
+/** Patient-submitted request; patient/clinic come from the session, the professional is chosen by staff. */
+export interface AppointmentRequestCreate {
+  preferred_start: string // ISO datetime with timezone
+  reason?: string
+}
+
+export interface AppointmentRequestAccept {
+  staff_id: string
+  scheduled_at: string // ISO datetime with timezone
+  duration_minutes: number
+}
+
+export interface AppointmentRequestPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  patient_name: string
+  preferred_start: string
+  /** null when the caller may not read clinical content. */
+  reason: string | null
+  status: AppointmentRequestStatus
+  appointment_id: string | null
+  decided_at: string | null
+  created_at: string
+}
+
 export interface ConsentPublic {
   id: string
   clinic_id: string
   patient_id: string
   consent_type: ConsentType
   purpose: string
+  policy_version: string | null
+  policy_text: string | null
   status: ConsentStatus
   granted_at: string
   revoked_at: string | null
@@ -194,6 +170,8 @@ export interface MedicalRecordPublic {
   clinic_id: string
   patient_id: string
   author_staff_id: string
+  /** Shown in the UI instead of the internal staff id. */
+  author_name: string
   title: string
   content: string
   version: number
@@ -205,6 +183,8 @@ export interface MedicalRecordRevisionPublic {
   id: string
   record_id: string
   editor_staff_id: string
+  /** Shown in the UI instead of the internal staff id. */
+  editor_name: string
   version: number
   title: string
   content: string
@@ -235,21 +215,30 @@ export interface NotificationPublic {
   is_read: boolean
   read_at: string | null
   created_at: string
-  target_type?: string | null
-  target_id?: string | null
-  conversation_target_id?: string | null
+  /** Deep-link target: 'document' uses `target_id`, 'conversation' uses `conversation_target_id`. */
+  target_type: 'document' | 'conversation' | null
+  target_id: string | null
+  conversation_target_id: string | null
 }
+
+/** Uploader is exposed by display name only, never by internal user id. */
+export interface DocumentPublic {
+  id: string
+  patient_id: string
+  title: string
+  uploaded_by_name: string
+  original_filename: string
+  content_type: string
+  file_size: number
+  created_at: string
+}
+
 
 // --- Request payloads (mirrors backend *Request schemas) --------------------
 
 export interface LoginRequest {
   email: string
   password: string
-}
-
-export interface PublicConfig {
-  clinic_onboarding_enabled: boolean
-  patient_registration_enabled: boolean
 }
 
 export interface InvitationPreview {
@@ -283,28 +272,36 @@ export interface InvitationCreated extends StaffInvitationRequest {
   created_at: string
 }
 
+export interface PatientInvitationRequest {
+  full_name: string
+  email: string
+}
+
+/** Invitation as listed for management: never carries the token. */
+export interface InvitationPublic {
+  id: string
+  clinic_id: string
+  email: string
+  full_name: string
+  role: Exclude<UserRole, 'clinic_admin'>
+  staff_role: StaffRole | null
+  status: 'pending' | 'accepted' | 'revoked'
+  expires_at: string
+  created_at: string
+}
+
 export interface PasswordChangeRequest {
   current_password: string
   new_password: string
 }
 
-export interface ClinicOnboardingRequest {
-  clinic_name: string
-  nif?: string
-  address?: string
-  phone?: string
-  admin_full_name: string
-  admin_email: string
-  admin_password: string
-}
-
-export interface PatientRegisterRequest {
-  clinic_id: string
+export interface StaffCreateRequest {
   full_name: string
   email: string
   password: string
-  birth_date?: string
-  phone?: string
+  staff_role: StaffRole
+  specialty?: string
+  license_number?: string
 }
 
 export interface AppointmentCreateRequest {
@@ -318,6 +315,8 @@ export interface AppointmentCreateRequest {
 export interface ConsentCreateRequest {
   consent_type: ConsentType
   purpose: string
+  policy_version?: string
+  policy_text?: string
 }
 
 export interface PatientUpdateRequest {
@@ -335,7 +334,8 @@ export interface AppointmentUpdateRequest {
   status?: Exclude<AppointmentStatus, 'cancelled'>
 }
 
-export interface MedicalRecordWriteRequest { title: string; content: string }
+export interface MedicalRecordCreateRequest { title: string; content: string }
+export interface MedicalRecordUpdateRequest extends MedicalRecordCreateRequest { expected_version: number }
 export interface MedicationCreateRequest {
   name: string
   dosage: string
@@ -358,4 +358,45 @@ export interface MedicationUpdateRequest {
 }
 export interface MedicationDeactivateRequest {
   end_date?: string
+}
+
+// --- Messages (backend/app/modules/messages/schemas.py) ---
+
+/** Mirrors backend MESSAGE_MAX_LENGTH; the backend still validates. */
+export const MESSAGE_MAX_LENGTH = 5000
+
+export interface ConversationPublic {
+  id: string
+  clinic_id: string
+  patient_id: string
+  staff_id: string
+  patient_name: string
+  staff_name: string
+  /** Messages addressed to the current user that they haven't read. */
+  unread_count: number
+  /** False when the professional no longer has an active care assignment: read-only thread. */
+  can_reply: boolean
+  created_at: string
+  /** Latest activity (last message, or creation). */
+  updated_at: string
+}
+
+export interface MessagePublic {
+  id: string
+  conversation_id: string
+  sender_user_id: string
+  body: string
+  read_at: string | null
+  created_at: string
+}
+
+export interface ConversationDetail extends ConversationPublic {
+  /** One page, newest first. */
+  messages: MessagePublic[]
+}
+
+/** Clinical staff send patient_id; patients send staff_id. */
+/** Only clinical staff start conversations, with a patient on their care team. */
+export interface ConversationCreateRequest {
+  patient_id: string
 }

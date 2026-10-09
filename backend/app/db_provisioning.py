@@ -12,9 +12,12 @@ Idempotent: safe to run on every deployment. The runtime role ends up with:
   cannot create, alter or drop objects;
 - SELECT/INSERT/UPDATE/DELETE on application tables (including tables
   created by future migrations, via default privileges);
-- SELECT/INSERT only on audit_logs and clinical_messages — it can append to
-  each but never edit, delete or truncate them (database triggers also reject
-  message edits/deletes and stop accidental audit-history rewrites);
+- SELECT/INSERT only on audit_logs and documents — it can append to each but
+  never edit, delete or truncate them (a database trigger also stops
+  accidental audit-history rewrites; documents are append-only by decision D3);
+- SELECT/INSERT plus column-level UPDATE (no DELETE) on conversations,
+  messages, invitations and appointment_requests (see COLUMN_UPDATE_TABLES);
+- no privilege at all on the deprecated Parent A tables (NO_ACCESS_TABLES);
 - SELECT only on alembic_version.
 
 Default privileges grant full DML on new tables; a future append-only
@@ -29,8 +32,25 @@ from sqlalchemy import String, create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
-APPEND_ONLY_TABLES = ("audit_logs", "clinical_messages")
+APPEND_ONLY_TABLES = ("audit_logs", "documents")
 READ_ONLY_TABLES = ("alembic_version",)
+# Tables the app inserts into and updates only specific columns of (column-level UPDATE,
+# no DELETE). Each column list is exactly what the services write, including onupdate columns.
+COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
+    "conversations": ("updated_at",),
+    "messages": ("read_at",),
+    "invitations": ("status", "accepted_at"),
+    "appointment_requests": ("status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at"),
+}
+# Deprecated tables kept by integration decision (app/core/schema_policy.py): the app never
+# touches them, so the runtime role gets no privilege at all on them.
+NO_ACCESS_TABLES = (
+    "clinical_conversations",
+    "clinical_messages",
+    "clinical_documents",
+    "clinical_document_versions",
+    "deprecated_notification_targets",
+)
 _ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 
@@ -97,6 +117,17 @@ def provision_runtime_role(connection: Connection, *, role: str, password: str) 
     for table in READ_ONLY_TABLES:
         statements.append(f'REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON "{table}" FROM "{role}"')
         statements.append(f'GRANT SELECT ON "{table}" TO "{role}"')
+    for table, columns in COLUMN_UPDATE_TABLES.items():
+        column_list = ", ".join(f'"{column}"' for column in columns)
+        statements.append(f'REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON "{table}" FROM "{role}"')
+        statements.append(f'GRANT SELECT, INSERT ON "{table}" TO "{role}"')
+        statements.append(f'GRANT UPDATE ({column_list}) ON "{table}" TO "{role}"')
+    for table in NO_ACCESS_TABLES:
+        # Tolerate databases where a deprecated table never existed (e.g. built from Parent B).
+        statements.append(
+            f"DO $$ BEGIN IF to_regclass('public.\"{table}\"') IS NOT NULL THEN "
+            f'REVOKE ALL ON "{table}" FROM "{role}"; END IF; END $$'
+        )
     for statement in statements:
         connection.execute(text(statement))
 

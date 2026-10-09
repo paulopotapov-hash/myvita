@@ -16,9 +16,12 @@ RUN groupadd -r myvita && useradd -r -g myvita myvita \
     && chmod 0700 /var/lib/myvita/documents \
     && chown -R myvita:myvita /app \
     && find /app -type d -exec chmod 0555 {} + \
-    && find /app -type f -exec chmod 0444 {} +
+    && find /app -type f -exec chmod 0444 {} + \
+    && mkdir -p /var/lib/myvita/documents \
+    && chown -R myvita:myvita /var/lib/myvita \
+    && chmod 0700 /var/lib/myvita/documents
 USER myvita
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

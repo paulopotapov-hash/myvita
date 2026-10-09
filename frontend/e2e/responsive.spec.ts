@@ -50,7 +50,8 @@ for (const viewport of VIEWPORTS) {
     test.use({ viewport: { width: viewport.width, height: viewport.height } })
 
     test.describe('public pages', () => {
-      for (const path of ['/login', '/registo', '/nova-clinica', '/recuperar-acesso']) {
+      // Public registration/onboarding pages were removed (invitation-only); /convite replaces them.
+      for (const path of ['/login', '/convite', '/recuperar-acesso']) {
         test(`${path} fits`, async ({ page }) => {
           await page.goto(path)
           await expectFits(page, `${path} @ ${viewport.name}`)
@@ -92,7 +93,8 @@ for (const viewport of VIEWPORTS) {
     test.describe('as the patient', () => {
       test.use({ storageState: authState('patient') })
 
-      for (const path of ['/app', '/app/consultas', '/app/saude', '/app/perfil', '/app/notificacoes']) {
+      // Merged UI: the patient area lives under /patient.
+      for (const path of ['/patient', '/patient/consultas', '/patient/saude', '/patient/perfil', '/patient/notificacoes', '/patient/documentos', '/patient/mensagens']) {
         test(`${path} fits`, async ({ page }) => {
           await page.goto(path)
           await expectFits(page, `${path} @ ${viewport.name}`)

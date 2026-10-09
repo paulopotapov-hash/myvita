@@ -6,7 +6,7 @@ services:
       ENVIRONMENT: development
       COOKIE_SECURE: "false"
       CORS_ORIGINS: '["${LOCAL_ORIGIN:-http://localhost}"]'
-  # migrate loads the same Settings; without this it rejects the local host/origin above.
+  # Settings validation runs for the migration job too, so it needs the same relaxation.
   migrate:
     environment:
       ENVIRONMENT: development

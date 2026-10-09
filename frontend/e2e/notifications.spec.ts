@@ -6,7 +6,7 @@ test.describe.serial('notifications', () => {
     test.use({ storageState: authState('patient') })
 
     test('lists unread notifications and marks one as read', async ({ page }) => {
-      await page.goto('/app/notificacoes')
+      await page.goto('/patient/notificacoes')
       await expect(page.getByRole('heading', { name: 'Notificações', level: 1 })).toBeVisible()
 
       // Other flows (documents, messaging) also notify this patient; assert on the seeded entries only.
@@ -27,7 +27,7 @@ test.describe.serial('notifications', () => {
     })
 
     test('keeps the read state after a reload', async ({ page }) => {
-      await page.goto('/app/notificacoes')
+      await page.goto('/patient/notificacoes')
       const items = page.getByRole('listitem')
       await expect(items.filter({ hasText: 'Consulta confirmada' }).getByText('Nova', { exact: true })).toHaveCount(0)
       await expect(items.filter({ hasText: 'Consulta confirmada' }).getByRole('button', { name: 'Marcar como lida' })).toHaveCount(0)

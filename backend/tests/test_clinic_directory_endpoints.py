@@ -77,14 +77,27 @@ def test_patient_list_never_crosses_clinics(client):
     assert "Paciente Teste" in emails_seen_names  # only clinic A's patient
 
 
-def test_staff_directory_visible_to_patients_too(client):
+def test_staff_directory_is_for_staff_roles_only_and_patients_get_audited_404(client):
+    """Integration decision M4: patients never pick a professional (they cannot
+    start conversations), so the staff roster is not exposed to them."""
+    from tests.account_support import audit_rows
+
     clinic_id = _onboard_clinic(client)
     _create_staff(client)  # already logged in as admin right after onboarding
+    admin_view = client.get("/api/v1/staff")
+    assert admin_view.status_code == 200
+    assert any(s["staff_role"] == "doctor" for s in admin_view.json())
 
     _register_patient(client, clinic_id, "paciente2@example.com")  # switches session to the patient
     r = client.get("/api/v1/staff")
-    assert r.status_code == 200
-    assert any(s["staff_role"] == "doctor" for s in r.json())
+    assert r.status_code == 404
+    assert "doctor" not in r.text
+
+    denied = [row for row in audit_rows(client, "permission_denied") if row.resource_type == "staff"]
+    assert len(denied) == 1
+    assert denied[0].result.value == "denied"
+    assert str(denied[0].clinic_id) == clinic_id
+    assert denied[0].event_metadata == {"path": "/api/v1/staff"}
 
 
 def test_staff_directory_never_crosses_clinics(client):

@@ -44,8 +44,8 @@ export function StaffDashboard() {
         {today.length > 0 && (
           <ul className="flex flex-col divide-y divide-slate-100">
             {today.map((appointment) => (
-              <li key={appointment.id} className="flex items-center justify-between py-3">
-                <p className="font-medium text-slate-900">{formatDateTime(appointment.scheduled_at)}</p>
+              <li key={appointment.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <Link to="/app/consultas" className="font-medium text-teal-700 hover:underline">{formatDateTime(appointment.scheduled_at)}</Link>
                 <AppointmentStatusBadge status={appointment.status} />
               </li>
             ))}
@@ -70,6 +70,7 @@ export function StaffDashboard() {
         >
           Ver pacientes
         </Link>
+        <Link to="/app/consultas" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Marcar consulta</Link>
       </div>
     </div>
   )

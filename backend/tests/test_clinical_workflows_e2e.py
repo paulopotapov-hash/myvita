@@ -251,7 +251,7 @@ def test_flow_b_medical_record_lifecycle(client: TestClient, tenant):
     updated = client.patch(
         f"/api/v1/medical-records/{record_id}",
         headers=headers,
-        json={"title": "Assessment", "content": "Revised findings"},
+        json={"title": "Assessment", "content": "Revised findings", "expected_version": 1},
     )
     assert updated.status_code == 200
     assert updated.json()["version"] == 2
@@ -272,7 +272,7 @@ def test_flow_b_medical_record_lifecycle(client: TestClient, tenant):
     denied = client.patch(
         f"/api/v1/medical-records/{record_id}",
         headers=use(client, tenant.who["patient"]),
-        json={"title": "Edited", "content": "By patient"},
+        json={"title": "Edited", "content": "By patient", "expected_version": 2},
     )
     assert denied.status_code in {403, 404}
     tenant.act(client, "doctor")
@@ -298,6 +298,9 @@ def test_medical_record_validation(client: TestClient, tenant):
 
 
 def test_concurrent_record_updates_get_distinct_gapless_versions(client: TestClient, tenant):
+    """Five clinicians edit version 1 at once: the row lock serialises them and the
+    optimistic check lets exactly one through; the other four are told to reload
+    (409) instead of silently overwriting each other. Versions stay gapless."""
     record = write_record(client, tenant)
     headers = raw_headers(tenant.who["doctor"])
     barrier = threading.Barrier(5)
@@ -307,18 +310,29 @@ def test_concurrent_record_updates_get_distinct_gapless_versions(client: TestCli
         response = TestClient(app).patch(
             f"/api/v1/medical-records/{record['id']}",
             headers=headers,
-            json={"title": "Assessment", "content": f"Edit {index}"},
+            json={"title": "Assessment", "content": f"Edit {index}", "expected_version": 1},
         )
         return response.status_code
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         statuses = list(pool.map(edit, range(5)))
 
-    assert statuses == [200] * 5
+    assert sorted(statuses) == [200, 409, 409, 409, 409]
     tenant.act(client, "doctor")
     revisions = client.get(f"/api/v1/medical-records/{record['id']}/revisions").json()
-    assert [row["version"] for row in revisions] == [1, 2, 3, 4, 5, 6]
-    assert client.get(f"/api/v1/medical-records/{record['id']}").json()["version"] == 6
+    assert [row["version"] for row in revisions] == [1, 2]
+    assert client.get(f"/api/v1/medical-records/{record['id']}").json()["version"] == 2
+
+    # Sequential edits that each reload first still produce gapless versions.
+    for expected in (2, 3, 4):
+        response = client.patch(
+            f"/api/v1/medical-records/{record['id']}",
+            headers=headers,
+            json={"title": "Assessment", "content": f"Sequential {expected}", "expected_version": expected},
+        )
+        assert response.status_code == 200 and response.json()["version"] == expected + 1
+    revisions = client.get(f"/api/v1/medical-records/{record['id']}/revisions").json()
+    assert [row["version"] for row in revisions] == [1, 2, 3, 4, 5]
 
 
 # --- FLOW C: medications --------------------------------------------------

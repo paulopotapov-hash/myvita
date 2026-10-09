@@ -8,11 +8,13 @@ test.describe.serial('consent', () => {
     test.use({ storageState: authState('patient') })
 
     test('validates, grants and revokes a consent while keeping the history', async ({ page }) => {
-      await page.goto('/app/saude')
-      const section = page.getByRole('region', { name: 'Consentimentos' })
+      // Merged UI (Parent B base): the patient's consents are a tab of their own file.
+      await page.goto('/patient/consentimentos')
+      const section = page.getByRole('tabpanel', { name: 'Consentimentos' })
 
       await section.getByRole('button', { name: 'Conceder' }).click()
       await expect(section.getByText('Indica a finalidade do consentimento.')).toBeVisible()
+      // Accessibility requirement kept from Parent A: focus moves to the first invalid field.
       await expect(section.getByLabel('Finalidade')).toBeFocused()
 
       await section.getByLabel('Tipo').selectOption({ label: 'Investigação' })
@@ -47,7 +49,8 @@ test.describe.serial('consent', () => {
 
     test('reads the consent history but cannot change it', async ({ page }) => {
       await page.goto(`/app/pacientes/${seed.patientIds.patient}`)
-      const section = page.getByRole('region', { name: 'Consentimentos' })
+      await page.getByRole('tab', { name: 'Consentimentos' }).click()
+      const section = page.getByRole('tabpanel', { name: 'Consentimentos' })
       const entry = section.getByRole('listitem').filter({ hasText: 'Estudo E2E' })
       await expect(entry).toContainText('Revogado')
       await expect(section.getByRole('button')).toHaveCount(0)
@@ -62,7 +65,7 @@ test.describe.serial('consent', () => {
       await page.goto(`/app/pacientes/${seed.patientIds.patient}`)
       // The backend answers 403 for the patient record; the page shows that instead of any clinical content.
       await expect(page.getByRole('alert')).toBeVisible()
-      await expect(page.getByRole('region', { name: 'Consentimentos' })).toHaveCount(0)
+      await expect(page.getByRole('tabpanel', { name: 'Consentimentos' })).toHaveCount(0)
     })
   })
 })

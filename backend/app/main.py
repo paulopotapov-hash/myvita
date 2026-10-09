@@ -35,6 +35,7 @@ from app.core.request_context import (
     reset_request_id,
 )
 from app.models import AuditAction, AuditResult
+from app.modules.appointment_requests.router import router as appointment_requests_router
 from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
 from app.modules.clinics.router import router as clinics_router
@@ -43,7 +44,7 @@ from app.modules.documents.router import router as documents_router
 from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
-from app.modules.messaging.router import router as messaging_router
+from app.modules.messages.router import router as messages_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
 from app.modules.staff.router import router as staff_router
@@ -108,7 +109,11 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> Resp
         request.method,
         type(exc).__name__,
     )
-    return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+    # ServerErrorMiddleware sits outside `observability`, so headers must be set here.
+    response = JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+    _apply_security_headers(request, response)
+    response.headers[REQUEST_ID_HEADER] = getattr(request.state, "request_id", None) or get_request_id()
+    return response
 
 
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_with_audit)
@@ -176,14 +181,15 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 declared_size = int(content_length)
             except ValueError:
                 declared_size = -1
+            # Private patient documents (POST /api/v1/patients/{id}/documents) are the
+            # only multipart uploads; allow the configured file size plus form overhead.
             is_document_upload = (
-                request.url.path.startswith("/api/v1/patients/")
-                and request.url.path.endswith("/documents/files")
-                or request.url.path.startswith("/api/v1/documents/")
-                and request.url.path.endswith("/files/versions")
+                request.method == "POST"
+                and request.url.path.startswith("/api/v1/patients/")
+                and request.url.path.endswith("/documents")
             )
             body_limit = (
-                settings.DOCUMENT_MAX_FILE_BYTES + 2 * 1024 * 1024
+                settings.DOCUMENT_MAX_UPLOAD_BYTES + 1_048_576
                 if is_document_upload
                 else settings.MAX_REQUEST_BODY_BYTES
             )
@@ -195,7 +201,8 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 response = await call_next(request)
         elif response is None:
             response = await call_next(request)
-        assert response is not None
+        if response is None:  # Defensive invariant; should be unreachable after call_next above.
+            raise RuntimeError("Request middleware completed without a response")
         duration_ms = (time.monotonic() - start) * 1000
 
         _apply_security_headers(request, response)
@@ -274,10 +281,11 @@ app.include_router(patients_router, prefix="/api/v1/patients", tags=["patients"]
 app.include_router(staff_router, prefix="/api/v1/staff", tags=["staff"])
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["appointments"])
+app.include_router(appointment_requests_router, prefix="/api/v1/appointment-requests", tags=["appointment-requests"])
 app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
-app.include_router(messaging_router, prefix="/api/v1/messages", tags=["messages"])
+app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])

@@ -1,13 +1,17 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { authState, loadSeed } from './support'
+import { authState, loadSeed, openPatientFile } from './support'
 
 const seed = loadSeed()
 
+// Merged UI: Parent A's standalone records section was dead code and is deleted; the live
+// section is the inline one in the "Registos clínicos" tab of the patient file.
 async function openPatient(page: Page) {
-  await page.goto('/app/pacientes')
-  await page.getByRole('link', { name: seed.names.patient }).click()
-  await expect(page.getByRole('heading', { name: seed.names.patient, level: 1 })).toBeVisible()
+  await openPatientFile(page, seed.names.patient, 'Registos clínicos')
+}
+
+function recordsPanel(page: Page) {
+  return page.getByRole('tabpanel', { name: 'Registos clínicos' })
 }
 
 test.describe.serial('medical records', () => {
@@ -16,11 +20,11 @@ test.describe.serial('medical records', () => {
 
     test('validates, creates, views and edits a record as a new version', async ({ page }) => {
       await openPatient(page)
-      const section = page.getByRole('region', { name: 'Histórico clínico' })
+      const section = recordsPanel(page)
 
       await section.getByRole('button', { name: 'Criar registo' }).click()
-      await expect(section.getByText('Indica o título do registo.')).toBeVisible()
-      await expect(section.getByText('Indica o conteúdo clínico.')).toBeVisible()
+      await expect(section.getByRole('alert')).toHaveText('Preenche o título e o conteúdo clínico.')
+      // Accessibility requirement kept from Parent A: focus moves to the first invalid field.
       await expect(section.getByLabel('Título do registo')).toBeFocused()
 
       await section.getByLabel('Título do registo').fill('Avaliação inicial E2E')
@@ -36,7 +40,7 @@ test.describe.serial('medical records', () => {
       await expect(section.getByLabel('Título do registo')).toHaveValue('Avaliação inicial E2E')
       await expect(record.getByText('Revisões')).toBeVisible()
       await section.getByLabel('Conteúdo clínico').fill('Queixas de cansaço.')
-      await section.getByRole('button', { name: 'Guardar nova versão' }).click()
+      await section.getByRole('button', { name: 'Guardar alterações' }).click()
       await expect(section.getByRole('status').filter({ hasText: 'Registo clínico guardado.' })).toBeVisible()
       await expect(record).toContainText('Queixas de cansaço.')
       await expect(record).toContainText('Versão 2')
@@ -47,8 +51,9 @@ test.describe.serial('medical records', () => {
     test.use({ storageState: authState('patient') })
 
     test('can read their record but not write it', async ({ page }) => {
-      await page.goto('/app/saude')
-      const section = page.getByRole('region', { name: 'Histórico clínico' })
+      await page.goto('/patient/saude')
+      await page.getByRole('tab', { name: 'Registos clínicos' }).click()
+      const section = recordsPanel(page)
       await expect(section.getByRole('listitem').filter({ hasText: 'Avaliação inicial E2E' })).toBeVisible()
       await expect(section.getByLabel('Título do registo')).toHaveCount(0)
       await expect(section.getByRole('button', { name: 'Editar' })).toHaveCount(0)
@@ -62,7 +67,8 @@ test.describe.serial('medical records', () => {
       await page.goto(`/app/pacientes/${seed.patientIds.patient}`)
       // The backend answers 403 for the patient record; the page shows that instead of any clinical content.
       await expect(page.getByRole('alert')).toBeVisible()
-      await expect(page.getByRole('region', { name: 'Histórico clínico' })).toHaveCount(0)
+      await expect(page.getByRole('tab', { name: 'Registos clínicos' })).toHaveCount(0)
+      await expect(recordsPanel(page)).toHaveCount(0)
       await expect(page.getByText('Avaliação inicial E2E')).toHaveCount(0)
     })
   })

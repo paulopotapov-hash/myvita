@@ -13,6 +13,7 @@ class ClinicOnboardingRequest(RequestModel):
     (there's no user yet), which is why NIF/email uniqueness must be
     re-checked server-side — never trust that the frontend checked first.
     """
+
     clinic_name: str = Field(min_length=2, max_length=255)
     nif: str | None = Field(default=None, max_length=20)
     address: str | None = Field(default=None, max_length=500)
@@ -40,6 +41,7 @@ class ClinicPublic(BaseModel):
 
 class ClinicSummary(BaseModel):
     """Minimal, non-sensitive shape for public clinic pickers (e.g. patient sign-up)."""
+
     id: uuid.UUID
     name: str
 

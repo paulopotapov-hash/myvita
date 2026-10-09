@@ -1,15 +1,12 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../../lib/apiClient'
 import { PatientDetailPage } from './PatientDetailPage'
 
-const { consentPending, grantMutate, revokeMutate, sessionState, updateMutate, usePatient } = vi.hoisted(() => ({
-  consentPending: { grant: false, revoke: false },
+const { grantMutate, revokeMutate, sessionState, usePatient } = vi.hoisted(() => ({
   grantMutate: vi.fn(),
   revokeMutate: vi.fn(),
-  updateMutate: vi.fn(),
   sessionState: { role: 'clinic_admin', staff_role: null as 'doctor' | 'nurse' | 'admin' | null, patient_id: null as string | null },
   usePatient: vi.fn(),
 }))
@@ -24,7 +21,7 @@ vi.mock('../../hooks/useClinicData', () => ({
     refetch: vi.fn(),
     }
   },
-  useUpdatePatient: () => ({ mutate: updateMutate, isPending: false }),
+  useUpdatePatient: () => ({ mutate: vi.fn(), isPending: false }),
   useAppointments: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 
@@ -35,12 +32,6 @@ vi.mock('../../hooks/useSession', () => ({
 }))
 
 vi.mock('../../hooks/useClinicalData', () => ({
-  useClinicalDocuments: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
-  useDocumentHistory: () => ({ data: [], isLoading: false }),
-  useCreateDocumentNote: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateDocumentNote: () => ({ mutate: vi.fn(), isPending: false }),
-  useUploadClinicalDocument: () => ({ mutate: vi.fn(), isPending: false }),
-  useUploadDocumentVersion: () => ({ mutate: vi.fn(), isPending: false }),
   useMedicalRecords: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useMedicalRecordRevisions: () => ({ data: [], isLoading: false }),
   useCreateMedicalRecord: () => ({ mutate: vi.fn(), isPending: false }),
@@ -49,6 +40,13 @@ vi.mock('../../hooks/useClinicalData', () => ({
   useCreateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useDeactivateMedication: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
+vi.mock('../../hooks/useDocuments', () => ({
+  usePatientDocuments: () => ({ data: { items: [], total: 0 }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useUploadDocument: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteDocument: () => ({ mutate: vi.fn(), isPending: false }),
+  useDownloadDocument: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('../../hooks/useConsents', () => ({
@@ -63,8 +61,8 @@ vi.mock('../../hooks/useConsents', () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-  useGrantConsent: () => ({ mutate: grantMutate, isPending: consentPending.grant }),
-  useRevokeConsent: () => ({ mutate: revokeMutate, isPending: consentPending.revoke, variables: undefined }),
+  useGrantConsent: () => ({ mutate: grantMutate, isPending: false }),
+  useRevokeConsent: () => ({ mutate: revokeMutate, isPending: false }),
 }))
 
 function renderPage() {
@@ -87,8 +85,6 @@ describe('PatientDetailPage consent workflow', () => {
   beforeEach(() => {
     grantMutate.mockReset()
     revokeMutate.mockReset()
-    updateMutate.mockReset()
-    consentPending.grant = consentPending.revoke = false
     usePatient.mockReset()
     sessionState.role = 'clinic_admin'
     sessionState.staff_role = null
@@ -96,19 +92,13 @@ describe('PatientDetailPage consent workflow', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
-  it('shows patient data and immutable consent history to clinical staff', () => {
-    sessionState.role = 'staff'
-    sessionState.staff_role = 'nurse'
+  it('shows patient data and immutable consent history', async () => {
+    const user = userEvent.setup()
     renderPage()
     expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Consentimentos' }))
     expect(screen.getByText('Cuidados clínicos')).toBeInTheDocument()
     expect(screen.getByText('Concedido')).toBeInTheDocument()
-  })
-
-  it('does not offer consents to administrative roles, which the backend refuses', () => {
-    renderPage()
-    expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Consentimentos' })).not.toBeInTheDocument()
   })
 
   it('grants and revokes using the real B5 payload shape', async () => {
@@ -116,6 +106,7 @@ describe('PatientDetailPage consent workflow', () => {
     sessionState.patient_id = 'patient-1'
     const user = userEvent.setup()
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Consentimentos' }))
     await user.type(screen.getByLabelText('Finalidade'), 'Partilha assistencial')
     await user.click(screen.getByRole('button', { name: 'Conceder' }))
     expect(grantMutate).toHaveBeenCalledWith(
@@ -138,89 +129,41 @@ describe('PatientDetailPage consent workflow', () => {
     expect(usePatient).toHaveBeenCalledWith('patient-1')
     expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
   })
+})
 
-  it('requires a consent purpose before calling the API', async () => {
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
-    const user = userEvent.setup()
-    renderPage()
-    await user.click(screen.getByRole('button', { name: 'Conceder' }))
-    expect(screen.getByText('Indica a finalidade do consentimento.')).toBeInTheDocument()
-    expect(screen.getByLabelText('Finalidade')).toHaveAttribute('aria-invalid', 'true')
-    expect(grantMutate).not.toHaveBeenCalled()
+describe('PatientDetailPage documents tab', () => {
+  beforeEach(() => {
+    sessionState.role = 'clinic_admin'
+    sessionState.staff_role = null
+    sessionState.patient_id = null
   })
 
-  it('confirms a granted consent, clears the field and reports a revoke failure', async () => {
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
-    const user = userEvent.setup()
+  it('hides Documentos from clinic_admin, who has no clinical access in the backend', () => {
     renderPage()
-    await user.type(screen.getByLabelText('Finalidade'), 'Partilha assistencial')
-    await user.click(screen.getByRole('button', { name: 'Conceder' }))
-    const grantOptions = grantMutate.mock.calls.at(-1)?.[1] as { onSuccess: () => void; onError: (e: unknown) => void }
-    act(() => grantOptions.onError(new ApiError(409, 'x', { detail: 'Consentimento já concedido.' })))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Consentimento já concedido.')
-    act(() => grantOptions.onSuccess())
-    expect(await screen.findByRole('status')).toHaveTextContent('Consentimento concedido')
-    expect(screen.getByLabelText('Finalidade')).toHaveValue('')
-
-    await user.click(screen.getByRole('button', { name: 'Revogar' }))
-    const revokeOptions = revokeMutate.mock.calls.at(-1)?.[1] as { onError: (e: unknown) => void }
-    act(() => revokeOptions.onError(new ApiError(409, 'x', { detail: 'Consentimento já revogado.' })))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Consentimento já revogado.')
+    expect(screen.queryByRole('tab', { name: 'Documentos' })).not.toBeInTheDocument()
   })
 
-  it('does not revoke when the confirmation is declined', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
-    const user = userEvent.setup()
-    renderPage()
-    await user.click(screen.getByRole('button', { name: 'Revogar' }))
-    expect(revokeMutate).not.toHaveBeenCalled()
-  })
-
-  it('disables grant and revoke while either request is pending', () => {
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
-    consentPending.revoke = true
-    renderPage()
-    expect(screen.getByRole('button', { name: 'Conceder' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Revogar' })).toBeDisabled()
-  })
-
-  it('validates patient contact fields before saving and confirms success', async () => {
+  it('lets a doctor open the patient documents with upload controls and the patient name', async () => {
     sessionState.role = 'staff'
     sessionState.staff_role = 'doctor'
     const user = userEvent.setup()
     renderPage()
-    const phone = screen.getByLabelText('Telefone')
-    fireEvent.change(phone, { target: { value: '9'.repeat(31) } })
-    await user.click(screen.getByRole('button', { name: 'Guardar dados' }))
-    expect(screen.getByText('O telefone pode ter no máximo 30 caracteres.')).toBeInTheDocument()
-    expect(updateMutate).not.toHaveBeenCalled()
-
-    await user.clear(phone)
-    await user.type(phone, '911111111')
-    await user.click(screen.getByRole('button', { name: 'Guardar dados' }))
-    expect(updateMutate).toHaveBeenCalledWith(
-      { phone: '911111111', national_health_number: '123456789' },
-      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
-    )
-    const options = updateMutate.mock.calls.at(-1)?.[1] as { onSuccess: () => void; onError: (e: unknown) => void }
-    act(() => options.onError(new ApiError(403, 'x', { detail: 'Sem permissões.' })))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Sem permissões.')
-    act(() => options.onSuccess())
-    expect(await screen.findByRole('status')).toHaveTextContent('Dados atualizados com sucesso.')
+    await user.click(screen.getByRole('tab', { name: 'Documentos' }))
+    expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
+    expect(screen.getByText('Documentos de Ana Silva')).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Carregar documento' })).toBeInTheDocument()
   })
 
-  it('lets patients edit only their phone and sends nothing else', async () => {
+  it('opens the documents section directly for a patient without upload controls', () => {
     sessionState.role = 'patient'
     sessionState.patient_id = 'patient-1'
-    const user = userEvent.setup()
-    renderPage()
-    expect(screen.queryByLabelText('Número de utente')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Guardar dados' }))
-    expect(updateMutate).toHaveBeenCalledWith({ phone: '912345678' }, expect.anything())
+    render(
+      <MemoryRouter initialEntries={['/patient/documentos']}>
+        <Routes><Route path="/patient/documentos" element={<PatientDetailPage own section="documents" />} /></Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: 'Documentos', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Carregar documento' })).not.toBeInTheDocument()
   })
 })

@@ -19,6 +19,7 @@ Design decisions (do not change without discussion):
   endpoints use `get_current_user_allow_pending`. Secure by default: a new
   endpoint is restricted unless it explicitly opts out.
 """
+
 import hashlib
 import hmac
 import secrets
@@ -184,20 +185,15 @@ def _enforce_csrf(request: Request, user: User) -> None:
 
 def _audit_csrf_failure(request: Request, user: User, reason: str) -> None:
     # Local import: app.core.audit imports app.models, which would otherwise
-    # be a circular import at module load time (app.models.audit_log does
-    # not import security, but keeping this import local avoids ever having
-    # to think about import order between this module and app.models).
-    from app.core.audit import client_ip, record_audit_event
+    # be a circular import at module load time.
+    from app.core.audit import audit_request
     from app.models import AuditAction, AuditResult
 
-    record_audit_event(
+    audit_request(
+        request,
         action=AuditAction.CSRF_FAILURE,
+        actor=user,
         result=AuditResult.DENIED,
-        clinic_id=user.clinic_id,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
         metadata={"reason": reason, "path": request.url.path},
     )
 
@@ -354,6 +350,18 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    request: Request,
+    session_token: str | None = Cookie(default=None, alias=settings.COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but yields None instead of 401, for read-only public endpoints."""
+    try:
+        return get_current_user(request, session_token, db)
+    except HTTPException:
+        return None
+
+
 def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
     """
     Dependency factory for endpoint-level authorization.
@@ -362,17 +370,14 @@ def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
 
     def _checker(request: Request, user: User = Depends(get_current_user)) -> User:
         if user.role not in allowed_roles:
-            from app.core.audit import client_ip, record_audit_event
+            from app.core.audit import audit_request
             from app.models import AuditAction, AuditResult
 
-            record_audit_event(
+            audit_request(
+                request,
                 action=AuditAction.PERMISSION_DENIED,
+                actor=user,
                 result=AuditResult.DENIED,
-                clinic_id=user.clinic_id,
-                actor_user_id=user.id,
-                actor_email=user.email,
-                ip_address=client_ip(request),
-                user_agent=request.headers.get("user-agent"),
                 metadata={"path": request.url.path, "required_roles": [r.value for r in allowed_roles]},
             )
             raise HTTPException(

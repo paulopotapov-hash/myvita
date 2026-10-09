@@ -22,18 +22,20 @@ class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
         Index("ix_notifications_user_created", "user_id", "created_at"),
+        # Deep-link targets point at the live documents/conversations tables
+        # (migration 5a6b7c8d9e0f); Parent A's clinical_* tables are deprecated.
         ForeignKeyConstraint(
             ["target_id", "clinic_id"],
-            ["clinical_documents.id", "clinical_documents.clinic_id"],
+            ["documents.id", "documents.clinic_id"],
             name="fk_notification_document_target",
             ondelete="RESTRICT",
             use_alter=True,
         ),
         ForeignKeyConstraint(
             ["conversation_target_id", "clinic_id"],
-            ["clinical_conversations.id", "clinical_conversations.clinic_id"],
+            ["conversations.id", "conversations.clinic_id"],
             name="fk_notification_conversation_target",
-            ondelete="RESTRICT",
+            ondelete="CASCADE",
             use_alter=True,
         ),
         CheckConstraint(

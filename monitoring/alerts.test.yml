@@ -42,6 +42,48 @@ tests:
 
   - interval: 1m
     input_series:
+      - series: 'myvita_documents_backup_enabled{instance="node-exporter:9100",job="host"}'
+        values: '1 1 1 1 1 1 1 1'
+      - series: 'myvita_documents_backup_last_run_success{instance="node-exporter:9100",job="host"}'
+        values: '1 0 0 0 0 0 0 1'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: MyVitaDocumentsBackupLastRunFailed
+        exp_alerts:
+          - exp_labels:
+              instance: node-exporter:9100
+              job: host
+              severity: critical
+            exp_annotations:
+              summary: The last documents storage backup failed
+      - eval_time: 7m
+        alertname: MyVitaDocumentsBackupLastRunFailed
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'myvita_documents_backup_enabled{instance="node-exporter:9100",job="host"}'
+        values: '0x20'
+      - series: 'myvita_documents_backup_last_success_timestamp_seconds{instance="node-exporter:9100",job="host"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MyVitaDocumentsBackupMissingOrStale
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'myvita_recovery_verification_last_success_timestamp_seconds{instance="node-exporter:9100",job="host"}'
+        values: '0x10'
+      - series: 'myvita_recovery_verification_last_run_success{instance="node-exporter:9100",job="host"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MyVitaRecoveryVerificationFailed
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
       - series: 'myvita_auth_failures_total'
         values: '0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45'
       - series: 'myvita_authorization_denials_total'

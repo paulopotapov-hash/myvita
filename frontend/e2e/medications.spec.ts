@@ -1,13 +1,11 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { authState, loadSeed } from './support'
+import { authState, loadSeed, openPatientFile } from './support'
 
 const seed = loadSeed()
 
 async function openPatient(page: Page) {
-  await page.goto('/app/pacientes')
-  await page.getByRole('link', { name: seed.names.patient }).click()
-  await expect(page.getByRole('heading', { name: seed.names.patient, level: 1 })).toBeVisible()
+  await openPatientFile(page, seed.names.patient, 'Medicamentos')
   return page.getByRole('region', { name: 'Medicação' })
 }
 
@@ -94,7 +92,9 @@ test.describe.serial('medications', () => {
     test.use({ storageState: authState('patient') })
 
     test('sees their medication without any way to change it', async ({ page }) => {
-      await page.goto('/app/saude')
+      // Merged UI: the patient's health data is /patient/saude, split into tabs.
+      await page.goto('/patient/saude')
+      await page.getByRole('tab', { name: 'Medicamentos' }).click()
       const section = page.getByRole('region', { name: 'Medicação' })
       await expect(section.getByRole('listitem').filter({ hasText: 'Amoxicilina E2E' })).toBeVisible()
       await expect(section.getByLabel('Medicamento')).toHaveCount(0)

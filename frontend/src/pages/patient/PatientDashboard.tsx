@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useNotifications } from '../../hooks/useClinicalData'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
@@ -11,6 +12,8 @@ import { toUserMessage } from '../../lib/errorMessages'
 export function PatientDashboard() {
   const { user } = useSession()
   const appointments = useAppointments()
+  const notifications = useNotifications(1, 20)
+  const unreadCount = notifications.data?.items.filter((notification) => !notification.is_read).length
 
   const upcoming = (appointments.data ?? [])
     .filter((a) => a.status === 'scheduled' || a.status === 'confirmed')
@@ -37,7 +40,7 @@ export function PatientDashboard() {
         {upcoming.length > 0 && (
           <ul className="flex flex-col divide-y divide-slate-100">
             {upcoming.map((appointment) => (
-              <li key={appointment.id} className="flex items-center justify-between py-3">
+              <li key={appointment.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <p className="font-medium text-slate-900">{formatDateTime(appointment.scheduled_at)}</p>
                   {appointment.reason && <p className="text-sm text-slate-500">{appointment.reason}</p>}
@@ -51,17 +54,19 @@ export function PatientDashboard() {
 
       <div className="flex flex-wrap gap-3">
         <Link
-          to="/app/consultas"
+          to="/patient/consultas"
           className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           Ver todas as consultas
         </Link>
         <Link
-          to="/app/perfil"
+          to="/patient/perfil"
           className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           O meu perfil
         </Link>
+        <Link to="/patient/consentimentos" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Gerir consentimentos</Link>
+        <Link to="/patient/notificacoes" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Notificações{unreadCount ? ` (${unreadCount})` : ''}</Link>
       </div>
     </div>
   )

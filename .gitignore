@@ -21,12 +21,23 @@ htmlcov/
 *.sql.gz
 *.sha256
 backups/
+# Interrupted backup_db.sh runs leave .myvita_<ts>.dump.tmp.<rand> files.
+*.dump.tmp.*
+# Documents archives and their staging/temp files (backup_documents.sh).
+*.tar.gz
+.myvita_documents_*
+.myvita-restore-*
+*.sha256.tmp
 
 .DS_Store
 node_modules/
 dist/
 frontend/coverage/
-frontend/e2e/.auth/
+
+# Playwright artifacts
 frontend/test-results/
 frontend/playwright-report/
+frontend/e2e/.auth/
+
+# Local document storage (development default DOCUMENT_STORAGE_DIR)
 backend/var/documents/

@@ -110,14 +110,18 @@ export interface RequestOptions {
   body?: unknown
   signal?: AbortSignal
   onResponse?: (response: Response) => void
+  /** Return the raw Response instead of parsing JSON (binary downloads). */
+  raw?: boolean
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? 'GET'
   const headers: Record<string, string> = {}
+  // FormData must set its own multipart boundary; never force a Content-Type on it.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
 
-  if (options.body !== undefined) {
-    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json'
+  if (options.body !== undefined && !isFormData) {
+    headers['Content-Type'] = 'application/json'
   }
   if (!SAFE_METHODS.has(method)) {
     const csrfToken = readCookie(CSRF_COOKIE_NAME)
@@ -136,12 +140,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       method,
       credentials: 'include',
       headers,
-      body:
-        options.body === undefined
-          ? undefined
-          : options.body instanceof FormData
-            ? options.body
-            : JSON.stringify(options.body),
+      body: options.body === undefined ? undefined : isFormData ? (options.body as FormData) : JSON.stringify(options.body),
       signal: options.signal,
     })
   } catch {
@@ -153,6 +152,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (response.status === 204) {
     options.onResponse?.(response)
     return undefined as T
+  }
+
+  if (options.raw && response.ok) {
+    options.onResponse?.(response)
+    return response as T
   }
 
   const contentType = response.headers.get('content-type') ?? ''
@@ -183,30 +187,24 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return rawBody as T
 }
 
-export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob> {
-  let response: Response
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include', signal })
-  } catch {
-    throw new NetworkError()
-  }
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    const detail = body && typeof body.detail === 'string' ? body.detail : `HTTP ${response.status}`
-    if (response.status === 401 && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { path } }))
-    }
-    throw new ApiError(response.status, detail, {
-      detail,
-      requestId: response.headers.get(REQUEST_ID_HEADER),
-    })
-  }
-  return response.blob()
-}
-
 export interface PageResult<T> {
   items: T[]
   total: number
+}
+
+/** Reads `filename*=UTF-8''…` (preferred) or `filename="…"` from Content-Disposition. */
+export function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) return null
+  const encoded = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim())
+    } catch {
+      return null
+    }
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i)
+  return plain ? plain[1].trim() : null
 }
 
 export const api = {
@@ -216,6 +214,12 @@ export const api = {
   patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     apiRequest<T>(path, { method: 'PATCH', body, signal }),
   delete: <T>(path: string, signal?: AbortSignal) => apiRequest<T>(path, { method: 'DELETE', signal }),
+  postForm: <T>(path: string, form: FormData, signal?: AbortSignal) =>
+    apiRequest<T>(path, { method: 'POST', body: form, signal }),
+  getBlob: async (path: string, signal?: AbortSignal): Promise<{ blob: Blob; filename: string | null }> => {
+    const response = await apiRequest<Response>(path, { method: 'GET', signal, raw: true })
+    return { blob: await response.blob(), filename: parseContentDispositionFilename(response.headers.get('content-disposition')) }
+  },
   getPage: async <T>(path: string, signal?: AbortSignal): Promise<PageResult<T>> => {
     let total = 0
     const items = await apiRequest<T[]>(path, {
@@ -227,5 +231,4 @@ export const api = {
     })
     return { items, total }
   },
-  getBlob: apiBlob,
 }

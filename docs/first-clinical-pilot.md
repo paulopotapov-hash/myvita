@@ -1,6 +1,6 @@
 # First controlled clinical pilot
 
-This document defines a proposed, configurable pilot envelope. It is not approval to process real patient data.
+This document defines a proposed, configurable pilot envelope. It is not approval to process real patient data. The decision-ready contract structure is in `pilot-contract-checklist.md`; every unresolved human input there remains **DECISÃO NECESSÁRIA**.
 
 ## Proposed envelope
 
@@ -21,7 +21,7 @@ These are starting parameters, not fixed product limits. Expansion requires a ga
 - patient-owned consent grant/revoke and clinician consent read;
 - doctor/nurse medical records and medication workflows;
 - patient self-access to own appointments, demographics, consents, records and medication;
-- notifications, audit capture, account deactivation and session invalidation;
+- notification inbox/read state (event producers are not yet a complete operational workflow), audit capture, account deactivation and session invalidation;
 - health/readiness, migrations, local backup tooling and monitoring topology.
 
 ## Excluded from a first pilot

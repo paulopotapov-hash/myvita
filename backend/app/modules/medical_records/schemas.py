@@ -20,7 +20,7 @@ class MedicalRecordCreateRequest(RequestModel):
 
 
 class MedicalRecordUpdateRequest(MedicalRecordCreateRequest):
-    pass
+    expected_version: int = Field(ge=1)
 
 
 class MedicalRecordPublic(BaseModel):
@@ -28,6 +28,8 @@ class MedicalRecordPublic(BaseModel):
     clinic_id: uuid.UUID
     patient_id: uuid.UUID
     author_staff_id: uuid.UUID
+    # Display name for the UI (staff and patient views never show raw ids).
+    author_name: str
     title: str
     content: str
     version: int
@@ -40,6 +42,7 @@ class MedicalRecordRevisionPublic(BaseModel):
     id: uuid.UUID
     record_id: uuid.UUID
     editor_staff_id: uuid.UUID
+    editor_name: str
     version: int
     title: str
     content: str

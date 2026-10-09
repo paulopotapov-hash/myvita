@@ -11,7 +11,7 @@ Status: **READY AS A PROCEDURE; EXECUTION BLOCKED BY EXTERNAL INFRASTRUCTURE**.
 5. Inject runtime secrets from the approved manager, including `APP_DB_ROLE`/`APP_DB_PASSWORD` (runtime database role, distinct from the owner `POSTGRES_USER`), `MFA_ENCRYPTION_KEY` and `PRIVACY_FINGERPRINT_KEY` (see `p7-secret-management.md` and `security/account-lifecycle.md#configuration`). Use exact HTTPS CORS/trusted hosts and keep public registration disabled.
 6. Configure private off-site backup and a staffed Alertmanager receiver; prove both before traffic.
 7. Run `scripts/production_preflight.sh`. Render base, monitoring, TLS and registry overlays with `docker compose config --quiet`.
-8. Pull digest-pinned images. Start PostgreSQL, run the one-shot migration service, then start remaining services with `--no-build`. Backend and backup are gated on migration success. The migrate service runs as the schema owner: `alembic upgrade head`, then `python -m app.db_provisioning`, which creates or updates the least-privilege runtime role. That role gets LOGIN only, DML on application tables, INSERT/SELECT only on `audit_logs`, SELECT on `alembic_version`, and no DDL. The backend connects only as that role. Provisioning is idempotent and refuses a role equal to the owner or one with elevated attributes. Its `ALTER ROLE … PASSWORD` statement must not be captured by server statement logging (`log_statement` must not be `ddl`/`all` during migrate).
+8. Pull digest-pinned images. Before migration, stop/quiesce application writes and create a checksum-verified backup with the currently deployed backup image; for a new empty database, record that this gate is not applicable. Abort if the backup fails. Then run the one-shot migration service and start remaining services with `--no-build`. Backend and scheduled backup are gated on migration success; backend health gates frontend/proxy. Compose startup alone does not create the required pre-migration backup. The migrate service runs as the schema owner: `alembic upgrade head`, then `python -m app.db_provisioning`, which creates or updates the least-privilege runtime role. That role gets LOGIN only, DML on application tables, INSERT/SELECT only on `audit_logs`, SELECT on `alembic_version`, and no DDL. The backend connects only as that role. Provisioning is idempotent and refuses a role equal to the owner.
    - Migration `f6a7b8c9d0e1` stops without changing anything if two accounts' e-mails differ only by letter case. Resolve those accounts manually (decide which is legitimate) and re-run.
    - After the first deploy with mandatory MFA, every staff member and clinic admin enrols TOTP at their next login. Brief clinic admins first: they recover staff from the *Contas* page, while clinic admins themselves are recovered by the operator (`security/account-lifecycle.md#clinic-admin-recovery-operator-procedure`).
 9. Verify container health, `/health`, `/ready`, Prometheus targets, Grafana authentication, backup freshness and alert delivery.
@@ -40,3 +40,15 @@ The TLS overlay redirects port 80 to 443, supports TLS 1.2/1.3 and HSTS. Certifi
 - `SMOKE_EXPECTED_ROLE` optionally pins the role.
 
 Optional URLs must demonstrate a genuine 403 authorization denial (`SMOKE_FORBIDDEN_URL`, refused if the 403 came from the account gate) and 404 cross-tenant concealment (`SMOKE_CROSS_TENANT_URL`). Both require an account with no pending action. Use a patient synthetic account for plain-login runs, or an MFA-enrolled staff/admin account with its seed stored in the secret manager. Database, monitoring targets, backup freshness and alert delivery remain operator-side checks because they are deliberately not public.
+
+## Staging synthetic data and acceptance
+
+Public onboarding/registration stay disabled, so staging identities are created with `backend/scripts/seed_staging.py` (two clinics: admin, doctor and patient each, plus a nurse in clinic A). It refuses to run unless `STAGING_SEED_CONFIRM=yes` and `STAGING_SEED_PASSWORD` are set, and refuses databases that contain non-seed clinics. The password is generated per environment and never stored in Git:
+
+```sh
+docker compose -f docker-compose.prod.yml exec -T -e STAGING_SEED_CONFIRM=yes \
+  -e STAGING_SEED_PASSWORD="$STAGING_SEED_PASSWORD" backend python -m scripts.seed_staging
+BASE_URL=https://<approved-host> SEED_PASSWORD="$STAGING_SEED_PASSWORD" node scripts/staging_acceptance.mjs
+```
+
+`staging_acceptance.mjs` is re-runnable and uses fewer than 10 logins so it stays inside the login rate limit. It covers SPA refresh, health, cookies, CSRF, the clinical write paths, role denials, cross-clinic concealment and logout revocation. The topology can be rehearsed locally with `docker-compose.prod.yml` plus `docker-compose.prod-http.yml` (see README); that rehearsal proves routing, port exposure and persistence but not TLS, HSTS, `Secure` cookies or JSON production logs.

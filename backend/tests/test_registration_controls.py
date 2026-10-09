@@ -1,7 +1,14 @@
 from fastapi.testclient import TestClient
 
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.main import app
+
+
+def test_public_registration_switches_default_to_closed():
+    # Pilot policy: invitation-only. The test suite opts in through tests/conftest.py; a deployment
+    # that sets nothing gets every public entry point closed.
+    for name in ("ALLOW_PUBLIC_PATIENT_REGISTRATION", "ALLOW_PUBLIC_CLINIC_ONBOARDING", "ALLOW_DIRECT_STAFF_CREATION"):
+        assert Settings.model_fields[name].default is False, name
 
 
 def test_public_registration_is_closed_when_deployment_switches_are_disabled(monkeypatch):

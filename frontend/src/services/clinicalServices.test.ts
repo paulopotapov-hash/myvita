@@ -15,13 +15,14 @@ describe('clinical API services', () => {
     medicalRecordsService.list('patient-1')
     medicalRecordsService.detail('record-1')
     medicalRecordsService.create('patient-1', payload)
-    medicalRecordsService.update('record-1', payload)
+    const updatePayload = { ...payload, expected_version: 1 }
+    medicalRecordsService.update('record-1', updatePayload)
     medicalRecordsService.revisions('record-1')
 
     expect(api.get).toHaveBeenNthCalledWith(1, '/api/v1/patients/patient-1/medical-records', undefined)
     expect(api.get).toHaveBeenNthCalledWith(2, '/api/v1/medical-records/record-1', undefined)
     expect(api.post).toHaveBeenCalledWith('/api/v1/patients/patient-1/medical-records', payload)
-    expect(api.patch).toHaveBeenCalledWith('/api/v1/medical-records/record-1', payload)
+    expect(api.patch).toHaveBeenCalledWith('/api/v1/medical-records/record-1', updatePayload)
     expect(api.get).toHaveBeenNthCalledWith(3, '/api/v1/medical-records/record-1/revisions', undefined)
   })
 

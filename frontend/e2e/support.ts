@@ -40,6 +40,17 @@ export function futureSlot(days: number, hour = 9, minute = 0): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/**
+ * Merged UI (Parent B base): the patients list is a table with an "Abrir ficha" link per row,
+ * and the patient file is split into tabs. Opens the file and, if given, the tab.
+ */
+export async function openPatientFile(page: Page, name: string, tab?: string): Promise<void> {
+  await page.goto('/app/pacientes')
+  await page.getByRole('row').filter({ hasText: name }).getByRole('link', { name: 'Abrir ficha' }).click()
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+  if (tab) await page.getByRole('tab', { name: tab }).click()
+}
+
 export async function loginThroughUi(page: Page, email: string, password = PASSWORD): Promise<void> {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Palavra-passe').fill(password)
@@ -60,9 +71,27 @@ export async function expectNoHorizontalOverflow(page: Page, label: string): Pro
 const FRONTEND_URL = 'http://localhost:5174'
 
 /** Creates test data through the real API as an already-logged-in role (no UI login, no rate-limit cost). */
+/** The HTTP status of one request made as an already-logged-in role (for denial checks). */
+export async function apiStatus(
+  role: Role,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  url: string,
+  data?: object,
+): Promise<number> {
+  const context = await request.newContext({ baseURL: FRONTEND_URL, storageState: authState(role) })
+  try {
+    const { cookies } = await context.storageState()
+    const csrf = cookies.find((cookie) => cookie.name === 'myvita_csrf')?.value ?? ''
+    const response = await context.fetch(url, { method, data, headers: { 'X-CSRF-Token': csrf } })
+    return response.status()
+  } finally {
+    await context.dispose()
+  }
+}
+
 export async function apiAs<T = unknown>(
   role: Role,
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'DELETE',
   url: string,
   data?: object,
   tolerate: number[] = [],

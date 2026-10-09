@@ -12,6 +12,7 @@ myVita runs multiple backend replicas, point `storage_uri` at Redis so all
 replicas share the same counters — see slowapi/limits docs. That's a
 deployment-time config change, not a code change.
 """
+
 from slowapi import Limiter
 
 from app.core.client_ip import get_client_ip

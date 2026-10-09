@@ -20,7 +20,8 @@ avoiding existence disclosure.
 | `/api/v1/auth/logout` | POST | Any authenticated user | Current user; increments token epoch |
 | `/api/v1/auth/me` | GET | Any authenticated user | Current user only |
 | `/api/v1/clinics` | POST | Public; 5/min/IP | Creates one clinic/admin atomically |
-| `/api/v1/clinics` | GET | Public | Deliberately minimal `id` + `name` directory |
+| `/api/v1/clinics` | GET | Public (restricted) | Paginated `id` + `name` only; lists just clinics in `PUBLIC_CLINIC_IDS` (and only while public patient registration is on) plus the caller's own clinic |
+| `/api/v1/clinics/{id}` | GET | Public (restricted) | Same visibility policy as the list; 404 for private and nonexistent clinics alike |
 | `/api/v1/patients/register` | POST | Public; 5/min/IP | Joins an existing clinic; cannot set role |
 | `/api/v1/patients` | GET | Staff or clinic admin | Session clinic only; paginated |
 | `/api/v1/patients/{id}` | GET/PATCH | Authenticated | Session clinic; patients restricted to self |

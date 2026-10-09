@@ -31,8 +31,8 @@ test.describe('public pages', () => {
   for (const [path, name] of [
     ['/login', 'login'],
     ['/recuperar-acesso', 'recover access'],
-    ['/registo', 'patient registration'],
-    ['/nova-clinica', 'clinic onboarding'],
+    // Public registration/onboarding pages were removed (invitation-only pilot); patients enter here.
+    ['/convite', 'invitation acceptance'],
   ] as const) {
     test(`${name} has no WCAG A/AA violations`, async ({ page }) => {
       await page.goto(path)
@@ -51,11 +51,12 @@ test.describe('public pages', () => {
     await expectNoViolations(page, 'login (server error)')
   })
 
-  test('registration and onboarding validation errors have no violations', async ({ page }) => {
-    await page.goto('/registo')
-    await page.getByRole('button', { name: 'Criar conta' }).click()
-    await expect(page.getByLabel('Clínica')).toBeFocused()
-    await expectNoViolations(page, 'registration (validation errors)')
+  // Replaces the registration/onboarding check: those pages no longer exist (invitation-only).
+  test('access recovery validation errors have no violations', async ({ page }) => {
+    await page.goto('/recuperar-acesso')
+    await page.getByRole('button', { name: 'Pedir ajuda' }).click()
+    await expect(page.getByLabel('Email')).toBeFocused()
+    await expectNoViolations(page, 'access recovery (validation errors)')
   })
 })
 
@@ -69,7 +70,8 @@ test.describe('keyboard and focus', () => {
     await expect(page.getByLabel('Palavra-passe')).toBeFocused()
     await page.keyboard.type('SenhaForte123!')
     await page.keyboard.press('Enter')
-    await expect(page).toHaveURL(/\/app$/)
+    // Merged UI: the patient's home is /patient.
+    await expect(page).toHaveURL(/\/patient$/)
   })
 
   test('the focused control always has a visible focus indicator', async ({ page }) => {
@@ -95,6 +97,7 @@ test.describe('authenticated pages as a doctor', () => {
     ['/app/pacientes', 'patients'],
     ['/app/notificacoes', 'notifications'],
     ['/app/seguranca', 'account security'],
+    ['/app/mensagens', 'messages'],
     [`/app/pacientes/${seed.patientIds.patient}`, 'patient file (records, medications, consents)'],
   ] as const) {
     test(`${name} has no violations`, async ({ page }) => {
@@ -142,23 +145,32 @@ test.describe('authenticated pages as a doctor', () => {
   })
 
   test('validation errors on the clinical forms are announced and have no violations', async ({ page }) => {
+    // Merged UI: the patient file is tabbed, so each clinical form is checked in its own tab.
     await page.goto(`/app/pacientes/${seed.patientIds.patient}`)
+    await page.getByRole('tab', { name: 'Medicamentos' }).click()
     await page.getByRole('region', { name: 'Medicação' }).getByRole('button', { name: 'Adicionar medicação' }).click()
-    await page.getByRole('region', { name: 'Histórico clínico' }).getByRole('button', { name: 'Criar registo' }).click()
-    await expect(page.getByLabel('Medicamento')).toHaveAccessibleDescription('Indica o nome do medicamento.')
-    await expectNoViolations(page, 'patient file (validation errors)')
+    await expect(page.getByLabel('Medicamento', { exact: true })).toHaveAccessibleDescription('Indica o nome do medicamento.')
+    await expectNoViolations(page, 'patient file, medications (validation errors)')
+    await page.getByRole('tab', { name: 'Registos clínicos' }).click()
+    await page.getByRole('tabpanel', { name: 'Registos clínicos' }).getByRole('button', { name: 'Criar registo' }).click()
+    await expect(page.getByRole('tabpanel', { name: 'Registos clínicos' }).getByRole('alert')).toBeVisible()
+    await expectNoViolations(page, 'patient file, records (validation errors)')
   })
 })
 
 test.describe('authenticated pages as the patient', () => {
   test.use({ storageState: authState('patient') })
 
+  // Merged UI: the patient area lives under /patient (the /app paths only redirect there).
   for (const [path, name] of [
-    ['/app', 'dashboard'],
-    ['/app/consultas', 'appointments'],
-    ['/app/saude', 'health data'],
-    ['/app/perfil', 'profile'],
-    ['/app/notificacoes', 'notifications'],
+    ['/patient', 'dashboard'],
+    ['/patient/consultas', 'appointments'],
+    ['/patient/saude', 'health data'],
+    ['/patient/perfil', 'profile'],
+    ['/patient/notificacoes', 'notifications'],
+    ['/patient/documentos', 'documents'],
+    ['/patient/mensagens', 'messages'],
+    ['/patient/consentimentos', 'consents'],
   ] as const) {
     test(`${name} has no violations`, async ({ page }) => {
       await page.goto(path)

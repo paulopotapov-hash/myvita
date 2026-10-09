@@ -60,6 +60,8 @@ def grant_consent(db: Session, patient_id: uuid.UUID, payload: ConsentCreateRequ
         patient_id=patient.id,
         consent_type=payload.consent_type,
         purpose=payload.purpose,
+        policy_version=payload.policy_version,
+        policy_text=payload.policy_text,
         status=ConsentStatus.GRANTED,
         granted_at=datetime.now(UTC),
         recorded_by_user_id=user.id,

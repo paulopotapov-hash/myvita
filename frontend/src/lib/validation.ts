@@ -67,27 +67,6 @@ export const passwordChangeSchema = z.object({
   message: 'As palavras-passe não coincidem.',
 })
 
-export const clinicOnboardingSchema = z.object({
-  clinic_name: z.string().min(2, 'Nome demasiado curto.').max(255),
-  nif: z.string().max(20).optional().or(z.literal('')),
-  address: z.string().max(500).optional().or(z.literal('')),
-  phone: z.string().max(30).optional().or(z.literal('')),
-  admin_full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
-  admin_email: z.email('Introduz um email válido.'),
-  admin_password: passwordSchema,
-})
-export type ClinicOnboardingFormValues = z.infer<typeof clinicOnboardingSchema>
-
-export const patientRegisterSchema = z.object({
-  clinic_id: z.string().min(1, 'Escolhe uma clínica.'),
-  full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
-  email: z.email('Introduz um email válido.'),
-  password: passwordSchema,
-  birth_date: z.string().optional().or(z.literal('')),
-  phone: z.string().max(30).optional().or(z.literal('')),
-})
-export type PatientRegisterFormValues = z.infer<typeof patientRegisterSchema>
-
 export const staffCreateSchema = z.object({
   full_name: z.string().min(2, 'Nome demasiado curto.').max(255),
   email: z.email('Introduz um email válido.'),
@@ -96,12 +75,16 @@ export const staffCreateSchema = z.object({
 })
 export type StaffCreateFormValues = z.infer<typeof staffCreateSchema>
 
+export const patientInvitationSchema = z.object({
+  full_name: z.string().trim().min(2, 'Nome demasiado curto.').max(255),
+  email: z.email('Introduz um email válido.'),
+})
+
 const durationMinutes = z.coerce
   .number('A duração deve ser um número de minutos.')
   .int('A duração deve ser um número inteiro de minutos.')
   .min(5, 'A duração mínima é de 5 minutos.')
   .max(480, 'A duração máxima é de 480 minutos.')
-
 const reasonField = z.string().trim().max(500, 'O motivo pode ter no máximo 500 caracteres.')
 
 export const appointmentCreateSchema = z.object({
@@ -113,26 +96,18 @@ export const appointmentCreateSchema = z.object({
 })
 export type AppointmentCreateFormValues = z.infer<typeof appointmentCreateSchema>
 
+export const consentCreateSchema = z.object({
+  consent_type: z.enum(['treatment', 'data_processing', 'communications', 'research']),
+  purpose: z.string().trim().min(1, 'Indica a finalidade do consentimento.').max(500, 'A finalidade pode ter no máximo 500 caracteres.'),
+})
+
 export const appointmentUpdateSchema = z.object({
   duration_minutes: durationMinutes,
   reason: reasonField,
 })
 
-export const consentCreateSchema = z.object({
-  consent_type: z.enum(['treatment', 'data_processing', 'communications', 'research']),
-  purpose: z
-    .string()
-    .trim()
-    .min(1, 'Indica a finalidade do consentimento.')
-    .max(500, 'A finalidade pode ter no máximo 500 caracteres.'),
-})
-
 export const medicalRecordSchema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, 'Indica o título do registo.')
-    .max(200, 'O título pode ter no máximo 200 caracteres.'),
+  title: z.string().trim().min(1, 'Indica o título do registo.').max(200, 'O título pode ter no máximo 200 caracteres.'),
   content: z
     .string()
     .trim()
@@ -142,18 +117,11 @@ export const medicalRecordSchema = z.object({
 
 const optionalText = (max: number, message: string) => z.string().trim().max(max, message)
 
+/** Mirrors backend/app/modules/medications/schemas.py limits and the end >= start constraint. */
 export const medicationFormSchema = z
   .object({
-    name: z
-      .string()
-      .trim()
-      .min(1, 'Indica o nome do medicamento.')
-      .max(200, 'O nome pode ter no máximo 200 caracteres.'),
-    dosage: z
-      .string()
-      .trim()
-      .min(1, 'Indica a dosagem.')
-      .max(200, 'A dosagem pode ter no máximo 200 caracteres.'),
+    name: z.string().trim().min(1, 'Indica o nome do medicamento.').max(200, 'O nome pode ter no máximo 200 caracteres.'),
+    dosage: z.string().trim().min(1, 'Indica a dosagem.').max(200, 'A dosagem pode ter no máximo 200 caracteres.'),
     route: optionalText(100, 'A via de administração pode ter no máximo 100 caracteres.'),
     frequency: optionalText(100, 'A frequência pode ter no máximo 100 caracteres.'),
     instructions: optionalText(2000, 'As instruções podem ter no máximo 2000 caracteres.'),

@@ -1,68 +1,67 @@
+import re
+import tempfile
 import uuid
-from io import BytesIO
+from typing import BinaryIO
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.audit import audit_denials, record_access
+from app.core.audit import audit_denials, audit_request
+from app.core.clinical_access import accessible_patient
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, ClinicalDocument, ClinicalDocumentVersion, Staff, User
-from app.modules.documents.schemas import DocumentNoteCreate, DocumentPublic, DocumentVersionPublic
+from app.models import AuditAction, Document, User
+from app.modules.documents.schemas import DOCUMENT_TITLE_MAX_LENGTH, DocumentPublic
 from app.modules.documents.service import (
-    create_note,
-    current_patient_id,
     get_document,
-    get_version,
-    list_documents,
-    read_file,
-    update_file,
-    update_note,
-    upload_file,
+    list_patient_documents,
+    persist_document,
+    to_public,
 )
+from app.modules.documents.storage import LocalDocumentStorage
 
 router = APIRouter()
+_ALLOWED = {
+    ".pdf": ("application/pdf", lambda data: data.startswith(b"%PDF-")),
+    ".png": ("image/png", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n")),
+    ".jpg": ("image/jpeg", lambda data: data.startswith(b"\xff\xd8\xff")),
+    ".jpeg": ("image/jpeg", lambda data: data.startswith(b"\xff\xd8\xff")),
+}
+_FILENAME = re.compile(r"^[^/\\\x00-\x1f\x7f]{1,255}$")
 
 
-def _audit(request: Request, user: User, action: AuditAction, document_id: uuid.UUID) -> None:
-    record_access(request, user, action, "document", document_id)
+def _storage() -> LocalDocumentStorage:
+    return LocalDocumentStorage(settings.DOCUMENT_STORAGE_DIR)
 
 
-def _version_public(
-    db: Session, version: ClinicalDocumentVersion, current_version: int
-) -> DocumentVersionPublic:
-    author = db.query(Staff).filter(Staff.id == version.author_staff_id).first()
-    return DocumentVersionPublic(
-        id=version.id,
-        document_id=version.document_id,
-        author_name=author.user.full_name if author else "Profissional",
-        version=version.version,
-        content=version.content,
-        original_filename=version.original_filename,
-        media_type=version.media_type,
-        file_size=version.file_size,
-        created_at=version.created_at,
-        is_current=version.version == current_version,
-    )
+def _clinic_id(user: User) -> uuid.UUID:
+    if user.clinic_id is None:
+        raise HTTPException(status_code=403, detail="Sem permissões clínicas.")
+    return user.clinic_id
 
 
-def _document_public(document: ClinicalDocument) -> DocumentPublic:
-    current = next(
-        (version for version in document.versions if version.version == document.current_version), None
-    )
-    return DocumentPublic(
-        id=document.id,
-        clinic_id=document.clinic_id,
-        patient_id=document.patient_id,
-        kind=document.kind,
-        title=document.title,
-        current_version=document.current_version,
-        created_at=document.created_at,
-        updated_at=document.updated_at,
-        current_content=current.content if current else None,
-        current_author=current.author_staff.user.full_name if current else None,
+def _audit(request: Request, user: User, action: AuditAction, document: Document) -> None:
+    audit_request(
+        request,
+        action=action,
+        actor=user,
+        resource_type="document",
+        resource_id=document.id,
+        metadata={"patient_id": document.patient_id},
     )
 
 
@@ -70,165 +69,131 @@ def _document_public(document: ClinicalDocument) -> DocumentPublic:
 def list_for_patient(
     patient_id: uuid.UUID,
     request: Request,
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[DocumentPublic]:
     with audit_denials(request, user, "document", patient_id):
-        documents = list_documents(db, patient_id, user)
-    _audit(request, user, AuditAction.DOCUMENT_VIEWED, patient_id)
-    return [_document_public(document) for document in documents]
-
-
-@router.get("/documents/mine", response_model=list[DocumentPublic])
-def list_mine(
-    request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
-) -> list[DocumentPublic]:
-    with audit_denials(request, user, "document", user.id):
-        patient_id = current_patient_id(db, user)
-        documents = list_documents(db, patient_id, user)
-    _audit(request, user, AuditAction.DOCUMENT_VIEWED, patient_id)
-    return [_document_public(document) for document in documents]
-
-
-@router.post("/patients/{patient_id}/documents/notes", response_model=DocumentPublic, status_code=201)
-def create_note_endpoint(
-    patient_id: uuid.UUID,
-    payload: DocumentNoteCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> DocumentPublic:
-    with audit_denials(request, user, "document", patient_id):
-        document = create_note(db, patient_id, payload, user)
-    _audit(request, user, AuditAction.DOCUMENT_CREATED, document.id)
-    return _document_public(document)
-
-
-@router.post("/patients/{patient_id}/documents/files", response_model=DocumentPublic, status_code=201)
-def upload_file_endpoint(
-    patient_id: uuid.UUID,
-    request: Request,
-    title: str = Form(min_length=1, max_length=200),
-    file: UploadFile = File(),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> DocumentPublic:
-    with audit_denials(request, user, "document", patient_id):
-        document = upload_file(db, patient_id, title, file, user)
-    _audit(request, user, AuditAction.DOCUMENT_CREATED, document.id)
-    return _document_public(document)
-
-
-@router.get("/documents/{document_id}", response_model=DocumentPublic)
-def detail(
-    document_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> DocumentPublic:
-    with audit_denials(request, user, "document", document_id):
-        document = get_document(db, document_id, user)
-    _audit(request, user, AuditAction.DOCUMENT_VIEWED, document.id)
-    return _document_public(document)
-
-
-@router.get("/documents/{document_id}/versions", response_model=list[DocumentVersionPublic])
-def history(
-    document_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> list[DocumentVersionPublic]:
-    with audit_denials(request, user, "document", document_id):
-        document = get_document(db, document_id, user)
-    _audit(request, user, AuditAction.DOCUMENT_VIEWED, document.id)
-    return [_version_public(db, item, document.current_version) for item in document.versions]
-
-
-@router.get("/documents/{document_id}/versions/{version_number}", response_model=DocumentVersionPublic)
-def version_detail(
-    document_id: uuid.UUID,
-    version_number: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> DocumentVersionPublic:
-    with audit_denials(request, user, "document", document_id):
-        document, version = get_version(db, document_id, version_number, user)
-    _audit(request, user, AuditAction.DOCUMENT_VIEWED, document.id)
-    return _version_public(db, version, document.current_version)
-
-
-@router.patch("/documents/{document_id}/notes", response_model=DocumentPublic)
-def update_note_endpoint(
-    document_id: uuid.UUID,
-    payload: DocumentNoteCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> DocumentPublic:
-    with audit_denials(request, user, "document", document_id):
-        document = update_note(db, document_id, payload, user)
-    _audit(request, user, AuditAction.DOCUMENT_UPDATED, document.id)
-    return _document_public(document)
-
-
-@router.post("/documents/{document_id}/files/versions", response_model=DocumentPublic)
-def update_file_endpoint(
-    document_id: uuid.UUID,
-    request: Request,
-    title: str = Form(min_length=1, max_length=200),
-    file: UploadFile = File(),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> DocumentPublic:
-    with audit_denials(request, user, "document", document_id):
-        document = update_file(db, document_id, title, file, user)
-    _audit(request, user, AuditAction.DOCUMENT_UPDATED, document.id)
-    return _document_public(document)
-
-
-@router.get("/documents/{document_id}/download")
-def download_current(
-    document_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> StreamingResponse:
-    return _download(document_id, None, request, db, user)
-
-
-@router.get("/documents/{document_id}/versions/{version_number}/download")
-def download_version(
-    document_id: uuid.UUID,
-    version_number: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> StreamingResponse:
-    return _download(document_id, version_number, request, db, user)
-
-
-def _download(
-    document_id: uuid.UUID,
-    version_number: int | None,
-    request: Request,
-    db: Session,
-    user: User,
-) -> StreamingResponse:
-    with audit_denials(request, user, "document", document_id):
-        version, payload = read_file(db, document_id, version_number, user)
-    _audit(request, user, AuditAction.DOCUMENT_DOWNLOADED, document_id)
-    filename = version.original_filename or "document.pdf"
-    safe_ascii_name = "".join(
-        char if 32 <= ord(char) < 127 and char not in {'"', "\\"} else "_" for char in filename
+        clinic_id = _clinic_id(user)
+        accessible_patient(db, patient_id, user)
+    documents, total = list_patient_documents(
+        db, patient_id, clinic_id, offset=(page - 1) * page_size, limit=page_size
     )
+    response.headers["X-Total-Count"] = str(total)
+    # Parent A pattern: a list view is a clinical read, audited against the patient.
+    audit_request(
+        request,
+        action=AuditAction.DOCUMENT_VIEWED,
+        actor=user,
+        resource_type="document",
+        resource_id=patient_id,
+        metadata={"patient_id": patient_id, "operation": "list", "count": len(documents)},
+    )
+    return documents
+
+
+@router.post(
+    "/patients/{patient_id}/documents",
+    response_model=DocumentPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload(
+    patient_id: uuid.UUID,
+    request: Request,
+    file: UploadFile = File(...),  # noqa: B008 - FastAPI multipart dependency
+    title: str = Form(..., max_length=DOCUMENT_TITLE_MAX_LENGTH),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> DocumentPublic:
+    # accessible_patient(write=True) enforces tenant, role, EDIT_DOCUMENTS and care assignment.
+    with audit_denials(request, user, "document", patient_id):
+        _clinic_id(user)
+        patient = accessible_patient(db, patient_id, user, write=True)
+    title = title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Indica um título para o documento.")
+    filename = file.filename or ""
+    if not _FILENAME.fullmatch(filename) or filename in {".", ".."}:
+        raise HTTPException(status_code=422, detail="Nome de ficheiro inválido.")
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    extension = f".{extension}"
+    allowed = _ALLOWED.get(extension)
+    if allowed is None or (file.content_type or "").lower() != allowed[0]:
+        raise HTTPException(
+            status_code=422, detail="Formato não suportado. Envia um PDF, PNG ou JPEG válido."
+        )
+
+    size = 0
+    with tempfile.SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b") as buffer:
+        while chunk := file.file.read(64 * 1024):
+            size += len(chunk)
+            if size > settings.DOCUMENT_MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="O ficheiro excede o tamanho máximo permitido.")
+            buffer.write(chunk)
+        if size == 0:
+            raise HTTPException(status_code=422, detail="O ficheiro está vazio.")
+        buffer.seek(0)
+        signature = buffer.read(16)
+        if not allowed[1](signature):
+            raise HTTPException(
+                status_code=422, detail="O conteúdo do ficheiro não corresponde ao formato indicado."
+            )
+        buffer.seek(0)
+        try:
+            document = persist_document(
+                db,
+                _storage(),
+                clinic_id=patient.clinic_id,
+                patient_id=patient.id,
+                patient_user_id=patient.user_id,
+                user=user,
+                title=title,
+                filename=filename,
+                content_type=allowed[0],
+                size=size,
+                source=buffer,
+            )
+        except OSError:
+            raise HTTPException(status_code=503, detail="Não foi possível guardar o documento.") from None
+    _audit(request, user, AuditAction.DOCUMENT_UPLOADED, document)
+    return to_public(document, user.full_name)
+
+
+@router.get(
+    "/documents/{document_id}/download", responses={404: {"description": "Documento não encontrado."}}
+)
+def download(
+    document_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    with audit_denials(request, user, "document", document_id):
+        document = get_document(db, document_id, _clinic_id(user))
+        if document is None:
+            raise HTTPException(status_code=404, detail="Documento não encontrado.")
+        accessible_patient(db, document.patient_id, user)
+    storage = _storage()
+    try:
+        stream: BinaryIO = storage.open(document.storage_key)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(status_code=404, detail="Ficheiro não encontrado.") from None
+    except OSError:
+        raise HTTPException(status_code=503, detail="Não foi possível abrir o documento.") from None
+    _audit(request, user, AuditAction.DOCUMENT_DOWNLOADED, document)
+    safe_name = quote(document.original_filename, safe="")
     return StreamingResponse(
-        BytesIO(payload),
-        media_type="application/pdf",
+        stream,
+        media_type=document.content_type,
         headers={
-            "Content-Disposition": f"attachment; filename=\"{safe_ascii_name}\"; filename*=UTF-8''{quote(filename)}",
-            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}",
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+# No delete route: clinical documents are append-only until a retention and
+# deletion policy is legally validated. Corrections are made by uploading a new
+# document (integration decision D3).

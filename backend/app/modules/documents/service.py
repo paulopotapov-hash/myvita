@@ -1,236 +1,96 @@
 import uuid
-from datetime import UTC, datetime
 
-from fastapi import HTTPException, UploadFile, status
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session
 
-from app.core.clinical_access import ClinicalAction, clinical_access, clinical_staff
-from app.models import (
-    ClinicalDocument,
-    ClinicalDocumentVersion,
-    DocumentKind,
-    Notification,
-    Patient,
-    User,
-    UserRole,
-)
-from app.modules.documents.schemas import DocumentNoteCreate
-from app.modules.documents.storage import document_storage
+from app.models import Document, Notification, User
+from app.modules.documents.schemas import DocumentPublic
+from app.modules.documents.storage import BinaryReader, LocalDocumentStorage
+
+# Deliberately generic: notifications live outside the document access rules,
+# so no title, filename or clinical content goes into them.
+NEW_DOCUMENT_NOTIFICATION_TITLE = "Novo documento"
+NEW_DOCUMENT_NOTIFICATION_MESSAGE = "A equipa clínica partilhou um novo documento. Abra os documentos para o consultar."
 
 
-def _authorized_patient(db: Session, patient_id: uuid.UUID, user: User, *, edit: bool = False) -> Patient:
-    action = ClinicalAction.EDIT_DOCUMENTS if edit else ClinicalAction.VIEW_DOCUMENTS
-    return clinical_access(db, patient_id, user, action)
-
-
-def list_documents(db: Session, patient_id: uuid.UUID, user: User) -> list[ClinicalDocument]:
-    patient = _authorized_patient(db, patient_id, user)
-    return (
-        db.query(ClinicalDocument)
-        .options(joinedload(ClinicalDocument.versions))
-        .filter(ClinicalDocument.patient_id == patient.id, ClinicalDocument.clinic_id == patient.clinic_id)
-        .order_by(ClinicalDocument.updated_at.desc(), ClinicalDocument.id)
-        .all()
+def to_public(document: Document, uploaded_by_name: str) -> DocumentPublic:
+    return DocumentPublic(
+        id=document.id,
+        patient_id=document.patient_id,
+        title=document.title,
+        uploaded_by_name=uploaded_by_name,
+        original_filename=document.original_filename,
+        content_type=document.content_type,
+        file_size=document.file_size,
+        created_at=document.created_at,
     )
 
 
-def get_document(
-    db: Session, document_id: uuid.UUID, user: User, *, for_update: bool = False
-) -> ClinicalDocument:
-    query = db.query(ClinicalDocument).filter(
-        ClinicalDocument.id == document_id, ClinicalDocument.clinic_id == user.clinic_id
+def list_patient_documents(
+    db: Session, patient_id: uuid.UUID, clinic_id: uuid.UUID, *, offset: int, limit: int
+) -> tuple[list[DocumentPublic], int]:
+    query = (
+        db.query(Document, User.full_name)
+        .join(User, User.id == Document.uploaded_by_user_id)
+        .filter(Document.patient_id == patient_id, Document.clinic_id == clinic_id)
     )
-    if for_update:
-        query = query.with_for_update()
-    options = selectinload(ClinicalDocument.versions) if for_update else joinedload(ClinicalDocument.versions)
-    document = query.options(options).first()
-    if document is None:
-        raise HTTPException(status_code=404, detail="Documento não encontrado.")
-    _authorized_patient(db, document.patient_id, user)
-    return document
+    total = query.count()
+    rows = query.order_by(Document.created_at.desc(), Document.id.desc()).offset(offset).limit(limit).all()
+    return [to_public(document, name) for document, name in rows], total
 
 
-def get_version(
-    db: Session, document_id: uuid.UUID, version_number: int, user: User
-) -> tuple[ClinicalDocument, ClinicalDocumentVersion]:
-    document = get_document(db, document_id, user)
-    version = next((row for row in document.versions if row.version == version_number), None)
-    if version is None:
-        raise HTTPException(status_code=404, detail="Versão não encontrada.")
-    return document, version
+def get_document(db: Session, document_id: uuid.UUID, clinic_id: uuid.UUID) -> Document | None:
+    return db.query(Document).filter(Document.id == document_id, Document.clinic_id == clinic_id).first()
 
 
-def _notify_patient(db: Session, document: ClinicalDocument, author_name: str, *, updated: bool) -> None:
-    patient = db.query(Patient).filter(Patient.id == document.patient_id).one()
-    db.add(
-        Notification(
-            clinic_id=document.clinic_id,
-            user_id=patient.user_id,
-            title="Documento atualizado" if updated else "Novo documento",
-            message=f"{author_name} {'atualizou' if updated else 'adicionou'} “{document.title}”.",
-            target_type="document",
-            target_id=document.id,
-        )
-    )
+def persist_document(
+    db: Session,
+    storage: LocalDocumentStorage,
+    *,
+    clinic_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    patient_user_id: uuid.UUID,
+    user: User,
+    title: str,
+    filename: str,
+    content_type: str,
+    size: int,
+    source: BinaryReader,
+) -> Document:
+    """Store the file, its metadata and the patient's notification atomically.
 
-
-def _new_document(
-    db: Session, patient: Patient, staff_id: uuid.UUID, kind: DocumentKind, title: str
-) -> ClinicalDocument:
-    document = ClinicalDocument(
-        clinic_id=patient.clinic_id,
-        patient_id=patient.id,
-        author_staff_id=staff_id,
-        kind=kind,
+    Documents are append-only: there is no delete path. The patient is notified
+    with generic text and a deep link (target) to the new document.
+    """
+    key = storage.new_key()
+    storage.save(key, source)
+    document = Document(
+        clinic_id=clinic_id,
+        patient_id=patient_id,
+        uploaded_by_user_id=user.id,
         title=title,
-        current_version=1,
+        original_filename=filename,
+        storage_key=key,
+        content_type=content_type,
+        file_size=size,
     )
-    db.add(document)
-    db.flush()
+    try:
+        db.add(document)
+        # The notification's composite foreign key needs the document row first.
+        db.flush()
+        db.add(
+            Notification(
+                clinic_id=clinic_id,
+                user_id=patient_user_id,
+                title=NEW_DOCUMENT_NOTIFICATION_TITLE,
+                message=NEW_DOCUMENT_NOTIFICATION_MESSAGE,
+                target_type="document",
+                target_id=document.id,
+            )
+        )
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        db.rollback()
+        storage.delete(key)
+        raise
     return document
-
-
-def create_note(
-    db: Session, patient_id: uuid.UUID, payload: DocumentNoteCreate, user: User
-) -> ClinicalDocument:
-    patient = _authorized_patient(db, patient_id, user, edit=True)
-    staff = clinical_staff(db, user, patient_id, ClinicalAction.EDIT_DOCUMENTS)
-    document = _new_document(db, patient, staff.id, DocumentKind.NOTE, payload.title)
-    db.add(
-        ClinicalDocumentVersion(
-            document_id=document.id,
-            clinic_id=document.clinic_id,
-            patient_id=document.patient_id,
-            author_staff_id=staff.id,
-            version=1,
-            content=payload.content,
-        )
-    )
-    _notify_patient(db, document, user.full_name, updated=False)
-    db.commit()
-    return get_document(db, document.id, user)
-
-
-def upload_file(
-    db: Session, patient_id: uuid.UUID, title: str, upload: UploadFile, user: User
-) -> ClinicalDocument:
-    patient = _authorized_patient(db, patient_id, user, edit=True)
-    staff = clinical_staff(db, user, patient_id, ClinicalAction.EDIT_DOCUMENTS)
-    storage_key, checksum, size = document_storage.save_pdf(upload)
-    try:
-        title = title.strip()
-        if not title or len(title) > 200:
-            raise HTTPException(status_code=422, detail="Título inválido.")
-        document = _new_document(db, patient, staff.id, DocumentKind.FILE, title.strip())
-        db.add(
-            ClinicalDocumentVersion(
-                document_id=document.id,
-                clinic_id=document.clinic_id,
-                patient_id=document.patient_id,
-                author_staff_id=staff.id,
-                version=1,
-                original_filename=(upload.filename or "document.pdf").strip(),
-                media_type="application/pdf",
-                file_size=size,
-                checksum_sha256=checksum,
-                storage_key=storage_key,
-            )
-        )
-        _notify_patient(db, document, user.full_name, updated=False)
-        db.commit()
-    except Exception:
-        db.rollback()
-        document_storage.delete(storage_key)
-        raise
-    return get_document(db, document.id, user)
-
-
-def update_note(
-    db: Session, document_id: uuid.UUID, payload: DocumentNoteCreate, user: User
-) -> ClinicalDocument:
-    document = get_document(db, document_id, user, for_update=True)
-    if document.kind != DocumentKind.NOTE:
-        raise HTTPException(status_code=409, detail="Apenas notas podem ser editadas como texto.")
-    _authorized_patient(db, document.patient_id, user, edit=True)
-    staff = clinical_staff(db, user, document.patient_id, ClinicalAction.EDIT_DOCUMENTS)
-    new_number = document.current_version + 1
-    document.title = payload.title
-    document.current_version = new_number
-    document.updated_at = datetime.now(UTC)
-    db.add(
-        ClinicalDocumentVersion(
-            document_id=document.id,
-            clinic_id=document.clinic_id,
-            patient_id=document.patient_id,
-            author_staff_id=staff.id,
-            version=new_number,
-            content=payload.content,
-        )
-    )
-    _notify_patient(db, document, user.full_name, updated=True)
-    db.commit()
-    return get_document(db, document.id, user)
-
-
-def update_file(
-    db: Session, document_id: uuid.UUID, title: str, upload: UploadFile, user: User
-) -> ClinicalDocument:
-    document = get_document(db, document_id, user, for_update=True)
-    if document.kind != DocumentKind.FILE:
-        raise HTTPException(status_code=409, detail="Apenas documentos de ficheiro aceitam novos ficheiros.")
-    _authorized_patient(db, document.patient_id, user, edit=True)
-    staff = clinical_staff(db, user, document.patient_id, ClinicalAction.EDIT_DOCUMENTS)
-    title = title.strip()
-    if not title or len(title) > 200:
-        raise HTTPException(status_code=422, detail="Título inválido.")
-    storage_key, checksum, size = document_storage.save_pdf(upload)
-    try:
-        new_number = document.current_version + 1
-        document.title = title
-        document.current_version = new_number
-        document.updated_at = datetime.now(UTC)
-        db.add(
-            ClinicalDocumentVersion(
-                document_id=document.id,
-                clinic_id=document.clinic_id,
-                patient_id=document.patient_id,
-                author_staff_id=staff.id,
-                version=new_number,
-                original_filename=(upload.filename or "document.pdf").strip(),
-                media_type="application/pdf",
-                file_size=size,
-                checksum_sha256=checksum,
-                storage_key=storage_key,
-            )
-        )
-        _notify_patient(db, document, user.full_name, updated=True)
-        db.commit()
-    except Exception:
-        db.rollback()
-        document_storage.delete(storage_key)
-        raise
-    return get_document(db, document.id, user)
-
-
-def read_file(
-    db: Session, document_id: uuid.UUID, version_number: int | None, user: User
-) -> tuple[ClinicalDocumentVersion, bytes]:
-    document = get_document(db, document_id, user)
-    if document.kind != DocumentKind.FILE:
-        raise HTTPException(status_code=409, detail="O documento não contém um ficheiro.")
-    version_number = version_number or document.current_version
-    _, version = get_version(db, document.id, version_number, user)
-    if not version.storage_key:
-        raise HTTPException(status_code=404, detail="Ficheiro não encontrado.")
-    return version, document_storage.read(version.storage_key)
-
-
-def current_patient_id(db: Session, user: User) -> uuid.UUID:
-    if user.role != UserRole.PATIENT:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Apenas pacientes.")
-    patient = (
-        db.query(Patient).filter(Patient.user_id == user.id, Patient.clinic_id == user.clinic_id).first()
-    )
-    if patient is None:
-        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
-    return patient.id

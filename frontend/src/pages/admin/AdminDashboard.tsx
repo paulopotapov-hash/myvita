@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { EmptyState } from '../../components/EmptyState'
 import { useAppointments, usePatients, useStaff } from '../../hooks/useClinicData'
 import { useOwnClinicName } from '../../hooks/useOwnClinicName'
 import { useSession } from '../../hooks/useSession'
@@ -35,11 +36,12 @@ export function AdminDashboard() {
       )}
       {!isLoading && !firstError && (
         <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard label="Pacientes" value={patients.data?.length} />
-          <StatCard label="Equipa" value={staff.data?.length} />
-          <StatCard label="Consultas" value={appointments.data?.length} />
+          <StatCard label="Pacientes carregados" value={patients.data?.length} to="/app/pacientes" />
+          <StatCard label="Equipa" value={staff.data?.length} to="/app/equipa" />
+          <StatCard label="Consultas carregadas" value={appointments.data?.length} to="/app/consultas" />
         </div>
       )}
+      {!isLoading && !firstError && patients.data?.length === 0 && <EmptyState title="Sem pacientes" description="Ainda não existem pacientes nesta clínica." action={<Link to="/app/pacientes" className="font-medium text-teal-700 hover:underline">Abrir pacientes</Link>} />}
 
       <div className="flex flex-wrap gap-3">
         <Link
@@ -65,11 +67,12 @@ export function AdminDashboard() {
   )
 }
 
-function StatCard({ label, value }: { label: string; value: number | undefined }) {
+function StatCard({ label, value, to }: { label: string; value: number | undefined; to: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <Link to={to} className="rounded-xl border border-slate-200 bg-white p-6 transition hover:border-teal-300 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-teal-700">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-1 text-3xl font-semibold text-slate-900">{value ?? '—'}</p>
-    </div>
+      <span className="mt-2 inline-block text-sm font-medium text-teal-700">Abrir →</span>
+    </Link>
   )
 }

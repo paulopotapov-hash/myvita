@@ -123,6 +123,21 @@ def test_patient_pagination_detail_update_and_cross_tenant_isolation(client: Tes
     assert client.get(f"/api/v1/patients/{second['patient_id']}").status_code == 404
 
 
+def test_patient_search_is_paginated_and_tenant_scoped(client: TestClient):
+    first = _tenant(client, "search-a")
+    second = _tenant(client, "search-b")
+    _use(client, first["doctor"])
+    found = client.get("/api/v1/patients?search=Patient%20search-a&page=1&page_size=10")
+    assert found.status_code == 200
+    assert found.headers["x-total-count"] == "1"
+    assert [item["id"] for item in found.json()] == [first["patient_id"]]
+    hidden = client.get("/api/v1/patients?search=Patient%20search-b&page=1&page_size=10")
+    assert hidden.status_code == 200
+    assert hidden.headers["x-total-count"] == "0"
+    assert hidden.json() == []
+    assert second["clinic_id"] != first["clinic_id"]
+
+
 def test_appointment_update_conflict_cancel_and_lifecycle(client: TestClient):
     tenant = _tenant(client, "appointments")
     headers = _use(client, tenant["admin"])
@@ -162,6 +177,40 @@ def test_appointment_update_conflict_cancel_and_lifecycle(client: TestClient):
     )
 
 
+def test_appointment_status_transitions_are_explicit(client: TestClient):
+    tenant = _tenant(client, "appointment-states")
+    headers = _use(client, tenant["admin"])
+    created = client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patient_id": tenant["patient_id"],
+            "staff_id": tenant["staff_id"],
+            "scheduled_at": (datetime.now(UTC) + timedelta(days=3)).isoformat(),
+        },
+    )
+    appointment_id = created.json()["id"]
+    invalid = client.patch(
+        f"/api/v1/appointments/{appointment_id}", headers=headers, json={"status": "completed"}
+    )
+    assert invalid.status_code == 409
+    confirmed = client.patch(
+        f"/api/v1/appointments/{appointment_id}", headers=headers, json={"status": "confirmed"}
+    )
+    assert confirmed.status_code == 200
+    completed = client.patch(
+        f"/api/v1/appointments/{appointment_id}", headers=headers, json={"status": "completed"}
+    )
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "completed"
+    assert (
+        client.patch(
+            f"/api/v1/appointments/{appointment_id}", headers=headers, json={"status": "confirmed"}
+        ).status_code
+        == 409
+    )
+
+
 def test_medical_record_and_medication_are_versioned_and_patient_readable(client: TestClient):
     tenant = _tenant(client, "clinical")
     headers = _use(client, tenant["doctor"])
@@ -175,7 +224,7 @@ def test_medical_record_and_medication_are_versioned_and_patient_readable(client
     updated = client.patch(
         f"/api/v1/medical-records/{record_id}",
         headers=headers,
-        json={"title": "Avaliação", "content": "Conteúdo clínico revisto"},
+        json={"title": "Avaliação", "content": "Conteúdo clínico revisto", "expected_version": 1},
     )
     assert updated.status_code == 200
     assert updated.json()["version"] == 2
@@ -196,8 +245,35 @@ def test_medical_record_and_medication_are_versioned_and_patient_readable(client
     assert client.patch(
         f"/api/v1/medical-records/{record_id}",
         headers=_use(client, tenant["patient"]),
-        json={"title": "Ataque", "content": "Não autorizado"},
+        json={"title": "Ataque", "content": "Não autorizado", "expected_version": 2},
     ).status_code in {403, 404}
+
+
+def test_medical_record_rejects_stale_concurrent_edit(client: TestClient):
+    tenant = _tenant(client, "record-concurrency")
+    headers = _use(client, tenant["doctor"])
+    created = client.post(
+        f"/api/v1/patients/{tenant['patient_id']}/medical-records",
+        headers=headers,
+        json={"title": "Versão inicial", "content": "Conteúdo inicial"},
+    )
+    record_id = created.json()["id"]
+    first = client.patch(
+        f"/api/v1/medical-records/{record_id}",
+        headers=headers,
+        json={"title": "Edição A", "content": "Conteúdo A", "expected_version": 1},
+    )
+    stale = client.patch(
+        f"/api/v1/medical-records/{record_id}",
+        headers=headers,
+        json={"title": "Edição B", "content": "Conteúdo B", "expected_version": 1},
+    )
+    assert first.status_code == 200
+    assert first.json()["version"] == 2
+    assert stale.status_code == 409
+    current = client.get(f"/api/v1/medical-records/{record_id}")
+    assert current.json()["title"] == "Edição A"
+    assert current.json()["version"] == 2
 
 
 def test_clinical_cross_tenant_idor_and_notification_ownership(client: TestClient):

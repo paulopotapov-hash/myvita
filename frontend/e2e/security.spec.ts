@@ -7,11 +7,12 @@ test.describe('route authorization (UX only; the backend decides)', () => {
   test.describe('as the patient', () => {
     test.use({ storageState: authState('patient') })
 
+    // Merged frontend (Parent B base): patients live under /patient; any staff area sends them home.
     for (const path of ['/app/pacientes', '/app/equipa', '/app/contas']) {
       test(`is sent back to the dashboard from ${path}`, async ({ page }) => {
         await page.goto(path)
-        await expect(page).toHaveURL(/\/app$/)
-        await expect(page.getByRole('heading', { level: 1 })).toContainText(seed.names.patient)
+        await expect(page).toHaveURL(/\/patient$/)
+        await expect(page.getByRole('heading', { level: 1 })).toContainText(seed.names.patient.split(' ')[0])
       })
     }
   })
@@ -19,7 +20,7 @@ test.describe('route authorization (UX only; the backend decides)', () => {
   test.describe('as a doctor', () => {
     test.use({ storageState: authState('doctor') })
 
-    for (const path of ['/app/equipa', '/app/contas', '/app/saude']) {
+    for (const path of ['/app/equipa', '/app/contas', '/patient/saude']) {
       test(`is sent back to the dashboard from ${path}`, async ({ page }) => {
         await page.goto(path)
         await expect(page).toHaveURL(/\/app$/)
@@ -31,7 +32,7 @@ test.describe('route authorization (UX only; the backend decides)', () => {
     test.use({ storageState: authState('clinic_admin') })
 
     test('is sent back to the dashboard from the patient-only health page', async ({ page }) => {
-      await page.goto('/app/saude')
+      await page.goto('/patient/saude')
       await expect(page).toHaveURL(/\/app$/)
     })
 

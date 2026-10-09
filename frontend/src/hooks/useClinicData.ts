@@ -3,15 +3,27 @@ import { appointmentsService } from '../services/appointments'
 import { clinicsService } from '../services/clinics'
 import { patientsService } from '../services/patients'
 import { staffService } from '../services/staff'
-import type { AppointmentCreateRequest, AppointmentUpdateRequest, PatientUpdateRequest } from '../types/api'
+import type { AppointmentCreateRequest, AppointmentUpdateRequest, PatientUpdateRequest, StaffCreateRequest, StaffRole } from '../types/api'
 
-/** Public clinic directory — used by the patient sign-up clinic picker.
- * No auth required, matches GET /api/v1/clinics being an open endpoint. */
+/** Clinics the caller may see: allowlisted public clinics (only while public
+ * registration is on) plus their own. First page only (backend default 50);
+ * visibility is decided by the backend, never here. */
 export function useClinics() {
   return useQuery({
     queryKey: ['clinics'],
     queryFn: ({ signal }) => clinicsService.list(signal),
     staleTime: 5 * 60_000, // clinic directory changes rarely
+  })
+}
+
+/** One clinic under the same backend visibility policy (404 when not visible). */
+export function useClinic(clinicId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['clinics', clinicId],
+    queryFn: ({ signal }) => clinicsService.get(clinicId as string, signal),
+    enabled: Boolean(clinicId),
+    staleTime: 5 * 60_000,
+    retry: false,
   })
 }
 
@@ -25,10 +37,21 @@ export function usePatients(enabled = true) {
   })
 }
 
-export function usePatientsPage(page: number, pageSize: number) {
+export function usePatientsPage(page: number, pageSize: number, search = '') {
   return useQuery({
-    queryKey: ['patients', 'page', page, pageSize],
-    queryFn: ({ signal }) => patientsService.listPage(page, pageSize, signal),
+    queryKey: ['patients', 'page', page, pageSize, search.trim()],
+    queryFn: ({ signal }) => search.trim()
+      ? patientsService.search(search.trim(), page, pageSize, signal)
+      : patientsService.listPage(page, pageSize, signal),
+  })
+}
+
+export function usePatientSearch(search: string, page = 1, pageSize = 20) {
+  const normalized = search.trim()
+  return useQuery({
+    queryKey: ['patients', 'search', normalized, page, pageSize],
+    queryFn: ({ signal }) => patientsService.search(normalized, page, pageSize, signal),
+    enabled: normalized.length > 0,
   })
 }
 
@@ -59,12 +82,47 @@ export function useStaff() {
   })
 }
 
+export function useCreateStaff() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: StaffCreateRequest) => staffService.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] })
+    },
+  })
+}
+
+export function useSetStaffActive() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      active ? staffService.activate(id) : staffService.deactivate(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff'] }),
+  })
+}
+
+export function useUpdateStaffRole() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, staffRole, specialty }: { id: string; staffRole: StaffRole; specialty?: string }) =>
+      staffService.updateRole(id, staffRole, specialty),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff'] }),
+  })
+}
+
 /** Scoped entirely server-side (own record for patients, own clinic for
  * staff/admin) — see backend/app/modules/appointments/service.py. */
 export function useAppointments() {
   return useQuery({
     queryKey: ['appointments'],
     queryFn: ({ signal }) => appointmentsService.list(signal),
+  })
+}
+
+export function useAppointmentsPage(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['appointments', 'page', page, pageSize],
+    queryFn: ({ signal }) => appointmentsService.listPage(page, pageSize, signal),
   })
 }
 

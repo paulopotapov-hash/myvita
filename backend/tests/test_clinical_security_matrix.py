@@ -7,6 +7,7 @@ Every actor is a real logged-in user of one of two clinics, on the real
 PostgreSQL schema.
 """
 
+import uuid
 from dataclasses import dataclass
 
 import pytest
@@ -91,7 +92,7 @@ def _requests(tenant: Tenant, seed: Seed) -> list[tuple[str, str, str, dict | No
             "record update",
             "PATCH",
             f"/api/v1/medical-records/{seed.record}",
-            {"title": "INJECTED", "content": "INJECTED"},
+            {"title": "INJECTED", "content": "INJECTED", "expected_version": 1},
         ),
         ("record revisions", "GET", f"/api/v1/medical-records/{seed.record}/revisions", None),
         ("medication list", "GET", f"/api/v1/patients/{pid}/medications", None),
@@ -138,7 +139,15 @@ def _assert_untouched(client: TestClient, tenant: Tenant, seed: Seed) -> None:
     consents = client.get(f"/api/v1/patients/{tenant.patient_id}/consents").json()
     assert [(row["id"], row["status"]) for row in consents] == [(seed.consent, "granted")]
     notifications = client.get("/api/v1/notifications").json()
-    assert [(row["id"], row["is_read"]) for row in notifications] == [(seed.notification, False)]
+    # Booking also produces an automatic appointment notification (P2 notifications);
+    # the seeded one must still be there, unread, and every row must belong to this clinic.
+    assert (seed.notification, False) in [(row["id"], row["is_read"]) for row in notifications]
+    with client.session_factory() as db:  # type: ignore[attr-defined]
+        clinics = {
+            str(row.clinic_id)
+            for row in db.query(Notification).filter(Notification.id.in_([uuid.UUID(r["id"]) for r in notifications]))
+        }
+    assert clinics == {tenant.clinic_id}
 
 
 def _db_rows(client: TestClient, model):
@@ -287,7 +296,8 @@ def test_patient_identity_is_authoritative_for_patient_detail_ids(client: TestCl
 def test_staff_never_see_or_consume_a_patients_notifications(client: TestClient, world: World):
     for role in ("doctor", "nurse", "admin", "clinic_admin"):
         headers = world.a.act(client, role)
-        assert client.get("/api/v1/notifications").json() == []
+        # Staff may have their own (appointment) notifications, never the patient's.
+        assert world.seed_a.notification not in [row["id"] for row in client.get("/api/v1/notifications").json()]
         response = client.post(f"/api/v1/notifications/{world.seed_a.notification}/read", headers=headers)
         assert response.status_code == 404
     _assert_untouched(client, world.a, world.seed_a)
@@ -428,7 +438,9 @@ def test_each_clinic_lists_only_its_own_data(client: TestClient, world: World):
         consents = client.get(f"/api/v1/patients/{tenant.patient_id}/consents").json()
         assert [row["id"] for row in consents] == [seed.consent]
         notifications = client.get("/api/v1/notifications").json()
-        assert [row["id"] for row in notifications] == [seed.notification]
+        assert seed.notification in [row["id"] for row in notifications]
+        assert other.notification not in [row["id"] for row in notifications]
+        assert not any(SECRET in row["title"] and other.notification == row["id"] for row in notifications)
 
 
 def test_foreign_ids_inside_request_bodies_cannot_cross_tenants(client: TestClient, world: World):
@@ -486,9 +498,9 @@ def test_foreign_ids_inside_request_bodies_cannot_cross_tenants(client: TestClie
     ("path_template", "body"),
     [
         ("/api/v1/appointments/{appointment}", {"clinic_id": "{other_clinic}"}),
-        ("/api/v1/medical-records/{record}", {"title": "x", "content": "y", "clinic_id": "{other_clinic}"}),
-        ("/api/v1/medical-records/{record}", {"title": "x", "content": "y", "patient_id": "{other_patient}"}),
-        ("/api/v1/medical-records/{record}", {"title": "x", "content": "y", "author_staff_id": "{other_staff}"}),
+        ("/api/v1/medical-records/{record}", {"title": "x", "content": "y", "expected_version": 1, "clinic_id": "{other_clinic}"}),
+        ("/api/v1/medical-records/{record}", {"title": "x", "content": "y", "expected_version": 1, "patient_id": "{other_patient}"}),
+        ("/api/v1/medical-records/{record}", {"title": "x", "content": "y", "expected_version": 1, "author_staff_id": "{other_staff}"}),
         ("/api/v1/medications/{medication}", {"clinic_id": "{other_clinic}"}),
         ("/api/v1/medications/{medication}", {"patient_id": "{other_patient}"}),
         ("/api/v1/medications/{medication}", {"prescribed_by_staff_id": "{other_staff}"}),
@@ -539,7 +551,7 @@ def test_notification_scoping_ignores_rows_whose_clinic_does_not_match_the_user(
     headers = world.a.act(client, "patient")
     listed = client.get("/api/v1/notifications")
     assert stray_id not in listed.text
-    assert listed.headers["x-total-count"] == "1"
+    assert listed.headers["x-total-count"] == str(len(listed.json()))
     assert client.post(f"/api/v1/notifications/{stray_id}/read", headers=headers).status_code == 404
 
 

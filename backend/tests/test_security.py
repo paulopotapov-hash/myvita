@@ -13,6 +13,10 @@ def test_password_is_hashed_not_stored_plain():
     assert hashed.startswith("$argon2")
 
 
+def test_password_hash_uses_the_argon2id_variant():
+    assert hash_password("SenhaForte123!").startswith("$argon2id$")
+
+
 def test_verify_password_correct_and_incorrect():
     hashed = hash_password("SenhaForte123!")
     assert verify_password("SenhaForte123!", hashed) is True
