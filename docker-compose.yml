@@ -23,6 +23,7 @@ services:
       - ./backend/.env
     environment:
       ALLOWED_HOSTS: '["localhost","127.0.0.1","testserver","backend"]'
+      ALLOW_PUBLIC_PATIENT_REGISTRATION: "false"
     depends_on:
       db:
         condition: service_healthy
