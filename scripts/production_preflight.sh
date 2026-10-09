@@ -39,6 +39,14 @@ done
 [ "$PRIVACY_FINGERPRINT_KEY" != "$JWT_SECRET_KEY" ] && [ "$PRIVACY_FINGERPRINT_KEY" != "$MFA_ENCRYPTION_KEY" ] || {
     echo "BLOCKED: PRIVACY_FINGERPRINT_KEY must differ from JWT_SECRET_KEY and MFA_ENCRYPTION_KEY" >&2; exit 1;
 }
+if [ "${OFFSITE_BACKUP_ENABLED:-false}" = "true" ]; then
+    [[ "${OFFSITE_AGE_RECIPIENT:-}" =~ age1[02-9ac-hj-np-z]{58} ]] || {
+        echo "BLOCKED: OFFSITE_AGE_RECIPIENT must hold the age public key used to encrypt off-site backups" >&2; exit 1;
+    }
+    [ "${OFFSITE_ALLOW_PLAINTEXT:-false}" != "true" ] || {
+        echo "BLOCKED: OFFSITE_ALLOW_PLAINTEXT must not be enabled in production" >&2; exit 1;
+    }
+fi
 
 docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml config --quiet
 docker run --rm --entrypoint /bin/promtool \

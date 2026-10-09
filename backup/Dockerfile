@@ -1,6 +1,6 @@
 FROM postgres:16-alpine
 
-RUN apk add --no-cache aws-cli bash coreutils tzdata
+RUN apk add --no-cache age aws-cli bash coreutils tzdata
 
 COPY scripts/backup_db.sh scripts/restore_db.sh scripts/prune_backups.sh scripts/check_backup.sh \
      scripts/backup_documents.sh scripts/restore_documents.sh scripts/verify_documents_storage.sh \

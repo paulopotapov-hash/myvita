@@ -108,6 +108,7 @@ s3_env=(
 in_backup() { # run a shipped script inside the shipped backup image
     local script="$1"; shift
     docker run --rm --network "$net" --entrypoint "/opt/myvita/${script}" "${s3_env[@]}" "${EXTRA_ENV[@]}" \
+        -v "${work}/age.key:/run/myvita-age.key:ro" -e OFFSITE_AGE_IDENTITY_FILE=/run/myvita-age.key \
         -v "${work}/backups:/backups" "$backup_image" "$@"
 }
 EXTRA_ENV=(-e "DR_TEST=1")
@@ -116,6 +117,13 @@ step "Building images"
 docker build -q -f "${repo_root}/backup/Dockerfile" -t "$backup_image" "$repo_root" >/dev/null
 docker build -q -t "$backend_image" "${repo_root}/backend" >/dev/null
 myvita_owner="$(docker run --rm --entrypoint sh "$backend_image" -c 'echo "$(id -u myvita):$(id -g myvita)"')"
+# Test-only age key pair, generated inside the shipped image. Uploads only see
+# the public key (as in production); downloads mount the private key.
+docker run --rm --entrypoint age-keygen "$backup_image" > "${work}/age.key" 2>/dev/null
+chmod 644 "${work}/age.key"
+age_recipient="$(awk '/^# public key: /{print $4}' "${work}/age.key")"
+[[ "$age_recipient" == age1* ]] || die "could not generate a test age key"
+s3_env+=(-e "OFFSITE_AGE_RECIPIENT=${age_recipient}")
 
 step "Starting isolated infrastructure (network ${net})"
 docker network create "$net" >/dev/null
@@ -197,9 +205,13 @@ grep -q 'BACKUP_STATUS postgres=OK documents=OK' "${work}/check.log" || die "che
 docker run --rm --network "$net" --entrypoint aws "${s3_env[@]}" -e AWS_DEFAULT_REGION=us-east-1 "$backup_image" \
     --endpoint-url "http://${s3}:8333" s3api list-objects-v2 --bucket "$bucket" --prefix myvita/ --query 'Contents[].Key' --output text \
     | tr '\t' '\n' | sort | tee "${work}/objects.txt"
-grep -qE '^myvita/postgres/myvita_[0-9]{8}T[0-9]{6}Z\.dump\.sha256$' "${work}/objects.txt" || die "postgres objects missing"
-grep -qE '^myvita/documents/myvita_documents_[0-9]{8}T[0-9]{6}Z\.tar\.gz\.sha256$' "${work}/objects.txt" || die "documents objects missing"
-grep -qvE '\.(dump|tar\.gz|sha256)$' "${work}/objects.txt" && die "unexpected objects were uploaded"
+grep -qE '^myvita/postgres/myvita_[0-9]{8}T[0-9]{6}Z\.dump\.age\.sha256$' "${work}/objects.txt" || die "postgres objects missing"
+grep -qE '^myvita/documents/myvita_documents_[0-9]{8}T[0-9]{6}Z\.tar\.gz\.age\.sha256$' "${work}/objects.txt" || die "documents objects missing"
+grep -qvE '\.(dump|tar\.gz)\.age(\.sha256)?$' "${work}/objects.txt" && die "unexpected (unencrypted?) objects were uploaded"
+first_object="$(grep -E '\.dump\.age$' "${work}/objects.txt" | head -n1)"
+docker run --rm --network "$net" --entrypoint sh "${s3_env[@]}" -e AWS_DEFAULT_REGION=us-east-1 "$backup_image" -c \
+    "aws --endpoint-url \$OFFSITE_S3_ENDPOINT s3 cp s3://${bucket}/${first_object} - | head -c 21" > "${work}/header.txt"
+[ "$(cat "${work}/header.txt")" = "age-encryption.org/v1" ] || die "off-site dump is not age-encrypted"
 
 step "Off-site failure cases"
 dump_name="$(basename "$(find "${work}/backups" -maxdepth 1 -name 'myvita_[0-9]*.dump' | head -n1)")"
@@ -222,11 +234,16 @@ docker run --rm --network "$net" --entrypoint aws "${s3_env[@]}" -e AWS_DEFAULT_
     --endpoint-url "http://${s3}:8333" s3api list-objects-v2 --bucket "$bucket" --query 'Contents[].Key' --output text \
     | tr '\t' '\n' > "${work}/after-prune.txt"
 grep -q '^other-app/myvita_20000101T000000Z.dump$' "${work}/after-prune.txt" || die "retention deleted outside the prefix"
-grep -q "^myvita/postgres/${dump_name}$" "${work}/after-prune.txt" || die "retention deleted the newest backup"
+grep -q "^myvita/postgres/${dump_name}.age$" "${work}/after-prune.txt" || die "retention deleted the newest backup"
 in_backup check_offsite_bucket.sh > "${work}/bucket.log" 2>&1 || true
 grep -q 'OFFSITE_BUCKET bucket=myvita-dr-test versioning=' "${work}/bucket.log" || die "bucket protection report missing"
 grep -q 'versioning=Enabled' "${work}/bucket.log" && die "test bucket must not be reported as versioned"
 cat "${work}/bucket.log"
+
+expect_failure "encrypted download without the private key" docker run --rm --network "$net" \
+    --entrypoint /opt/myvita/download_offsite_backup.sh "${s3_env[@]}" -v "${work}/backups:/backups" "$backup_image" \
+    "myvita/postgres/${dump_name}.age" /backups/nokey-check
+grep -q 'OFFSITE_AGE_IDENTITY_FILE' "${work}/last.log" || die "missing key was not reported"
 
 step "DISASTER: destroying the source database, documents volume and local backups"
 docker rm -f "$src_api" "$src_db" >/dev/null

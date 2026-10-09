@@ -33,6 +33,10 @@ export PGPASSFILE=/run/myvita/pgpass
 if [ "${OFFSITE_BACKUP_ENABLED:-false}" = "true" ]; then
     : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required when off-site backup is enabled}"
     : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required when off-site backup is enabled}"
+    if [ -z "${OFFSITE_AGE_RECIPIENT:-}" ] && [ "${OFFSITE_ALLOW_PLAINTEXT:-false}" != "true" ]; then
+        echo "ERROR: OFFSITE_AGE_RECIPIENT (age public key) is required when off-site backup is enabled: backups are encrypted before upload." >&2
+        exit 1
+    fi
     cat > /run/myvita/aws_credentials <<EOF
 [default]
 aws_access_key_id=${AWS_ACCESS_KEY_ID}
@@ -65,6 +69,8 @@ OFFSITE_S3_ENDPOINT=${OFFSITE_S3_ENDPOINT:-}
 OFFSITE_S3_REGION=${OFFSITE_S3_REGION:-us-east-1}
 OFFSITE_S3_SSE=${OFFSITE_S3_SSE:-AES256}
 OFFSITE_RETENTION_DAYS=${OFFSITE_RETENTION_DAYS:-30}
+OFFSITE_AGE_RECIPIENT=${OFFSITE_AGE_RECIPIENT:-}
+OFFSITE_ALLOW_PLAINTEXT=${OFFSITE_ALLOW_PLAINTEXT:-false}
 AWS_SHARED_CREDENTIALS_FILE=/run/myvita/aws_credentials
 ${BACKUP_SCHEDULE} /opt/myvita/run_scheduled_backup.sh >> /proc/1/fd/1 2>> /proc/1/fd/2
 EOF

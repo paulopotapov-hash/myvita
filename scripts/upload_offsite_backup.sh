@@ -6,6 +6,15 @@
 #   myvita_<ts>.dump                  -> s3://$OFFSITE_S3_BUCKET/$OFFSITE_S3_PREFIX/postgres/
 #   myvita_documents_<ts>.tar.gz      -> s3://$OFFSITE_S3_BUCKET/$OFFSITE_S3_PREFIX/documents/
 #
+# Client-side encryption: backups contain health data, so every object is
+# encrypted with age (https://age-encryption.org) BEFORE it leaves the host
+# and stored as <name>.age. OFFSITE_AGE_RECIPIENT holds one or more age public
+# keys (space or comma separated, e.g. one per operator). The private keys
+# never live on the server; restoring needs one of them
+# (download_offsite_backup.sh, OFFSITE_AGE_IDENTITY_FILE). The .sha256 sidecar
+# is the checksum of the encrypted object. Without a recipient the upload is
+# refused, unless OFFSITE_ALLOW_PLAINTEXT=true (test stores only).
+#
 # The local checksum and archive are verified first; the data object is
 # uploaded before its .sha256, so a sidecar off-site always means the data
 # upload finished. Both objects' sizes are checked after upload. Local files
@@ -42,9 +51,39 @@ else
         || { echo "ERROR: documents archive is not readable; nothing was uploaded." >&2; exit 1; }
 fi
 
+recipients="${OFFSITE_AGE_RECIPIENT:-}"
+age_args=()
+for recipient in ${recipients//,/ }; do
+    if ! [[ "$recipient" =~ ^age1[02-9ac-hj-np-z]{58}$ ]]; then
+        echo "ERROR: OFFSITE_AGE_RECIPIENT contains an invalid age public key; nothing was uploaded." >&2; exit 1
+    fi
+    age_args+=(-r "$recipient")
+done
+upload_source="$backup_file"
+upload_checksum="$checksum_file"
+suffix=""
+if [ "${#age_args[@]}" -gt 0 ]; then
+    command -v age >/dev/null || { echo "ERROR: age is not installed; nothing was uploaded." >&2; exit 1; }
+    work_dir="$(mktemp -d "$(dirname "$backup_file")/.offsite-upload.XXXXXX")"
+    trap 'rm -rf "$work_dir"' EXIT
+    chmod 700 "$work_dir"
+    encrypted="${work_dir}/${name}.age"
+    (umask 077 && age "${age_args[@]}" -o "$encrypted" "$backup_file") \
+        || { echo "ERROR: encryption failed; nothing was uploaded." >&2; exit 1; }
+    [ "$(head -c 21 "$encrypted")" = "age-encryption.org/v1" ] \
+        || { echo "ERROR: encrypted output is not an age file; nothing was uploaded." >&2; exit 1; }
+    (cd "$work_dir" && sha256sum "${name}.age" > "${name}.age.sha256")
+    upload_source="$encrypted"
+    upload_checksum="${encrypted}.sha256"
+    suffix=".age"
+elif [ "${OFFSITE_ALLOW_PLAINTEXT:-false}" != "true" ]; then
+    echo "ERROR: OFFSITE_AGE_RECIPIENT is required: backups contain health data and must be encrypted before upload. (OFFSITE_ALLOW_PLAINTEXT=true is for test stores only.)" >&2
+    exit 1
+fi
+
 prefix="${OFFSITE_S3_PREFIX:-myvita}"
 prefix="${prefix#/}"; prefix="${prefix%/}"
-object_key="${prefix}/${kind}/${name}"
+object_key="${prefix}/${kind}/${name}${suffix}"
 checksum_key="${object_key}.sha256"
 aws_cmd() {
     if [ -n "${OFFSITE_S3_ENDPOINT:-}" ]; then aws --endpoint-url "$OFFSITE_S3_ENDPOINT" "$@"; else aws "$@"; fi
@@ -69,19 +108,21 @@ remote_size() {
 }
 export AWS_DEFAULT_REGION="${OFFSITE_S3_REGION:-us-east-1}"
 
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-site upload started: kind=${kind} file=${name}"
-upload_object "$backup_file" "s3://${OFFSITE_S3_BUCKET}/${object_key}" \
+encryption=none
+[ -z "$suffix" ] || encryption=age
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-site upload started: kind=${kind} file=${name} encryption=${encryption}"
+upload_object "$upload_source" "s3://${OFFSITE_S3_BUCKET}/${object_key}" \
     || { echo "ERROR: off-site upload failed: ${object_key}" >&2; exit 1; }
-upload_object "$checksum_file" "s3://${OFFSITE_S3_BUCKET}/${checksum_key}" \
+upload_object "$upload_checksum" "s3://${OFFSITE_S3_BUCKET}/${checksum_key}" \
     || { echo "ERROR: off-site checksum upload failed: ${checksum_key}" >&2; exit 1; }
 
-local_size="$(wc -c < "$backup_file" | tr -d ' ')"
+local_size="$(wc -c < "$upload_source" | tr -d ' ')"
 if [ "$(remote_size "$object_key")" != "$local_size" ]; then
     echo "ERROR: off-site object size verification failed: ${object_key}" >&2
     exit 1
 fi
-if [ "$(remote_size "$checksum_key")" != "$(wc -c < "$checksum_file" | tr -d ' ')" ]; then
+if [ "$(remote_size "$checksum_key")" != "$(wc -c < "$upload_checksum" | tr -d ' ')" ]; then
     echo "ERROR: off-site checksum size verification failed: ${checksum_key}" >&2
     exit 1
 fi
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-site upload completed successfully: key=${object_key} size=${local_size}"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-site upload completed successfully: key=${object_key} size=${local_size} encryption=${encryption}"

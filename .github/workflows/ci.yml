@@ -82,6 +82,9 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Install age (client-side backup encryption)
+        run: sudo apt-get update && sudo apt-get install -y age
+
       - name: Backup script safety tests
         run: |
           bash ../scripts/test_backup_scripts.sh

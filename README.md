@@ -179,7 +179,7 @@ DB_HOST=localhost DB_PORT=5432 DB_NAME=myvita DB_USER=myvita PGPASSWORD=... \
 
 Os documentos privados (volume `myvita_documents`) não estão no `pg_dump`: o serviço de backup arquiva-os no mesmo agendamento (`myvita_documents_<ts>.tar.gz`, montagem só de leitura) e envia ambos para off-site em `<prefix>/postgres/` e `<prefix>/documents/`. Restauro de documentos, modelo de consistência BD↔ficheiros e verificação de órfãos: [`docs/p7-backup-and-restore.md`](docs/p7-backup-and-restore.md).
 
-O volume PostgreSQL (`myvita_pg_data`) **não é um backup**. O volume separado `myvita_backups` permite recuperar de uma migration ou `DELETE` acidental, mas continua no mesmo host. Não protege contra perda, corrupção ou comprometimento do host; cópias off-site ficam deliberadamente para P2.2. Os backups também não são cifrados pela aplicação, portanto o acesso ao host e ao volume deve ser restrito.
+O volume PostgreSQL (`myvita_pg_data`) **não é um backup**. O volume separado `myvita_backups` permite recuperar de uma migration ou `DELETE` acidental, mas continua no mesmo host. Não protege contra perda, corrupção ou comprometimento do host; cópias off-site ficam deliberadamente para P2.2. Os backups locais não são cifrados pela aplicação (ficam no volume encriptado do host); as cópias off-site são cifradas com `age` antes de sair do host (`OFFSITE_AGE_RECIPIENT`, ver `docs/p7-backup-and-restore.md`).
 
 **Verificado operacionalmente** (não é só "os scripts existem"):
 - `backup_db.sh` falha com código de saída 1 e sem ficheiro parcial quando o Postgres está inacessível (testado apontando para uma porta fechada).

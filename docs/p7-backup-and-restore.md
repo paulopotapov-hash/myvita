@@ -79,14 +79,25 @@ Any S3 API provider works through the bundled AWS CLI: AWS S3, Cloudflare R2, Mi
 | `OFFSITE_S3_BUCKET`, `OFFSITE_S3_PREFIX` (default `myvita`) | Destination; the prefix must be a plain non-empty path |
 | `OFFSITE_S3_ENDPOINT` | Required for non-AWS providers (`https://…`) |
 | `OFFSITE_S3_REGION` | Region (`us-east-1` default) |
-| `OFFSITE_S3_SSE` | `AES256` (default), `aws:kms`, or `none` for providers without SSE-S3 |
+| `OFFSITE_AGE_RECIPIENT` | **Required.** age public key(s) (`age1…`, space/comma separated) used to encrypt every object before upload |
+| `OFFSITE_ALLOW_PLAINTEXT` | `false`. `true` only for test stores; refused by `production_preflight.sh` |
+| `OFFSITE_S3_SSE` | `AES256` (default), `aws:kms`, or `none` for providers without SSE-S3 (defence in depth on top of client-side encryption) |
 | `OFFSITE_RETENTION_DAYS` | Default 30 |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (`AWS_SESSION_TOKEN`) | A **backup-only** identity limited to the prefix; never the application's or an admin's credentials |
 
-Object layout: `<prefix>/postgres/myvita_<ts>.dump(.sha256)` and `<prefix>/documents/myvita_documents_<ts>.tar.gz(.sha256)`. Older flat keys (`<prefix>/myvita_<ts>.dump`) are still downloadable and pruned.
+Object layout: `<prefix>/postgres/myvita_<ts>.dump.age(.sha256)` and `<prefix>/documents/myvita_documents_<ts>.tar.gz.age(.sha256)`; the sidecar is the checksum of the encrypted object. Older unencrypted keys (`….dump`, flat `<prefix>/myvita_<ts>.dump`) are still downloadable and pruned.
+
+### Client-side encryption (age)
+
+Backups contain health data, so they are encrypted with [age](https://age-encryption.org) **before** leaving the host. The server only holds public keys; a leaked bucket, provider breach or stolen S3 credentials do not expose patient data. Restoring requires one of the private keys, which never live on the server.
+
+1. On an operator laptop: `age-keygen -o myvita-backup-<name>.key` (one key per founder/operator is recommended). Store the file in the shared password manager and, ideally, a printed copy in a safe. **Losing every private key makes every off-site backup unrecoverable.**
+2. Put the public key(s) (`age-keygen -y myvita-backup-<name>.key`) in `OFFSITE_AGE_RECIPIENT`.
+3. To restore, mount one private key read-only into the backup container and set `OFFSITE_AGE_IDENTITY_FILE` to its path. Remove it from the host when the restore is done.
+4. Rotation: add the new public key, wait until every retained object was written with it (`OFFSITE_RETENTION_DAYS`), then remove the old one and destroy the old private key.
 
 - **Upload** (`upload_offsite_backup.sh <file>`):
-  1. Verifies the local checksum and archive.
+  1. Verifies the local checksum and archive, then encrypts to `<name>.age` (refuses to upload without `OFFSITE_AGE_RECIPIENT`).
   2. Uploads the data, then its sidecar. A sidecar off-site therefore means the data upload completed.
   3. Checks both remote sizes and reports the object key.
 
@@ -97,9 +108,9 @@ Object layout: `<prefix>/postgres/myvita_<ts>.dump(.sha256)` and `<prefix>/docum
   docker compose -f docker-compose.prod.yml exec -T backup /opt/myvita/upload_offsite_backup.sh /backups/myvita_documents_<ts>.tar.gz
   ```
 
-- **Download** (`download_offsite_backup.sh <key> [dir]`, or `--latest [dir]` for the newest dump and the newest documents archive): verifies the digest and archive before publishing anything. Existing files are never overwritten.
+- **Download** (`download_offsite_backup.sh <key> [dir]`, or `--latest [dir]` for the newest dump and the newest documents archive): verifies the digest of the encrypted object, decrypts it with `OFFSITE_AGE_IDENTITY_FILE`, verifies the dump/archive and only then publishes it under its plain name. A missing or wrong key fails without publishing anything. Existing files are never overwritten.
 - **Retention** (`prune_offsite_backups.sh`) deletes only exact myVita backup names under `<prefix>/` whose embedded timestamp is older than `OFFSITE_RETENTION_DAYS`. It always keeps the newest dump and the newest documents archive, and never touches other prefixes or names.
-- **Encryption and immutability** are provider settings. myVita requests SSE (unless `none`) but does not encrypt client-side and does not change bucket configuration. `check_offsite_bucket.sh` reports what the provider actually has: `OFFSITE_BUCKET … versioning=Enabled|Suspended|Disabled object_lock=Enabled|Disabled`. It exits non-zero unless versioning is enabled. Production should enable versioning and object lock/WORM with a retention at least as long as `OFFSITE_RETENTION_DAYS`, TLS-only access and provider audit logs. Do not describe backups as immutable unless that check shows object lock.
+- **Immutability** is a provider setting. myVita encrypts client-side (age), additionally requests SSE (unless `none`) and does not change bucket configuration. `check_offsite_bucket.sh` reports what the provider actually has: `OFFSITE_BUCKET … versioning=Enabled|Suspended|Disabled object_lock=Enabled|Disabled`. It exits non-zero unless versioning is enabled. Production should enable versioning and object lock/WORM with a retention at least as long as `OFFSITE_RETENTION_DAYS`, TLS-only access and provider audit logs. Do not describe backups as immutable unless that check shows object lock.
 
 ## Verification
 
@@ -150,7 +161,7 @@ docker run --rm -v <project>_myvita_backups:/backups:ro -v <project>_myvita_docu
 **Complete host loss:**
 1. Provision a host and deploy the same release and secrets (`docs/p7-deployment-runbook.md`).
 2. Start only `db`.
-3. Run `download_offsite_backup.sh --latest /backups/recovery` (from `docker compose run --rm --no-deps --entrypoint /opt/myvita/download_offsite_backup.sh backup …`).
+3. Fetch an age private key from the password manager, mount it read-only and set `OFFSITE_AGE_IDENTITY_FILE`; run `download_offsite_backup.sh --latest /backups/recovery` (from `docker compose run --rm --no-deps --entrypoint /opt/myvita/download_offsite_backup.sh backup …`).
 4. Run `verify_restore.sh` on the set.
 5. Restore the database with `--yes` into the empty database, then restore the documents into the empty volume as above.
 6. Run `migrate`, `verify_documents_storage.sh` and `check_backup.sh`.

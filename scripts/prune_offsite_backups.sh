@@ -8,6 +8,7 @@
 #       <prefix>/myvita_<ts>.dump                         (legacy flat layout)
 #       <prefix>/postgres/myvita_<ts>.dump
 #       <prefix>/documents/myvita_documents_<ts>.tar.gz
+#     each optionally with the .age suffix of client-side encrypted backups,
 #   - carry a UTC timestamp in their name older than OFFSITE_RETENTION_DAYS.
 # The newest PostgreSQL dump and the newest documents archive are always kept,
 # however old. Each deleted object's .sha256 sidecar is deleted with it.
@@ -41,8 +42,8 @@ keys="$(printf '%s\n' "$listing" | tr '\t' '\n' | sed '/^None$/d;/^$/d')"
 
 removed=0
 kept=0
-for kind_re in "^${escaped_prefix}/(postgres/)?myvita_[0-9]{8}T[0-9]{6}Z\.dump$" \
-               "^${escaped_prefix}/documents/myvita_documents_[0-9]{8}T[0-9]{6}Z\.tar\.gz$"; do
+for kind_re in "^${escaped_prefix}/(postgres/)?myvita_[0-9]{8}T[0-9]{6}Z\.dump(\.age)?$" \
+               "^${escaped_prefix}/documents/myvita_documents_[0-9]{8}T[0-9]{6}Z\.tar\.gz(\.age)?$"; do
     # "<timestamp> <key>", oldest first.
     candidates="$(printf '%s\n' "$keys" | grep -E "$kind_re" \
         | sed -E 's#^(.*([0-9]{8}T[0-9]{6}Z).*)$#\2 \1#' | sort || true)"

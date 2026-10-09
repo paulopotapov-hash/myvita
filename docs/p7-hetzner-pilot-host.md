@@ -19,7 +19,8 @@ Ficheiros: `deploy/host/` (cloud-init, encriptação do volume, TLS, wrapper `my
 3. **Chave SSH** própria (`ssh-keygen -t ed25519`), só a parte pública vai para o cloud-init.
 4. **Passphrase LUKS** gerada e guardada num gestor de passwords partilhado pelos dois fundadores.
 5. **Bucket de backups off-site** (Hetzner Object Storage noutra localização, ou outro fornecedor S3 na UE) com credenciais limitadas a esse bucket.
-6. **Destino de alertas** (email ou webhook) e quem responde — ver `alertmanager.yml` (`pending-human-destination`).
+6. **Chaves de encriptação dos backups**: cada fundador corre `age-keygen -o myvita-backup-<nome>.key` no seu portátil, guarda o ficheiro no gestor de passwords e põe as chaves públicas (`age-keygen -y …`) em `OFFSITE_AGE_RECIPIENT`. A chave privada nunca vai para o servidor. Sem nenhuma chave privada, os backups off-site são irrecuperáveis.
+7. **Destino de alertas** (email ou webhook) e quem responde — ver `alertmanager.yml` (`pending-human-destination`).
 
 ## Passos
 
@@ -43,7 +44,7 @@ Ficheiros: `deploy/host/` (cloud-init, encriptação do volume, TLS, wrapper `my
 
 ## Riscos conhecidos (não resolvidos aqui)
 
-- **Backups off-site sem encriptação do lado do cliente.** `upload_offsite_backup.sh` depende de SSE do fornecedor; se o fornecedor não suportar SSE (`OFFSITE_S3_SSE=none`), os dumps com dados de saúde ficam em claro no bucket. Recomendado antes de dados reais: encriptar o dump antes do upload (ex.: `age` com chave pública; chave privada fora do servidor).
+- ~~Backups off-site sem encriptação do lado do cliente~~ — resolvido: cifrados com `age` antes do upload (`docs/p7-backup-and-restore.md#client-side-encryption-age`).
 - **Disco raiz não encriptado** (SO e imagens apenas; nenhum dado de paciente deve ir para lá — verificar com `docker info | grep "Docker Root Dir"`).
 - **Reboot = indisponibilidade até desbloqueio manual.** Aceitável para um piloto; não para escala.
 - `sudo` sem password para `myvita-ops` (acesso só por chave SSH). Rever quando houver mais operadores.
