@@ -1,0 +1,11 @@
+# HTTPS overlay for a single host with a Let's Encrypt certificate managed by
+# deploy/host/tls/issue_certificate.sh. Certificate material is copied to
+# /srv/myvita-data/tls (encrypted volume) and never enters Git.
+# Paths are relative to the project directory (the repository root).
+services:
+  proxy:
+    ports:
+      - "443:8443"
+    volumes:
+      - ./proxy/nginx.tls.conf.template.example:/etc/nginx/templates/default.conf.template:ro
+      - /srv/myvita-data/tls:/etc/nginx/tls:ro

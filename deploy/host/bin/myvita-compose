@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Single entry point for operating the MyVita production stack on the host.
+#   myvita-compose ps | logs -f backend | pull | up -d --no-build | stop proxy ...
+set -euo pipefail
+REPO_DIR="${MYVITA_REPO_DIR:-/opt/myvita}"
+ENV_FILE="${MYVITA_ENV_FILE:-/srv/myvita-data/config/.env.production}"
+
+if ! mountpoint -q /srv/myvita-data; then
+    echo "ERROR: /srv/myvita-data is not mounted. Run unlock_and_start.sh first." >&2
+    exit 1
+fi
+[ -r "$ENV_FILE" ] || { echo "ERROR: env file $ENV_FILE not readable." >&2; exit 1; }
+
+files=(-f docker-compose.prod.yml -f docker-compose.monitoring.yml
+       -f deploy/host/docker-compose.tls-letsencrypt.yml)
+if [ "${MYVITA_USE_REGISTRY:-0}" = 1 ]; then
+    files+=(-f docker-compose.registry.yml.example)
+fi
+
+cd "$REPO_DIR"
+exec docker compose --env-file "$ENV_FILE" -p myvita "${files[@]}" "$@"

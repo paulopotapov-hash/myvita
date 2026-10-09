@@ -1,0 +1,106 @@
+#cloud-config
+# MyVita pilot host bootstrap (Ubuntu 24.04 LTS, Hetzner Cloud or any VPS).
+# Paste into "Cloud config" when creating the server.
+# Replace <PASTE_YOUR_SSH_PUBLIC_KEY> before use. Nothing secret lives here.
+#
+# What this does: named admin user with SSH key only, root/password SSH off,
+# UTC + NTP, automatic security patches (no automatic reboot), fail2ban,
+# host firewall, Docker Engine + Compose v2 with log rotation and
+# data-root on the encrypted volume. Docker is left DISABLED on purpose:
+# it only starts after the encrypted volume is unlocked
+# (deploy/host/setup_encrypted_storage.sh, then unlock_and_start.sh).
+
+timezone: Etc/UTC
+disable_root: true
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+
+users:
+  - name: myvita-ops
+    shell: /bin/bash
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - <PASTE_YOUR_SSH_PUBLIC_KEY>
+
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - git
+  - jq
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - chrony
+  - cryptsetup
+  - certbot
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-myvita.conf
+    permissions: "0644"
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+      AllowUsers myvita-ops
+      MaxAuthTries 3
+      LoginGraceTime 30
+      X11Forwarding no
+  - path: /etc/apt/apt.conf.d/52myvita-unattended
+    permissions: "0644"
+    content: |
+      // Security patches install automatically. No automatic reboot:
+      // after a reboot the encrypted volume must be unlocked by an operator.
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "data-root": "/srv/myvita-data/docker",
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "5" },
+        "live-restore": true,
+        "no-new-privileges": true
+      }
+  - path: /etc/fail2ban/jail.d/sshd.local
+    permissions: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      maxretry = 5
+      bantime = 1h
+
+runcmd:
+  # Docker Engine + Compose v2 from Docker's official apt repository.
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - sh -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list'
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker myvita-ops
+  # Docker must not run (or write data) before the encrypted volume is mounted.
+  - systemctl stop docker.service docker.socket
+  - systemctl disable docker.service docker.socket
+  - rm -rf /srv/myvita-data/docker
+  - mkdir -p /srv/myvita-data && chmod 0700 /srv/myvita-data
+  # Host firewall. Docker publishes 80/443 itself (it bypasses ufw for
+  # published ports), so the Hetzner Cloud Firewall is the primary
+  # perimeter; ufw is defence in depth for anything else on the host.
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw limit 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - systemctl enable --now chrony fail2ban unattended-upgrades
+  - systemctl restart ssh
+  # Code lives here (not secret). Secrets live on the encrypted volume.
+  - git clone https://github.com/paulopotapov-hash/myvita /opt/myvita || true
+  - chown -R myvita-ops:myvita-ops /opt/myvita
+  - install -m 0755 /opt/myvita/deploy/host/bin/myvita-compose /usr/local/bin/myvita-compose || true
