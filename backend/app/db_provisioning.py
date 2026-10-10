@@ -12,11 +12,17 @@ Idempotent: safe to run on every deployment. The runtime role ends up with:
   cannot create, alter or drop objects;
 - SELECT/INSERT/UPDATE/DELETE on application tables (including tables
   created by future migrations, via default privileges);
-- SELECT/INSERT only on audit_logs and documents — it can append to each but
-  never edit, delete or truncate them (a database trigger also stops
-  accidental audit-history rewrites; documents are append-only by decision D3);
+- SELECT/INSERT only on audit_logs, documents and medical_record_revisions —
+  it can append to each but never edit, delete or truncate them (a database
+  trigger also stops accidental audit-history rewrites; documents are
+  append-only by decision D3; record revisions are the edit and sharing
+  history of medical records, P2.5);
 - SELECT/INSERT plus column-level UPDATE (no DELETE) on conversations,
-  messages, invitations and appointment_requests (see COLUMN_UPDATE_TABLES);
+  messages, invitations, appointment_requests, medical_records and
+  clinical_results (see COLUMN_UPDATE_TABLES). For clinical results this means
+  a result can never be deleted or moved to another patient, clinic, author or
+  correction chain by the app role; that a RELEASED result is never updated
+  or deleted is enforced by a table trigger (migration 8d9e0f1a2b3c);
 - no privilege at all on the deprecated Parent A tables (NO_ACCESS_TABLES);
 - SELECT only on alembic_version.
 
@@ -32,15 +38,47 @@ from sqlalchemy import String, create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
-APPEND_ONLY_TABLES = ("audit_logs", "documents")
+APPEND_ONLY_TABLES = ("audit_logs", "documents", "medical_record_revisions")
 READ_ONLY_TABLES = ("alembic_version",)
 # Tables the app inserts into and updates only specific columns of (column-level UPDATE,
 # no DELETE). Each column list is exactly what the services write, including onupdate columns.
 COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
-    "conversations": ("updated_at",),
+    "conversations": (
+        "updated_at",
+        "status",
+        "needs_doctor_review",
+        "escalated_at",
+        "escalated_by_staff_id",
+        "closed_at",
+        "closed_by_staff_id",
+    ),
     "messages": ("read_at",),
     "invitations": ("status", "accepted_at"),
     "appointment_requests": ("status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at"),
+    "medical_records": (
+        "title",
+        "content",
+        "version",
+        "patient_visibility",
+        "visibility_changed_at",
+        "visibility_changed_by_staff_id",
+        "updated_at",
+    ),
+    "clinical_results": (
+        "category",
+        "title",
+        "value",
+        "unit",
+        "reference_range",
+        "summary",
+        "result_date",
+        "document_id",
+        "correction_reason",
+        "status",
+        "released_at",
+        "released_by_staff_id",
+        "updated_at",
+    ),
 }
 # Deprecated tables kept by integration decision (app/core/schema_policy.py): the app never
 # touches them, so the runtime role gets no privilege at all on them.

@@ -1,12 +1,14 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../lib/apiClient'
 import { AppointmentsPage } from './AppointmentsPage'
 
-const { appointmentState, cancelMutate, createMutate, updateMutate, patientSearchQuery } = vi.hoisted(() => ({
+const { appointmentState, cancelMutate, createMutate, updateMutate, patientSearchQuery, sessionState, staffQueryEnabled } = vi.hoisted(() => ({
   appointmentState: { rows: [] as Array<Record<string, unknown>> },
+  sessionState: { patient: false },
+  staffQueryEnabled: [] as Array<boolean | undefined>,
   cancelMutate: vi.fn(),
   createMutate: vi.fn(),
   updateMutate: vi.fn(),
@@ -17,7 +19,9 @@ const { appointmentState, cancelMutate, createMutate, updateMutate, patientSearc
 vi.mock('../../components/AppointmentRequestsPanel', () => ({ AppointmentRequestsPanel: () => null }))
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({
-    user: { id: 'doctor-1', email: 'doctor@example.pt', full_name: 'Doctor', role: 'staff', clinic_id: 'clinic-1', staff_role: 'doctor', patient_id: null },
+    user: sessionState.patient
+      ? { id: 'patient-user-1', email: 'ana@example.pt', full_name: 'Ana', role: 'patient', clinic_id: 'clinic-1', staff_role: null, patient_id: 'patient-1' }
+      : { id: 'doctor-1', email: 'doctor@example.pt', full_name: 'Doctor', role: 'staff', clinic_id: 'clinic-1', staff_role: 'doctor', patient_id: null },
   }),
 }))
 
@@ -25,7 +29,10 @@ vi.mock('../../hooks/useClinicData', () => ({
   useAppointmentsPage: () => ({ data: { items: appointmentState.rows, total: appointmentState.rows.length }, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
   usePatients: () => ({ data: [{ id: 'patient-1', full_name: 'Ana' }], isLoading: false, isError: false }),
   usePatientSearch: (...args: unknown[]) => patientSearchQuery(...args),
-  useStaff: () => ({ data: [{ id: 'staff-1', full_name: 'Dr. Rui' }], isLoading: false, isError: false }),
+  useStaff: (enabled?: boolean) => {
+    staffQueryEnabled.push(enabled)
+    return { data: enabled === false ? undefined : [{ id: 'staff-1', full_name: 'Dr. Rui' }], isLoading: false, isError: false }
+  },
   useCreateAppointment: () => ({ mutate: createMutate, isPending: false }),
   useUpdateAppointment: () => ({ mutate: updateMutate, isPending: false }),
   useCancelAppointment: () => ({ mutate: cancelMutate, isPending: false }),
@@ -186,5 +193,30 @@ describe('AppointmentsPage clinical workflow', () => {
     const cancelOptions = cancelMutate.mock.calls.at(-1)?.[1] as { onSuccess: () => void }
     act(() => cancelOptions.onSuccess())
     expect(await screen.findByRole('status')).toHaveTextContent('Consulta cancelada.')
+  })
+
+  describe('as the patient', () => {
+    beforeEach(() => {
+      sessionState.patient = true
+      staffQueryEnabled.length = 0
+    })
+    afterEach(() => {
+      sessionState.patient = false
+    })
+
+    it('names the professional from the patient view, without the staff roster or internal ids', async () => {
+      appointmentState.rows = [{
+        view: 'patient', id: 'appointment-9', staff_name: 'Dra. Rita Sousa',
+        scheduled_at: '2026-10-20T10:30:00Z', duration_minutes: 30, status: 'scheduled', reason: 'Controlo',
+      }]
+      const user = userEvent.setup()
+      renderPage()
+      expect(screen.getByText('Com Dra. Rita Sousa')).toBeInTheDocument()
+      // The roster endpoint answers 404 to patients, so it is never requested for them.
+      expect(staffQueryEnabled).not.toContain(true)
+      expect(staffQueryEnabled).toContain(false)
+      await user.click(screen.getByRole('button', { name: 'Detalhes' }))
+      expect(screen.getByRole('dialog')).toHaveTextContent('Dra. Rita Sousa')
+    })
   })
 })

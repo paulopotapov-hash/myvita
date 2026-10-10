@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { apiAs, apiStatus, loadSeed, switchRole } from './support'
 
-// Rewritten at integration (Phase 6) for the merged messaging model: Parent B's one-to-one
-// threads with decisions M1-M6. Parent A's spec covered the shared inbox, subject, status and
-// escalation, which are on the post-pilot roadmap.
+// Care-team messaging (docs/clinical-messaging.md): threads opened by staff, shared by the
+// patient's active care team (team inbox), nurse escalation, doctor close/reopen, M1-M6.
 const seed = loadSeed()
 const firstMessage = 'Queremos saber como tem corrido a recuperação.'
 const reply = 'A recuperação está a correr bem.'
@@ -63,7 +62,41 @@ test.describe.serial('clinical messaging', () => {
     expect(await apiStatus('patient', 'GET', '/api/v1/staff')).toBe(404)
   })
 
-  test('a professional whose assignment ended is denied and the thread turns read-only for the patient', async ({ page }) => {
+  test('the care team shares the inbox: a nurse asks for review, a doctor closes and reopens', async ({ page }) => {
+    // The nurse sees the doctor's thread and the patient's reply (team inbox).
+    await switchRole(page.context(), 'nurse')
+    await page.goto(`/app/mensagens/${doctorThread}`)
+    await expect(page.getByText(reply)).toBeVisible()
+    await page.getByRole('button', { name: 'Pedir revisão médica' }).click()
+    await expect(page.getByText(/Revisão médica pedida/).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Encerrar conversa' })).toHaveCount(0)
+
+    // The doctor is notified generically and closes the conversation after confirming.
+    await switchRole(page.context(), 'doctor')
+    await page.goto('/app/notificacoes')
+    const review = page.getByRole('listitem').filter({ hasText: 'Conversa para revisão médica' }).first()
+    await expect(review).not.toContainText(reply)
+    await review.getByRole('link', { name: 'Abrir conversa' }).click()
+    await expect(page).toHaveURL(new RegExp(`/app/mensagens/${doctorThread}$`))
+    await page.getByRole('button', { name: 'Encerrar conversa' }).click()
+    await page.getByRole('alertdialog', { name: 'Encerrar conversa' }).getByRole('button', { name: 'Encerrar' }).click()
+    await expect(page.getByRole('button', { name: 'Reabrir conversa' })).toBeVisible()
+
+    // Closed is read-only for the patient, enforced by the backend.
+    await switchRole(page.context(), 'patient')
+    await page.goto(`/patient/mensagens/${doctorThread}`)
+    await expect(page.getByRole('status').filter({ hasText: 'Esta conversa foi encerrada pela equipa clínica.' })).toBeVisible()
+    await expect(page.getByLabel('Mensagem', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/Revisão médica/)).toHaveCount(0)
+    expect(await apiStatus('patient', 'POST', `/api/v1/conversations/${doctorThread}/messages`, { body: 'Olá?' })).toBe(403)
+
+    await switchRole(page.context(), 'doctor')
+    await page.goto(`/app/mensagens/${doctorThread}`)
+    await page.getByRole('button', { name: 'Reabrir conversa' }).click()
+    await expect(page.getByLabel('Mensagem', { exact: true })).toBeVisible()
+  })
+
+  test('a professional whose assignment ended loses access; the patient still reaches the remaining team', async ({ page }) => {
     const opened = await apiAs<{ id: string }>('nurse', 'POST', '/api/v1/conversations', { patient_id: seed.patientIds.patient })
     nurseThread = opened!.id
     await apiAs('nurse', 'POST', `/api/v1/conversations/${nurseThread}/messages`, { body: 'Mensagem da enfermagem E2E.' })
@@ -78,15 +111,15 @@ test.describe.serial('clinical messaging', () => {
     await page.goto('/app/mensagens')
     await expect(page.getByRole('link', { name: new RegExp(seed.names.patient) })).toHaveCount(0)
 
-    // M2: the patient keeps the history but cannot write into a thread nobody can read.
+    // The doctor is still on the care team, so the patient keeps the history and can still
+    // write: the doctor reads it in the team inbox. (With nobody left on the team the thread
+    // turns read-only (M2); covered by backend tests, since it would empty the shared seed's team.)
     await switchRole(page.context(), 'patient')
     await page.goto(`/patient/mensagens/${nurseThread}`)
     await expect(page.getByText('Mensagem da enfermagem E2E.')).toBeVisible()
-    await expect(
-      page.getByRole('status').filter({ hasText: 'Esta conversa já não está activa. Para continuar, contacte a clínica.' }),
-    ).toBeVisible()
-    await expect(page.getByLabel('Mensagem', { exact: true })).toHaveCount(0)
-    expect(await apiStatus('patient', 'POST', `/api/v1/conversations/${nurseThread}/messages`, { body: 'Olá?' })).toBe(403)
+    await expect(page.getByLabel('Mensagem', { exact: true })).toBeVisible()
+    expect(await apiStatus('patient', 'POST', `/api/v1/conversations/${nurseThread}/messages`, { body: 'Olá, equipa.' })).toBe(201)
+    expect(await apiStatus('doctor', 'GET', `/api/v1/conversations/${nurseThread}`)).toBe(200)
 
     // The doctor's thread with the same patient is unaffected.
     await page.goto(`/patient/mensagens/${doctorThread}`)

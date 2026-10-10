@@ -97,16 +97,48 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml exec 
   promtool check rules /etc/prometheus/alerts.yml
 ```
 
-## Alerting (P2.4)
+## Alerting
 
-Rules define `critical` and `warning` severities:
+Rules (`monitoring/alerts.yml`, unit-tested in `monitoring/alerts.test.yml`) define two severities:
 
-- critical: proxy/backend/database down, backend not ready, local/off-site backup missing, stale, or failed, disk above 95%;
-- warning: 5xx ratio above 5% for 10 minutes with meaningful traffic, disk above 85%, memory above 90%, CPU above 85%, PostgreSQL connections above 80%, repeated container restarts.
+- **critical:** proxy, backend or database down; backend not ready; document storage unwritable; public HTTPS failing; TLS certificate within 7 days of expiry; local or off-site backup missing, stale or failed; disk above 95%; Alertmanager unable to deliver.
+- **warning:** 5xx ratio above 5%; disk, memory, CPU or PostgreSQL connections high; repeated container restarts; e-mail delivery failing; certificate within 21 days of expiry; no public HTTPS probe configured; recovery verification failed or stale.
 
-Durations in `monitoring/alerts.yml` deliberately avoid alerting on short restarts. Tune them only from observed load and incident history.
+Durations deliberately avoid alerting on short restarts. Tune them from observed load and incident history only.
 
-Alertmanager is intentionally provisioned with a receiver that has no external destination. Configure email, PagerDuty, Slack, Teams, or another approved human channel using deployment secrets before declaring P2.4 complete. Do not commit webhook URLs or SMTP passwords. After configuration, fire a controlled alert, confirm human delivery, recover the service, and confirm a resolved notification.
+### Human alert delivery
+
+Alertmanager renders its receivers at start (`monitoring/alertmanager/render-and-run.sh`) from the environment and from secret files. No address, URL or password is committed.
+
+| Setting | Purpose |
+|---|---|
+| `ALERT_DELIVERY` | `email`, `webhook` or `email+webhook`. `unconfigured` starts with no human receiver, logs a loud warning, and is refused by the preflight. |
+| `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM`, `ALERT_SMTP_SMARTHOST`, `ALERT_SMTP_USERNAME` | E-mail receiver. TLS is required. |
+| `ALERT_SECRETS_DIR` | Directory outside the repository, mounted read-only, holding `smtp_password`, `webhook_url` and `heartbeat_url`. |
+
+- **Routing.** Grouped by alert name and severity. Critical alerts repeat hourly, warnings every 4 hours. Resolved notifications are sent. A critical disk alert inhibits the matching warning.
+- **Heartbeat (dead man's switch).** The always-firing `Watchdog` alert is sent every minute to `heartbeat_url`, an external heartbeat service. That service must page a human when the pings **stop**, because a dead Prometheus, Alertmanager, host or network cannot report its own failure. Configure it with a few minutes of grace.
+- **Delivery failures.** `MyVitaAlertDeliveryFailing` fires when any integration fails to send. Because it travels through the same receivers, configure both e-mail and webhook where possible; the heartbeat covers total loss.
+- **Network.** Alertmanager is the only monitoring container with outbound access (`alert-egress` network).
+- **Validation.** `scripts/test_alertmanager_config.sh` renders every mode and validates it with `amtool`. The preflight renders the real configuration.
+
+**Before go-live (external, not done):**
+
+1. Choose the on-call destination(s).
+2. Create the heartbeat check at an external service.
+3. Fill `ALERT_SECRETS_DIR`.
+4. Fire a controlled alert (stop the backend container only), confirm that a human received it, restore, and confirm the resolved notification.
+5. Stop Alertmanager and confirm the heartbeat service pages.
+6. Record the evidence.
+
+Until then, human alert delivery is **not operational**.
+
+### Acknowledging and responding to alerts
+
+1. **Acknowledge** in the on-call channel within the agreed time, stating who owns it. To stop repeats during work, create a silence with an expiry and a reason: Alertmanager UI through an SSH tunnel, or `amtool silence add` inside the container. Never silence `Watchdog`.
+2. **Assess** with the dashboard and the scenario guidance below. Follow `incident-response.md` when data, credentials or availability are at risk.
+3. **Resolve** and confirm the resolved notification. Expire any silence you created.
+4. **Record** the alert, the timeline and the cause. Tune or fix a rule that was noisy or late; do not just mute it.
 
 Controlled detection test:
 
@@ -115,7 +147,27 @@ Controlled detection test:
 3. Start the backend again and confirm the probes return to `1` and alerts resolve.
 4. For backup alert testing, point `BACKUP_METRICS_DIR` at a temporary directory and use `write_backup_metrics.sh local-failure`; do not corrupt a real backup.
 
+## Environment, external services and startup
+
+- **Variables.** Every production variable is listed with placeholders in `.env.production.example`. Secrets and their rotation are in `p7-secret-management.md`. The backend refuses to start with insecure production settings (`app/core/config.py`). Run `scripts/production_preflight.sh` before every deployment.
+- **External services**, all still to be provided:
+  - DNS name and host;
+  - ACME CA (Let's Encrypt), see `tls-certificates.md`;
+  - S3-compatible off-site bucket with object lock, see `p7-backup-and-restore.md`;
+  - SMTP relay for account e-mails, see `email-delivery.md`;
+  - alert e-mail relay and/or incident webhook, plus a heartbeat service, see above;
+  - optional SIEM endpoint, see `audit-logging.md`.
+- **Startup.**
+  1. `docker compose -f docker-compose.prod.yml -f docker-compose.prod-tls.yml -f docker-compose.monitoring.yml up -d`.
+  2. The one-shot `migrate` service runs `alembic upgrade head` and provisions the least-privilege runtime role (`app/db_provisioning.py`) before the backend starts.
+  3. Check `/health` (liveness) and `/ready` (database) through the proxy, then run `scripts/production_smoke.sh`.
+- **Migrations.** Back up first. Migrations run forward only in normal operation. Some downgrades refuse when they would expose or destroy clinical data (for example `6b7c8d9e0f1a`); read a migration's docstring before any rollback.
+- **Shutdown.** `docker compose ... stop` (the backend has a 30 s grace period). Never use `down -v` on production volumes.
+- **Health endpoints** return only a status word. They never return versions, hostnames, paths, secrets or patient data. Document-storage writability is exposed as an internal metric only.
+
 ## Incident response
+
+The full runbook, including credential compromise, data exposure, failed restores and notification failures, is [`incident-response.md`](incident-response.md). Summary:
 
 1. **Detect:** acknowledge the alert and identify severity, affected component, start time, and current user impact.
 2. **Confirm:** check independent health probes, recent deployment changes, logs by request ID, host resources, database health, and backup freshness. Do not copy sensitive payloads into tickets/chat.
@@ -154,7 +206,7 @@ Defects found and fixed during the drill: the disk alerts and dashboard counted 
 
 Known limits (not closed by this phase):
 
-- Alertmanager has no real receiver (`pending-human-destination`); a staffed email/webhook receiver is required before a pilot.
+- Alertmanager receivers are now configurable (e-mail/webhook plus external heartbeat), but no real destination has been configured or tested; human delivery remains unverified.
 - Backups and the database share one host and the backup container holds both database and off-site credentials; a real off-site bucket with prefix-scoped, write-only credentials, encryption and retention policy is still to be provisioned and tested.
 - Logs live only in rotated container logs; central aggregation and a retention period are undecided. Metrics have request counts and duration sum/count, but no latency histogram, so there is no p95 alert.
-- TLS, Secure cookies, JSON production logs and a real staging deployment are unverified (Phase 3 is blocked on infrastructure).
+- TLS configuration, renewal and certificate monitoring are prepared (`tls-certificates.md`) but unverified on a real domain; Secure cookies, JSON production logs and a real staging deployment are likewise unverified.

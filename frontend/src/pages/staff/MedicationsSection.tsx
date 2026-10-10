@@ -22,7 +22,7 @@ import {
 } from '../../lib/medicationPayloads'
 import { medicationFormSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { MedicationFormValues } from '../../lib/validation'
-import type { MedicationPublic, MedicationStatus } from '../../types/api'
+import type { MedicationFields, MedicationStatus } from '../../types/api'
 import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
 
 const FORM_FIELDS = ['name', 'dosage', 'route', 'frequency', 'instructions', 'start_date', 'end_date'] as const
@@ -49,7 +49,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
   const create = useCreateMedication(patientId)
   const update = useUpdateMedication(patientId)
   const deactivate = useDeactivateMedication(patientId)
-  const [editing, setEditing] = useState<MedicationPublic | null>(null)
+  const [editing, setEditing] = useState<MedicationFields | null>(null)
   const [form, setForm] = useState<MedicationFormValues>(EMPTY_MEDICATION_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const formRef = useFocusFirstInvalid(errors)
@@ -68,7 +68,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
     setErrors({})
   }
 
-  function startEdit(medication: MedicationPublic) {
+  function startEdit(medication: MedicationFields) {
     setEditing(medication)
     setForm(medicationToForm(medication))
     setErrors({})
@@ -114,7 +114,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
     })
   }
 
-  function finish(medication: MedicationPublic, outcome: keyof typeof FINISH_COPY) {
+  function finish(medication: MedicationFields, outcome: keyof typeof FINISH_COPY) {
     if (busy) return
     if (!window.confirm(`${FINISH_COPY[outcome].confirm} (${medication.name})`)) return
     setSuccess('')

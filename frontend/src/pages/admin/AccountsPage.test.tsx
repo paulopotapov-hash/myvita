@@ -80,6 +80,7 @@ describe('AccountsPage', () => {
       user_id: 'nurse',
       token: 'tok_123',
       expires_at: '2026-10-06T12:00:00Z',
+      delivery: 'failed',
     })
     const user = userEvent.setup()
     renderPage()
@@ -88,6 +89,8 @@ describe('AccountsPage', () => {
 
     expect(usersService.issuePasswordReset).toHaveBeenCalledWith('nurse')
     expect(await screen.findByText(`${window.location.origin}/redefinir-palavra-passe#token=tok_123`)).toBeInTheDocument()
+    // A failed e-mail is never presented as sent; the admin hands the link over.
+    expect(screen.getByText(/Não foi possível enviar o email/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Fechar' }))
     expect(screen.queryByText(/tok_123/)).not.toBeInTheDocument()
   })

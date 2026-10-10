@@ -3,7 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.models import AuditAction, AuditLog
+from app.models import AuditAction, AuditLog, Consent
 
 
 def _identity(response) -> dict[str, str]:
@@ -64,7 +64,14 @@ def test_authorized_creation_validation_and_audit(client: TestClient):
     response = _grant(client, tenant)
     assert response.status_code == 201
     body = response.json()
-    assert body["clinic_id"] == tenant["clinic_id"]
+    # The patient view omits internal ids; the stored consent is scoped to the patient's clinic.
+    assert "clinic_id" not in body
+    db = client.session_factory()
+    try:
+        stored = db.get(Consent, uuid.UUID(body["id"]))
+        assert str(stored.clinic_id) == tenant["clinic_id"]
+    finally:
+        db.close()
     assert body["status"] == "granted"
     assert body["revoked_at"] is None
     assert body["policy_version"] is None

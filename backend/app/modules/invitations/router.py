@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import audit_request, client_ip, record_audit_event
 from app.core.clinical_access import ClinicalAction, clinical_staff
 from app.core.database import get_db
+from app.core.email import deliver, invitation_email
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, INVITATION_PUBLIC_RATE_LIMIT, limiter
 from app.core.security import require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, User, UserRole
@@ -39,6 +40,7 @@ def _audit(
     action: AuditAction,
     invitation_id: uuid.UUID,
     clinic_id: uuid.UUID,
+    metadata: dict[str, object] | None = None,
 ) -> None:
     audit_request(
         request,
@@ -47,6 +49,7 @@ def _audit(
         clinic_id=clinic_id,
         resource_type="invitation",
         resource_id=invitation_id,
+        metadata=metadata,
     )
 
 
@@ -70,9 +73,12 @@ def invite_staff(
         staff_role=payload.staff_role,
         specialty=payload.specialty,
     )
-    _audit(request, admin, AuditAction.INVITATION_CREATED, invitation.id, invitation.clinic_id)
-    public = InvitationCreated.model_validate({**invitation.__dict__, "token": token})
-    return public
+    # Committed first: a failed e-mail never undoes the invitation; the admin can share the link.
+    delivery = deliver(invitation_email(invitation.email, token))
+    _audit(
+        request, admin, AuditAction.INVITATION_CREATED, invitation.id, invitation.clinic_id, {"delivery": delivery}
+    )
+    return InvitationCreated.model_validate({**invitation.__dict__, "token": token, "delivery": delivery})
 
 
 @router.post("/patients", response_model=InvitationCreated, status_code=status.HTTP_201_CREATED)
@@ -95,8 +101,11 @@ def invite_patient(
         full_name=payload.full_name,
         role=UserRole.PATIENT,
     )
-    _audit(request, actor, AuditAction.INVITATION_CREATED, invitation.id, invitation.clinic_id)
-    return InvitationCreated.model_validate({**invitation.__dict__, "token": token})
+    delivery = deliver(invitation_email(invitation.email, token))
+    _audit(
+        request, actor, AuditAction.INVITATION_CREATED, invitation.id, invitation.clinic_id, {"delivery": delivery}
+    )
+    return InvitationCreated.model_validate({**invitation.__dict__, "token": token, "delivery": delivery})
 
 
 @router.post("/preview", response_model=InvitationPreview)

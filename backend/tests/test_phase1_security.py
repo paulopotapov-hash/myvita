@@ -504,7 +504,8 @@ def _rows(world: World):
             "GET",
             f"/api/v1/medical-records/{res['record']}/revisions",
             None,
-            (403, 200, 200, 403, 200, 404, 401),
+            # P2.5: the edit history is internal to the care team, even for a shared record.
+            (403, 200, 200, 403, 404, 404, 401),
         ),
         (
             "record update (stale version)",
@@ -708,7 +709,16 @@ def test_patient_never_sees_staff_only_or_administrative_data(world: World):
         assert patient.get(path).status_code in {403, 405}
     listing = patient.get("/api/v1/appointments").json()
     assert patient.res["appointment"] in [a["id"] for a in listing]
-    assert all(a["patient_id"] == patient.patient_id for a in listing)
+    # The patient view has no patient_id; prove the scope from the stored rows instead.
+    assert all(a["view"] == "patient" and "patient_id" not in a for a in listing)
+    with world.db() as db:
+        owners = {
+            str(owner)
+            for owner in db.scalars(
+                select(Appointment.patient_id).where(Appointment.id.in_([uuid.UUID(a["id"]) for a in listing]))
+            )
+        }
+    assert owners == {patient.patient_id}
     blob = " ".join(
         patient.get(p).text
         for p in (

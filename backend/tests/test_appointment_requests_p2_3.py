@@ -88,7 +88,12 @@ def test_patient_request_accept_lifecycle_creates_one_normal_appointment(world: 
 
     appointment = patient.get(f"/api/v1/appointments/{appointment_id}")
     assert appointment.status_code == 200
-    assert appointment.json()["staff_id"] == world.a.doctor.staff_id
+    # Booked with the chosen professional (staff view), shown to the patient by name only.
+    assert world.a.staff_admin.get(f"/api/v1/appointments/{appointment_id}").json()["staff_id"] == world.a.doctor.staff_id
+    with world.db() as db:
+        doctor_name = db.get(User, uuid.UUID(world.a.doctor.user_id)).full_name
+    assert appointment.json()["staff_name"] == doctor_name
+    assert "staff_id" not in appointment.json()
     assert appointment.json()["status"] == "scheduled"
     assert appointment.json()["reason"] == SECRET_REASON
     assert patient.get(BASE).json()[0]["status"] == "accepted"

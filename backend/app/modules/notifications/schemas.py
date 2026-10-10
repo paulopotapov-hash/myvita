@@ -14,4 +14,6 @@ class NotificationPublic(BaseModel):
     target_type: str | None
     target_id: uuid.UUID | None
     conversation_target_id: uuid.UUID | None = None
+    result_target_id: uuid.UUID | None = None
+    record_target_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}

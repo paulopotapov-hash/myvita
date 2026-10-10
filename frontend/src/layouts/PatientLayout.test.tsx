@@ -32,7 +32,7 @@ describe('PatientLayout navigation', () => {
 
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     expect(screen.getByText('Área do paciente')).toBeInTheDocument()
-    for (const name of ['Início', 'Consultas', 'Dados clínicos', 'Perfil', 'Notificações']) {
+    for (const name of ['Início', 'Consultas', 'Dados clínicos', 'Resultados', 'Perfil', 'Notificações']) {
       expect(screen.getAllByRole('link', { name }).length).toBeGreaterThan(0)
     }
     expect(screen.queryByRole('link', { name: 'Pacientes' })).not.toBeInTheDocument()

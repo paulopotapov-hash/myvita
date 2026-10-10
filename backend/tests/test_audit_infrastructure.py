@@ -138,7 +138,11 @@ def test_successful_operation_leaves_an_audit_row(world: World):
     assert created.status_code == 201
     row = _latest(world, AuditAction.MEDICAL_RECORD_CREATED, resource_id=uuid.UUID(created.json()["id"]))
     # `actor_staff_role` is attached centrally for staff actors (app/core/audit.py).
-    assert row.event_metadata == {"patient_id": patient.patient_id, "actor_staff_role": "doctor"}
+    assert row.event_metadata == {
+        "patient_id": patient.patient_id,
+        "visibility": "internal",
+        "actor_staff_role": "doctor",
+    }
 
 
 def test_rolled_back_operation_does_not_claim_success(world: World, monkeypatch):

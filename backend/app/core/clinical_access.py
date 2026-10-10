@@ -34,6 +34,8 @@ class ClinicalAction(str, enum.Enum):
     TRIAGE_CONVERSATIONS = "conversations.triage"
     ESCALATE_CONVERSATIONS = "conversations.escalate"
     MANAGE_CONVERSATIONS = "conversations.manage"
+    VIEW_RESULTS = "results.view"
+    EDIT_RESULTS = "results.edit"
 
 
 # Explicit policy, not a role hierarchy. Doctor and nurse permissions reflect
@@ -56,6 +58,8 @@ _CURRENT_CLINICIAN_ACTIONS = frozenset(
         ClinicalAction.VIEW_CONVERSATIONS,
         ClinicalAction.CREATE_CONVERSATIONS,
         ClinicalAction.REPLY_CONVERSATIONS,
+        ClinicalAction.VIEW_RESULTS,
+        ClinicalAction.EDIT_RESULTS,
     }
 )
 
@@ -84,6 +88,10 @@ PATIENT_OWN_ACTIONS = frozenset(
         ClinicalAction.REPLY_CONVERSATIONS,
         ClinicalAction.VIEW_APPOINTMENTS,
         ClinicalAction.VIEW_APPOINTMENT_REASON,
+        # Released results only, and only patient-shared medical records: the
+        # per-row patient visibility is enforced by the results and medical
+        # records services (P2.4/P2.5), not by this action alone.
+        ClinicalAction.VIEW_RESULTS,
     }
 )
 

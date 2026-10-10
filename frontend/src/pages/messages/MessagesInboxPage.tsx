@@ -10,8 +10,8 @@ import { useConversations, useCreateConversation, usePatientContactSearch } from
 import { useSession } from '../../hooks/useSession'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
-import { canUseMessaging, messagesBasePath, otherParticipantName } from '../../lib/messaging'
-import type { ConversationPublic, UserPublic } from '../../types/api'
+import { canUseMessaging, CONVERSATION_STATUS_LABELS, messagesBasePath, otherParticipantName, patientStatusLabel } from '../../lib/messaging'
+import type { ConversationPublic, ConversationStatus, UserPublic } from '../../types/api'
 
 const PAGE_SIZE = 20
 
@@ -20,7 +20,13 @@ export function MessagesInboxPage() {
   const allowed = canUseMessaging(user)
   const [page, setPage] = useState(1)
   const [composerOpen, setComposerOpen] = useState(false)
-  const conversations = useConversations(page, PAGE_SIZE, allowed)
+  const [statusFilter, setStatusFilter] = useState<ConversationStatus | ''>('')
+  const [needsReview, setNeedsReview] = useState(false)
+  const staffInbox = user?.role === 'staff'
+  const conversations = useConversations(page, PAGE_SIZE, allowed, {
+    status: statusFilter || undefined,
+    needsReview: staffInbox && needsReview,
+  })
 
   if (!user) return null
   if (!allowed) {
@@ -53,6 +59,27 @@ export function MessagesInboxPage() {
       {canStart && composerOpen && <NewConversationPanel basePath={basePath} />}
       <section aria-labelledby="conversations-heading" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
         <h2 id="conversations-heading" className="sr-only">Conversas</h2>
+        {staffInbox && (
+          <div className="mb-4 flex flex-wrap items-end gap-4" role="group" aria-label="Filtros da caixa da equipa">
+            <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+              Estado
+              <select
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-normal"
+                value={statusFilter}
+                onChange={(event) => { setPage(1); setStatusFilter(event.target.value as ConversationStatus | '') }}
+              >
+                <option value="">Todos</option>
+                {(Object.keys(CONVERSATION_STATUS_LABELS) as ConversationStatus[]).map((value) => (
+                  <option key={value} value={value}>{CONVERSATION_STATUS_LABELS[value]}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={needsReview} onChange={(event) => { setPage(1); setNeedsReview(event.target.checked) }} />
+              Só revisão médica pedida
+            </label>
+          </div>
+        )}
         {conversations.isLoading && <LoadingSpinner label="A carregar conversas…" />}
         {conversations.isError && (
           <ErrorState message={toUserMessage(conversations.error)} onRetry={() => conversations.refetch()} />
@@ -112,7 +139,15 @@ function ConversationRow({ conversation, user, basePath }: { conversation: Conve
       >
         <div className="min-w-0">
           <p className={`break-words ${unread ? 'font-semibold text-slate-900' : 'font-medium text-slate-800'}`}>{name}</p>
-          <p className="text-sm text-slate-600">{user.role === 'patient' ? 'Profissional de saúde' : 'Paciente'}</p>
+          <p className="text-sm text-slate-600">{user.role === 'patient' ? 'Equipa clínica' : `Paciente · aberta por ${conversation.staff_name}`}</p>
+          <p className="mt-1 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+              {user.role === 'patient' ? patientStatusLabel(conversation.status) : CONVERSATION_STATUS_LABELS[conversation.status]}
+            </span>
+            {conversation.team?.needs_doctor_review && (
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-900">Revisão médica pedida</span>
+            )}
+          </p>
           <p className="mt-1 text-xs text-slate-600">
             Última atividade: <time dateTime={conversation.updated_at}>{formatDateTime(conversation.updated_at)}</time>
           </p>

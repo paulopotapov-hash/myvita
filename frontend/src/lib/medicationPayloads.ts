@@ -1,5 +1,5 @@
 import type { MedicationFormValues } from './validation'
-import type { MedicationCreateRequest, MedicationPublic, MedicationUpdateRequest } from '../types/api'
+import type { MedicationCreateRequest, MedicationFields, MedicationUpdateRequest } from '../types/api'
 
 export const EMPTY_MEDICATION_FORM: MedicationFormValues = {
   name: '',
@@ -11,7 +11,7 @@ export const EMPTY_MEDICATION_FORM: MedicationFormValues = {
   end_date: '',
 }
 
-export function medicationToForm(medication: MedicationPublic): MedicationFormValues {
+export function medicationToForm(medication: MedicationFields): MedicationFormValues {
   return {
     name: medication.name,
     dosage: medication.dosage,
@@ -37,7 +37,7 @@ export function toCreatePayload(values: MedicationFormValues): MedicationCreateR
 }
 
 /** Sends only what changed; emptied optional fields become `null` (the backend's way to clear them). */
-export function toUpdatePayload(values: MedicationFormValues, original: MedicationPublic): MedicationUpdateRequest {
+export function toUpdatePayload(values: MedicationFormValues, original: MedicationFields): MedicationUpdateRequest {
   const before = medicationToForm(original)
   const payload: MedicationUpdateRequest = {}
   if (values.name !== before.name) payload.name = values.name

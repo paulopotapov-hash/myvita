@@ -5,7 +5,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MESSAGE_MAX_LENGTH } from '../../types/api'
 import { ConversationPage } from './ConversationPage'
 import { DOCTOR_USER, PATIENT_USER, conversation, json, message, mockFetch, renderAt } from './messagesTestUtils'
-import type { MessagePublic } from '../../types/api'
+import type { ConversationPublic, MessagePublic } from '../../types/api'
+
+/** The fake backend keeps who wrote each message; the API only says `is_mine`. */
+type FakeMessage = MessagePublic & { author: string }
+function authored(author: string, overrides: Partial<MessagePublic> = {}): FakeMessage {
+  const patient = author === PATIENT_USER.id
+  return {
+    ...message({ sender_name: patient ? 'Ana Paciente' : 'Dr. Rui', sender_role: patient ? 'patient' : 'doctor', ...overrides }),
+    author,
+  }
+}
+const publicView = ({ author, ...rest }: FakeMessage, currentUserId: string): MessagePublic => ({ ...rest, is_mine: author === currentUserId })
 
 const session = vi.hoisted(() => ({ user: null as unknown }))
 vi.mock('../../hooks/useSession', () => ({ useSession: () => ({ user: session.user }) }))
@@ -23,7 +34,7 @@ afterEach(() => {
 
 /** In-memory backend for one conversation, following the real API's rules. */
 function fakeBackend(
-  options: { currentUserId: string; messages?: MessagePublic[]; sendStatus?: number; canReply?: boolean } = { currentUserId: PATIENT_USER.id },
+  options: { currentUserId: string; messages?: FakeMessage[]; sendStatus?: number; canReply?: boolean; conversation?: Partial<ConversationPublic> } = { currentUserId: PATIENT_USER.id },
 ) {
   const messages = [...(options.messages ?? [])]
   const calls = mockFetch((url, init) => {
@@ -32,9 +43,12 @@ function fakeBackend(
       const page = Number(url.searchParams.get('page'))
       const size = Number(url.searchParams.get('page_size'))
       const newestFirst = [...messages].reverse()
-      const unread = messages.filter((m) => m.sender_user_id !== options.currentUserId && !m.read_at).length
+      const unread = messages.filter((m) => m.author !== options.currentUserId && !m.read_at).length
       return json(
-        { ...conversation({ unread_count: unread, can_reply: options.canReply ?? true }), messages: newestFirst.slice((page - 1) * size, page * size) },
+        {
+          ...conversation({ unread_count: unread, can_reply: options.canReply ?? true, ...options.conversation }),
+          messages: newestFirst.slice((page - 1) * size, page * size).map((m) => publicView(m, options.currentUserId)),
+        },
         200,
         { 'X-Total-Count': String(messages.length) },
       )
@@ -42,7 +56,7 @@ function fakeBackend(
     if (url.pathname === '/api/v1/conversations/conv-1/read' && method === 'POST') {
       let updated = 0
       for (const m of messages) {
-        if (m.sender_user_id !== options.currentUserId && !m.read_at) {
+        if (m.author !== options.currentUserId && !m.read_at) {
           m.read_at = '2026-10-03T09:00:00Z'
           updated += 1
         }
@@ -50,11 +64,12 @@ function fakeBackend(
       return json({ updated_count: updated })
     }
     if (url.pathname === '/api/v1/conversations/conv-1/messages' && method === 'POST') {
+      if (options.sendStatus === 403) return json({ detail: 'Esta conversa já não está activa. Para continuar, contacte a clínica.' }, 403)
       if (options.sendStatus) return json({ detail: 'Demasiados pedidos' }, options.sendStatus)
       const body = JSON.parse(String(init?.body)).body as string
-      const created = message({ id: `msg-${messages.length + 1}`, body, sender_user_id: options.currentUserId, created_at: '2026-10-03T10:00:00Z' })
+      const created = authored(options.currentUserId, { id: `msg-${messages.length + 1}`, body, created_at: '2026-10-03T10:00:00Z' })
       messages.push(created)
-      return json(created, 201)
+      return json(publicView(created, options.currentUserId), 201)
     }
     return undefined
   })
@@ -74,8 +89,8 @@ describe('ConversationPage', () => {
     fakeBackend({
       currentUserId: PATIENT_USER.id,
       messages: [
-        message({ id: 'm1', body: 'Bom dia, como se sente?', sender_user_id: DOCTOR_USER.id, read_at: '2026-10-02T10:00:00Z' }),
-        message({ id: 'm2', body: 'Melhor, obrigado.', sender_user_id: PATIENT_USER.id, created_at: '2026-10-02T11:00:00Z' }),
+        authored(DOCTOR_USER.id, { id: 'm1', body: 'Bom dia, como se sente?', read_at: '2026-10-02T10:00:00Z' }),
+        authored(PATIENT_USER.id, { id: 'm2', body: 'Melhor, obrigado.', created_at: '2026-10-02T11:00:00Z' }),
       ],
     })
     renderAt('/patient/mensagens/conv-1', routes)
@@ -83,7 +98,7 @@ describe('ConversationPage', () => {
     expect(await screen.findByRole('heading', { name: 'Dr. Rui' })).toBeInTheDocument()
     const items = within(screen.getByRole('list', { name: 'Mensagens' })).getAllByRole('article')
     expect(items.map((item) => item.getAttribute('aria-label'))).toEqual([
-      'Mensagem de Dr. Rui',
+      'Mensagem de Dr. Rui · Médico(a)',
       'Mensagem enviada por si',
     ])
     expect(within(items[0]).getByText('Bom dia, como se sente?')).toBeInTheDocument()
@@ -96,7 +111,7 @@ describe('ConversationPage', () => {
     const { calls } = fakeBackend({ currentUserId: DOCTOR_USER.id })
     renderAt('/app/mensagens/conv-1', routes)
     expect(await screen.findByText('Ainda não há mensagens')).toBeInTheDocument()
-    expect(screen.getByText('Conversa com o paciente Ana Paciente')).toBeInTheDocument()
+    expect(screen.getByText('Conversa com o paciente Ana Paciente · aberta por Dr. Rui')).toBeInTheDocument()
     expect(calls.some((call) => call.path.endsWith('/read'))).toBe(false)
   })
 
@@ -105,8 +120,8 @@ describe('ConversationPage', () => {
     const { calls, messages } = fakeBackend({
       currentUserId: PATIENT_USER.id,
       messages: [
-        message({ id: 'm1', body: 'Nova indicação', sender_user_id: DOCTOR_USER.id }),
-        message({ id: 'm2', body: 'Minha mensagem', sender_user_id: PATIENT_USER.id }),
+        authored(DOCTOR_USER.id, { id: 'm1', body: 'Nova indicação' }),
+        authored(PATIENT_USER.id, { id: 'm2', body: 'Minha mensagem' }),
       ],
     })
     renderAt('/patient/mensagens/conv-1', routes)
@@ -176,7 +191,7 @@ describe('ConversationPage', () => {
     const { calls } = fakeBackend({
       currentUserId: PATIENT_USER.id,
       canReply: false,
-      messages: [message({ id: 'msg-1', body: 'Resultados normais.', sender_user_id: 'user-doctor' })],
+      messages: [authored(DOCTOR_USER.id, { id: 'msg-1', body: 'Resultados normais.' })],
     })
     renderAt('/patient/mensagens/conv-1', routes)
     expect(await screen.findByText('Resultados normais.')).toBeInTheDocument()
@@ -209,7 +224,7 @@ describe('ConversationPage', () => {
   it('loads older messages using backend pages', async () => {
     session.user = PATIENT_USER
     const history = Array.from({ length: 35 }, (_, index) =>
-      message({ id: `m${index}`, body: `Mensagem ${index}`, sender_user_id: DOCTOR_USER.id, read_at: '2026-10-02T10:00:00Z' }),
+      authored(DOCTOR_USER.id, { id: `m${index}`, body: `Mensagem ${index}`, read_at: '2026-10-02T10:00:00Z' }),
     )
     const { calls } = fakeBackend({ currentUserId: PATIENT_USER.id, messages: history })
     renderAt('/patient/mensagens/conv-1', routes)
@@ -219,5 +234,47 @@ describe('ConversationPage', () => {
     expect(await screen.findByText('Mensagem 0')).toBeInTheDocument()
     expect(calls.some((call) => call.path === '/api/v1/conversations/conv-1?page=2&page_size=30')).toBe(true)
     expect(screen.queryByRole('button', { name: 'Carregar mensagens anteriores' })).not.toBeInTheDocument()
+  })
+
+  describe('care-team workflow', () => {
+    const NURSE_USER = { ...DOCTOR_USER, id: 'user-nurse', full_name: 'Enf. Sara', staff_role: 'nurse' as const }
+
+    it('lets a nurse triage and ask for a doctor review, but not close', async () => {
+      session.user = NURSE_USER
+      const { calls } = fakeBackend({ currentUserId: NURSE_USER.id, conversation: { status: 'waiting_for_team', team: { needs_doctor_review: false, escalated_at: null, escalated_by_name: null, closed_by_name: null } } })
+      renderAt('/app/mensagens/conv-1', routes)
+      const panel = await screen.findByRole('region', { name: 'Gestão da conversa' })
+      expect(within(panel).queryByRole('button', { name: 'Encerrar conversa' })).not.toBeInTheDocument()
+      await userEvent.selectOptions(within(panel).getByLabelText('Estado'), 'waiting_for_patient')
+      await userEvent.click(within(panel).getByRole('button', { name: 'Pedir revisão médica' }))
+      await waitFor(() => expect(calls.filter((call) => call.method === 'POST' && call.path !== '/api/v1/conversations/conv-1/read').map((call) => call.path)).toEqual([
+        '/api/v1/conversations/conv-1/status',
+        '/api/v1/conversations/conv-1/escalate',
+      ]))
+      expect(calls.find((call) => call.path.endsWith('/status'))?.body).toEqual({ status: 'waiting_for_patient' })
+    })
+
+    it('lets a doctor close after confirmation and shows the closed thread as read-only', async () => {
+      session.user = DOCTOR_USER
+      const { calls } = fakeBackend({ currentUserId: DOCTOR_USER.id, conversation: { team: { needs_doctor_review: true, escalated_at: '2026-10-02T09:00:00Z', escalated_by_name: 'Enf. Sara', closed_by_name: null } } })
+      renderAt('/app/mensagens/conv-1', routes)
+      expect(await screen.findByText('Revisão médica pedida por Enf. Sara')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Encerrar conversa' }))
+      const dialog = screen.getByRole('alertdialog')
+      expect(dialog).toHaveTextContent('só de leitura')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Encerrar' }))
+      await waitFor(() => expect(calls.find((call) => call.path.endsWith('/status'))?.body).toEqual({ status: 'closed' }))
+    })
+
+    it('shows a closed conversation as read-only, without triage details, to the patient', async () => {
+      session.user = PATIENT_USER
+      fakeBackend({ currentUserId: PATIENT_USER.id, canReply: false, conversation: { status: 'closed', closed_at: '2026-10-03T09:00:00Z' } })
+      renderAt('/patient/mensagens/conv-1', routes)
+      expect(await screen.findByText('Esta conversa foi encerrada pela equipa clínica.')).toBeInTheDocument()
+      expect(screen.getByText('Encerrada')).toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Gestão da conversa' })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Mensagem')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Revisão médica/)).not.toBeInTheDocument()
+    })
   })
 })

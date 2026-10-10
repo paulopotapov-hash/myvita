@@ -65,6 +65,7 @@ export function PatientDashboard() {
         >
           O meu perfil
         </Link>
+        <Link to="/patient/resultados" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Os meus resultados</Link>
         <Link to="/patient/consentimentos" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Gerir consentimentos</Link>
         <Link to="/patient/notificacoes" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Notificações{unreadCount ? ` (${unreadCount})` : ''}</Link>
       </div>

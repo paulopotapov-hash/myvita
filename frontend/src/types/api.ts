@@ -64,10 +64,14 @@ export interface AccountSummary {
   must_change_password: boolean
 }
 
+/** E-mail delivery of a one-time link: "sent" = accepted by the relay; otherwise hand the link over. */
+export type EmailDelivery = 'sent' | 'failed' | 'disabled'
+
 export interface PasswordResetIssued {
   user_id: string
   token: string
   expires_at: string
+  delivery: EmailDelivery
 }
 
 export interface ClinicPublic {
@@ -110,7 +114,9 @@ export interface StaffPublic {
   is_active: boolean
 }
 
+/** Staff and clinic-admin view (backend AppointmentPublic). */
 export interface AppointmentPublic {
+  view: 'staff'
   id: string
   clinic_id: string
   patient_id: string
@@ -120,6 +126,19 @@ export interface AppointmentPublic {
   status: AppointmentStatus
   reason: string | null
 }
+
+/** Patient view: the professional's display name, no internal identifiers. */
+export interface AppointmentPatientView {
+  view: 'patient'
+  id: string
+  staff_name: string
+  scheduled_at: string // ISO datetime
+  duration_minutes: number
+  status: AppointmentStatus
+  reason: string | null
+}
+
+export type AppointmentView = AppointmentPublic | AppointmentPatientView
 
 export type AppointmentRequestStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled'
 
@@ -149,7 +168,9 @@ export interface AppointmentRequestPublic {
   created_at: string
 }
 
+/** Staff view of a consent. Patients receive ConsentPatientView (no internal identifiers). */
 export interface ConsentPublic {
+  view: 'staff'
   id: string
   clinic_id: string
   patient_id: string
@@ -165,7 +186,32 @@ export interface ConsentPublic {
   updated_at: string
 }
 
+export interface ConsentPatientView {
+  view: 'patient'
+  id: string
+  consent_type: ConsentType
+  purpose: string
+  policy_version: string | null
+  policy_text: string | null
+  status: ConsentStatus
+  granted_at: string
+  revoked_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ConsentView = ConsentPublic | ConsentPatientView
+
+/**
+ * P2.5 visibility. 'internal': care team only (default). 'shared': a professional
+ * explicitly shared it with the patient. 'legacy_shared': pre-dates the visibility
+ * model and stays readable by the patient, but nobody made a sharing decision.
+ */
+export type MedicalRecordVisibility = 'internal' | 'shared' | 'legacy_shared'
+
+/** Professional view of a record (backend MedicalRecordPublic, `view: 'staff'`). */
 export interface MedicalRecordPublic {
+  view: 'staff'
   id: string
   clinic_id: string
   patient_id: string
@@ -174,10 +220,27 @@ export interface MedicalRecordPublic {
   author_name: string
   title: string
   content: string
+  visibility: MedicalRecordVisibility
+  /** Last explicit share/unshare decision; null for new and legacy records. */
+  visibility_changed_at: string | null
+  visibility_changed_by_name: string | null
   version: number
   created_at: string
   updated_at: string
 }
+
+/** Patient view: only shared records, without staff ids, versions or sharing metadata. */
+export interface MedicalRecordPatientView {
+  view: 'patient'
+  id: string
+  author_name: string
+  title: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export type MedicalRecordView = MedicalRecordPublic | MedicalRecordPatientView
 
 export interface MedicalRecordRevisionPublic {
   id: string
@@ -188,14 +251,94 @@ export interface MedicalRecordRevisionPublic {
   version: number
   title: string
   content: string
+  visibility: MedicalRecordVisibility
   created_at: string
 }
 
-export interface MedicationPublic {
+// --- Clinical results (backend/app/modules/clinical_results/schemas.py) ---
+
+export type ClinicalResultCategory = 'laboratory' | 'imaging' | 'pathology' | 'other'
+export type ClinicalResultStatus = 'draft' | 'released'
+
+interface ClinicalResultCommon {
   id: string
-  clinic_id: string
+  category: ClinicalResultCategory
+  title: string
+  value: string | null
+  unit: string | null
+  reference_range: string | null
+  summary: string | null
+  /** Clinical date of the result (YYYY-MM-DD). */
+  result_date: string
+  /** Optional link to an existing document of the same patient. */
+  document_id: string | null
+  author_name: string
+}
+
+/** Professional view, including the draft → released workflow state and the correction chain. */
+export interface ClinicalResultStaffView extends ClinicalResultCommon {
+  view: 'staff'
   patient_id: string
-  prescribed_by_staff_id: string
+  status: ClinicalResultStatus
+  released_at: string | null
+  released_by_name: string | null
+  /** Set on a correction: the released result it corrects, and why. */
+  corrects_result_id: string | null
+  correction_reason: string | null
+  /** The correction of this result, draft or released. */
+  corrected_by_result_id: string | null
+  /** A released correction replaces this result for the patient. */
+  superseded: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Patient view: released results only, no workflow fields and no internal correction reason. */
+export interface ClinicalResultPatientView extends ClinicalResultCommon {
+  view: 'patient'
+  released_at: string
+  corrects_result_id: string | null
+  /** The released correction of this result, if any. */
+  superseded_by_result_id: string | null
+}
+
+export type ClinicalResultPublic = ClinicalResultStaffView | ClinicalResultPatientView
+
+export interface ClinicalResultCreateRequest {
+  category: ClinicalResultCategory
+  title: string
+  value?: string
+  unit?: string
+  reference_range?: string
+  summary?: string
+  result_date: string
+  document_id?: string
+  /** Make the result available to the patient immediately (otherwise a draft). */
+  release?: boolean
+}
+
+/** A correction of a released result: the complete corrected result plus a reason. */
+export interface ClinicalResultCorrectionRequest extends ClinicalResultCreateRequest {
+  correction_reason: string
+}
+
+/** Drafts only; nullable fields can be cleared with `null`. */
+export interface ClinicalResultUpdateRequest {
+  category?: ClinicalResultCategory
+  title?: string
+  value?: string | null
+  unit?: string | null
+  reference_range?: string | null
+  summary?: string | null
+  result_date?: string
+  document_id?: string | null
+  /** Draft corrections only. */
+  correction_reason?: string
+}
+
+/** Fields shared by every medication view. */
+export interface MedicationFields {
+  id: string
   name: string
   dosage: string
   route: string | null
@@ -208,6 +351,21 @@ export interface MedicationPublic {
   updated_at: string
 }
 
+/** Professional view (care team). */
+export interface MedicationPublic extends MedicationFields {
+  view: 'staff'
+  clinic_id: string
+  patient_id: string
+  prescribed_by_staff_id: string
+}
+
+/** Patient view: no internal clinic or staff identifiers. */
+export interface MedicationPatientView extends MedicationFields {
+  view: 'patient'
+}
+
+export type MedicationView = MedicationPublic | MedicationPatientView
+
 export interface NotificationPublic {
   id: string
   title: string
@@ -215,10 +373,14 @@ export interface NotificationPublic {
   is_read: boolean
   read_at: string | null
   created_at: string
-  /** Deep-link target: 'document' uses `target_id`, 'conversation' uses `conversation_target_id`. */
-  target_type: 'document' | 'conversation' | null
+  /** Deep-link target: 'document' uses `target_id`, 'conversation' uses `conversation_target_id`,
+   * 'result' uses `result_target_id`, 'medical_record' uses `record_target_id`.
+   * The target page re-checks access on open. */
+  target_type: 'document' | 'conversation' | 'result' | 'medical_record' | null
   target_id: string | null
   conversation_target_id: string | null
+  result_target_id?: string | null
+  record_target_id?: string | null
 }
 
 /** Uploader is exposed by display name only, never by internal user id. */
@@ -268,6 +430,7 @@ export interface InvitationCreated extends StaffInvitationRequest {
   role: Exclude<UserRole, 'clinic_admin'>
   status: 'pending' | 'accepted' | 'revoked'
   token: string
+  delivery: EmailDelivery
   expires_at: string
   created_at: string
 }
@@ -334,8 +497,10 @@ export interface AppointmentUpdateRequest {
   status?: Exclude<AppointmentStatus, 'cancelled'>
 }
 
-export interface MedicalRecordCreateRequest { title: string; content: string }
-export interface MedicalRecordUpdateRequest extends MedicalRecordCreateRequest { expected_version: number }
+/** `share_with_patient` is the author's explicit decision to share the new record. */
+export interface MedicalRecordCreateRequest { title: string; content: string; share_with_patient?: boolean }
+/** Content only: visibility changes go through share/unshare. */
+export interface MedicalRecordUpdateRequest { title: string; content: string; expected_version: number }
 export interface MedicationCreateRequest {
   name: string
   dosage: string
@@ -365,26 +530,47 @@ export interface MedicationDeactivateRequest {
 /** Mirrors backend MESSAGE_MAX_LENGTH; the backend still validates. */
 export const MESSAGE_MAX_LENGTH = 5000
 
+/** Care-team workflow state. Messages move it between the waiting states; only a doctor closes. */
+export type ConversationStatus = 'open' | 'waiting_for_patient' | 'waiting_for_team' | 'closed'
+
+/** Staff only: triage metadata never reaches the patient (`team` is null for patients). */
+export interface ConversationTeamState {
+  needs_doctor_review: boolean
+  escalated_at: string | null
+  escalated_by_name: string | null
+  closed_by_name: string | null
+}
+
 export interface ConversationPublic {
   id: string
-  clinic_id: string
-  patient_id: string
-  staff_id: string
+  /** Staff only; null for patients, who are shown names instead. */
+  clinic_id: string | null
+  patient_id: string | null
+  staff_id: string | null
   patient_name: string
+  /** The professional who opened the thread; the patient's active care team shares it. */
   staff_name: string
-  /** Messages addressed to the current user that they haven't read. */
+  status: ConversationStatus
+  closed_at: string | null
+  /** Patient: team messages not read yet. Staff: patient messages nobody on the team has opened. */
   unread_count: number
-  /** False when the professional no longer has an active care assignment: read-only thread. */
+  /** False when closed, or when nobody on the care team could read a patient reply. */
   can_reply: boolean
+  team: ConversationTeamState | null
   created_at: string
   /** Latest activity (last message, or creation). */
   updated_at: string
 }
 
+export type MessageSenderRole = 'patient' | 'doctor' | 'nurse' | 'staff'
+
 export interface MessagePublic {
   id: string
   conversation_id: string
-  sender_user_id: string
+  sender_name: string
+  sender_role: MessageSenderRole
+  /** Written by the current user (no internal user ids are exposed). */
+  is_mine: boolean
   body: string
   read_at: string | null
   created_at: string

@@ -17,8 +17,12 @@ The repository is provider-neutral. AWS Secrets Manager, GCP Secret Manager, Azu
 | S3 access/session credentials | mandatory for off-site backup | backup only, prefix-limited | prefer short-lived; incident |
 | Backup/provider encryption key | mandatory when provider-managed encryption is insufficient | backup/provider | provider policy |
 | TLS private key | mandatory | TLS terminator only | renewal/compromise |
-| SMTP/email credential | required for recovery/invitations if selected | delivery service only | provider/incident |
-| Alert webhook/pager credential | required for human alerts | Alertmanager only | provider/incident |
+| SMTP relay credential (`SMTP_USERNAME`/`SMTP_PASSWORD`) | when `EMAIL_DELIVERY_ENABLED=true` | backend only | provider policy, staff change, incident; restart backend (`email-delivery.md`) |
+| Alert secrets (`ALERT_SECRETS_DIR`: `smtp_password`, `webhook_url`, `heartbeat_url`) | required for human alerts | Alertmanager only | provider/incident; restart Alertmanager; re-test delivery |
+| age off-site backup identity (private key) | required to restore off-site backups | operators only, never on the server | on custodian change/compromise; old backups stay readable only with the old key — keep it until they expire |
+| ACME account key (`LETSENCRYPT_DIR`) | with automated TLS | host root only | on compromise; revoke certificates (`tls-certificates.md`) |
+
+Rotation consequences: changing `JWT_SECRET_KEY` logs every user out; `MFA_ENCRYPTION_KEY` forces MFA re-enrolment for all staff (rotate only if exposed); database passwords need the `migrate` job to re-provision the runtime role; `PRIVACY_FINGERPRINT_KEY` only breaks correlation with older fingerprints. Rotate one secret at a time, restart only its consumers, and verify (`/ready`, login, a backup run, a test alert) before the next. Incident-driven rotation order: `incident-response.md`.
 
 Provision separate runtime identities, deny secret enumeration where possible, audit reads, document break-glass access and test rotation. Render secrets into a root-owned `0600` runtime file or native secret mount outside the repository; avoid process arguments. `.env.production.example` is a schema of placeholders, not a production secret store.
 

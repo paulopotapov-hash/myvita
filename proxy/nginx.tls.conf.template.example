@@ -7,7 +7,15 @@ server {
     server_name ${PUBLIC_DOMAIN};
     server_tokens off;
     location = /healthz { access_log off; return 200 "ok\n"; }
-    location / { return 301 https://$host$request_uri; }
+    # ACME HTTP-01 challenges for certificate issuance/renewal
+    # (scripts/renew_tls_certificate.sh writes them to the shared webroot).
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    # Redirect to the configured name only, never to a client-supplied Host.
+    location / { return 301 https://${PUBLIC_DOMAIN}$request_uri; }
 }
 
 server {
@@ -19,7 +27,10 @@ server {
     ssl_certificate /etc/nginx/tls/fullchain.pem;
     ssl_certificate_key /etc/nginx/tls/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
     ssl_session_cache shared:TLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
 
     access_log /dev/stdout myvita;
     error_log /dev/stderr warn;
@@ -62,6 +73,13 @@ server {
         proxy_pass http://backend:8000;
         include /etc/nginx/proxy_params;
         proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # Same as the HTTP template: metrics are collected through the internal-only
+    # metrics proxy, and the SPA fallback must never make this path look public.
+    location = /metrics {
+        access_log off;
+        return 404;
     }
     location / {
         proxy_pass http://frontend:8080;

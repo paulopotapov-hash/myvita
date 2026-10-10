@@ -29,6 +29,25 @@ describe('notificationLink', () => {
     expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/documentos?document=doc-1', label: 'Abrir documento' })
   })
 
+  it('opens the patient results with the result highlighted', () => {
+    const target = notification({ title: 'Novo resultado disponível', target_type: 'result', result_target_id: 'res-1' })
+    expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/resultados?result=res-1', label: 'Abrir resultado' })
+    // A result target is only meaningful in the patient area.
+    expect(notificationLink(target, { role: 'staff' }).to).toBe('/app/consultas')
+  })
+
+  it('opens a shared medical record in the patient area only', () => {
+    const target = notification({ title: 'Nova informação clínica partilhada', target_type: 'medical_record', record_target_id: 'rec-1' })
+    expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/registos?record=rec-1', label: 'Abrir registo clínico' })
+    expect(notificationLink(target, { role: 'staff' }).to).toBe('/app/consultas')
+    expect(notificationLink(notification({ target_type: 'medical_record', record_target_id: null }), { role: 'patient' }).to).toBe('/patient/consultas')
+  })
+
+  it('falls back safely when a result target was cleared', () => {
+    const target = notification({ target_type: 'result', result_target_id: null })
+    expect(notificationLink(target, { role: 'patient' }).to).toBe('/patient/consultas')
+  })
+
   it('encodes target ids into the URL', () => {
     const target = notification({ target_type: 'conversation', conversation_target_id: 'a/b?c' })
     expect(notificationLink(target, { role: 'patient' }).to).toBe('/patient/mensagens/a%2Fb%3Fc')

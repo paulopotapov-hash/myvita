@@ -75,10 +75,12 @@ export function useUpdatePatient(patientId: string) {
 }
 
 /** Own clinic's staff directory — open to every authenticated role. */
-export function useStaff() {
+/** The clinic's staff roster. Not available to patients (the backend answers 404), so pass enabled=false for them. */
+export function useStaff(enabled = true) {
   return useQuery({
     queryKey: ['staff'],
     queryFn: ({ signal }) => staffService.list(signal),
+    enabled,
   })
 }
 

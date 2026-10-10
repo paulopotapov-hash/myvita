@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { emailDeliveryNotice } from '../../lib/emailDelivery'
+import type { EmailDelivery } from '../../types/api'
 import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
@@ -27,7 +29,7 @@ const ROLE_LABELS: Record<AccountSummary['role'], string> = {
 export function AccountsPage() {
   const { user } = useSession()
   const queryClient = useQueryClient()
-  const [issuedLink, setIssuedLink] = useState<{ name: string; link: string; expiresAt: string } | null>(null)
+  const [issuedLink, setIssuedLink] = useState<{ name: string; link: string; expiresAt: string; delivery: EmailDelivery } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState('')
   const accounts = useQuery({ queryKey: ACCOUNTS_QUERY_KEY, queryFn: ({ signal }) => usersService.list(signal) })
@@ -36,7 +38,7 @@ export function AccountsPage() {
     mutationFn: async ({ kind, account }: { kind: AccountAction; account: AccountSummary }) => {
       if (kind === 'reset-link') {
         const issued = await usersService.issuePasswordReset(account.id)
-        setIssuedLink({ name: account.full_name, link: passwordResetLink(issued.token), expiresAt: issued.expires_at })
+        setIssuedLink({ name: account.full_name, link: passwordResetLink(issued.token), expiresAt: issued.expires_at, delivery: issued.delivery })
         return
       }
       await ACTIONS[kind].run(account.id)
@@ -75,9 +77,9 @@ export function AccountsPage() {
         <div role="status" className="mb-6 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm">
           <p className="font-medium text-teal-900">Ligação de redefinição para {issuedLink.name}</p>
           <p className="mt-1 text-teal-800">
-            Mostrada apenas agora. Entrega-a pessoalmente ou por um canal seguro; expira em{' '}
-            {new Date(issuedLink.expiresAt).toLocaleString('pt-PT')}.
+            Mostrada apenas agora; expira em {new Date(issuedLink.expiresAt).toLocaleString('pt-PT')}.
           </p>
+          <p className="mt-1 text-teal-800">{emailDeliveryNotice(issuedLink.delivery)}</p>
           <p className="mt-2 break-all rounded bg-white p-2 font-mono text-xs">{issuedLink.link}</p>
           <div className="mt-2 flex gap-2">
             <Button variant="secondary" onClick={() => void navigator.clipboard?.writeText(issuedLink.link)}>Copiar</Button>

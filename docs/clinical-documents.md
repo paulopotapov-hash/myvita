@@ -1,55 +1,43 @@
-# Clinical Documents
+# Clinical documents
 
-## Product boundary
+Patient files (reports, images) stored privately and shown to the patient and their care team. Implementation: `backend/app/modules/documents/`. UI: `frontend/src/components/DocumentsSection.tsx`.
 
-**Documents** hold patient-facing files and authored guidance. **Medical Records** remain the clinical history and observations; **Medications** remain structured medication data. Notes created here live under Documents and do not reuse medical-record revisions. Messaging and team inbox are not part of this feature.
+## Access
 
-Documents currently support two kinds: text notes and PDF files. Notes and file replacements create immutable numbered versions; a document's `current_version` points to the newest version. Previous text and file versions remain retrievable to authorized users. Permanent deletion is not exposed.
+- **Upload:** a doctor or nurse with an **active care assignment** to the patient (`EDIT_DOCUMENTS`). The patient, the clinic and the uploader come from the URL and the session, never from the body.
+- **List and download:** the patient (own documents only) and assigned doctors or nurses. Every request re-checks tenant, role and assignment.
+- Other patients, other clinics, physiotherapists, administrative staff and clinic administrators are denied. Every denial is audited against the requested resource.
+- A clinical result may reference a document of the **same** patient and clinic. The service checks this, and a composite foreign key enforces it. The document keeps its own access rules: a result never grants access to a document.
 
-## Access and audit
+## Upload rules
 
-Patient reads use the patient's authenticated profile. Doctor and nurse actions use the central `ClinicalAction` policy and an active Phase 1 patient assignment. The current pilot gives doctor and nurse the same document actions, matching their existing clinical write scope; other roles, including physiotherapists and administrative staff, receive no document access. Changing this policy requires an explicit product/security review.
+- PDF, PNG or JPEG only. The extension, the declared content type and the file signature (magic bytes) must all agree.
+- Size limit `DOCUMENT_MAX_UPLOAD_BYTES` (default 10 MiB), enforced while streaming. The proxy allows 11 MiB on the upload path only.
+- A title is required. The original filename is metadata only, restricted to a safe character set, and never used as a storage path.
 
-List, detail, version-history and download requests authorize independently. Tenant-scoped foreign keys add database protection. Document create/update/view/download and denials use the existing append-only audit trail. Audit metadata contains identifiers only, never note content or file bytes.
+## Storage
 
-## Storage and file handling
+- Files live in a private directory (`DOCUMENT_STORAGE_DIR`; in production the `myvita_documents` volume at `/var/lib/myvita/documents`, mode 0700).
+- Each file is stored under a random 128-bit key (`[0-9a-f]{32}`). Paths are resolved and confined to the storage root. Files are created exclusively, so nothing is ever overwritten.
+- **Consistency.** The file is written and fsynced first, then the database row and the patient's notification are committed together. If the write fails, the partial file is removed. If the database step fails, the stored file is removed. A committed document therefore always has its complete file; a failure leaves neither behind.
+- Storage keys, paths and checksums are never returned to clients.
+- There are no public or static URLs. Downloads go through the authenticated API as attachments, with `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`.
+- **Append-only.** There is no delete or edit route, and the runtime database role cannot UPDATE or DELETE document rows. A correction is a new document. Deletion waits for a validated retention policy (`privacy/RETENTION_MATRIX.md`).
 
-PostgreSQL stores metadata, note content and opaque version references, not file bytes. The domain uses a storage protocol with a private local filesystem implementation. PDFs are kept in a private directory with generated 128-bit opaque keys, exclusive file creation, restrictive file permissions and SHA-256 checksums. Original filenames are metadata only and are never used as storage paths; internal storage keys and checksums are not returned to clients. Uploads are limited to PDF, checked against extension, declared MIME type and the `%PDF-` signature, and limited to 5 MiB. Downloads are attachments with `nosniff` and `no-store` headers.
+## Notifications and audit
 
-Development Compose mounts `backend/var/documents`; production Compose mounts a dedicated `myvita_documents` volume at `/var/lib/myvita/documents`. This abstraction is local-filesystem-specific today; an object-storage backend is future work. No custom encryption is implemented and no at-rest encryption claim is made. Operators must protect/encrypt the underlying volume and transport with their infrastructure controls.
+- A new document notifies the patient once, with generic text ("Novo documento") and a deep link that re-checks access. The notification commits in the same transaction as the row.
+- Audited: upload, list view, download and every denial. Identifiers only, never titles or file contents.
 
-**Production limitation:** the current scheduled backup and off-site backup pipeline archives PostgreSQL only; it does not yet archive or restore `myvita_documents`. Configure and verify an independent protected backup/restore for this volume before using Documents for production clinical records. No public/static file URLs are issued. PDF active-content sanitization and malware scanning are not implemented; the MVP stores PDFs as attachments and does not render them inline.
+## Operations
 
-### What was validated locally (Phase 4)
+- **Health.** `myvita_document_storage_writable` (on the internal metrics endpoint) drives the `MyVitaDocumentStorageUnavailable` alert. Upload failures caused by storage return 503 without disclosing paths.
+- **Backup and restore.** The scheduled backup archives the documents volume after the database dump, encrypts it client-side for off-site storage, and `verify_documents_storage.sh` / `verify_restore.sh` check that every row has its file. See `p7-backup-and-restore.md` for the consistency model.
+- **Encryption at rest** depends on the host volume or disk encryption; the application does not encrypt files itself.
 
-On a local production-shaped Compose stack (`docker-compose.prod.yml` + `docker-compose.prod-http.yml`, throwaway secrets), through the public proxy:
+## Not implemented (product roadmap, not in scope)
 
-- PDF upload, new version, download of current and previous versions (byte-identical by SHA-256), and rejection of traversal names, wrong extension/MIME/signature and oversized files.
-- Files survive `docker compose down` / `up` because they live in the named `myvita_documents` volume.
-- A manual volume backup and restore works: stop the backend, archive the volume read-only, and restore it with ownership and `0600` permissions preserved:
-
-  ```bash
-  docker run --rm --user 0 -v <project>_myvita_documents:/data:ro -v "$PWD":/out --entrypoint sh <backend-image> -c 'tar -cf /out/documents.tar -C /data .'
-  docker run --rm --user 0 -v <project>_myvita_documents:/data -v "$PWD":/in:ro --entrypoint sh <backend-image> -c 'tar -xpf /in/documents.tar -C /data'
-  ```
-
-  With the volume emptied, downloads fail with a 404 that discloses no path; after the restore they succeed with identical checksums.
-
-Not validated: scheduling, encryption, off-site copies and retention for this archive, and keeping it consistent with the PostgreSQL backup (metadata rows and files must be restored to the same point in time). **Document storage backup/restore requires production infrastructure validation before production deployment.**
-
-## Notifications
-
-Creating a document and each new version inserts one patient notification in the same database transaction. The notification contains a short title/message and a typed document target; the document remains the source of content. Only the patient account receives the notification. Opening its link returns through the authenticated Documents API, which rechecks authorization.
-
-## API
-
-- `GET /api/v1/patients/{patient_id}/documents` and `GET /api/v1/documents/mine`
-- `POST /api/v1/patients/{patient_id}/documents/notes`
-- `POST /api/v1/patients/{patient_id}/documents/files` (multipart PDF)
-- `GET /api/v1/documents/{id}`
-- `PATCH /api/v1/documents/{id}/notes`
-- `POST /api/v1/documents/{id}/files/versions` (multipart PDF replacement)
-- `GET /api/v1/documents/{id}/versions` and `GET /api/v1/documents/{id}/versions/{number}`
-- `GET /api/v1/documents/{id}/download` and `GET /api/v1/documents/{id}/versions/{number}/download`
-
-These are technical controls intended to support privacy and access control; they are not a legal compliance certification.
+- Document versions and version history.
+- Text-note documents.
+- Malware scanning and PDF active-content sanitisation. PDFs are served as downloads, never rendered inline by the app.
+- An object-storage backend.

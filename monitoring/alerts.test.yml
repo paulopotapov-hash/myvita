@@ -103,3 +103,93 @@ tests:
               severity: warning
             exp_annotations:
               summary: Authorization denials exceeded the pilot threshold
+
+  - interval: 1m
+    input_series:
+      - series: 'myvita_document_storage_writable{instance="metrics-proxy:8080",job="myvita-backend"}'
+        values: '1 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: MyVitaDocumentStorageUnavailable
+        exp_alerts:
+          - exp_labels:
+              instance: metrics-proxy:8080
+              job: myvita-backend
+              severity: critical
+            exp_annotations:
+              summary: The clinical document store is missing or not writable; uploads fail
+
+  - interval: 1m
+    input_series:
+      - series: 'myvita_email_deliveries_total{instance="metrics-proxy:8080",job="myvita-backend",result="failed"}'
+        values: '0 0 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: MyVitaEmailDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              instance: metrics-proxy:8080
+              job: myvita-backend
+              result: failed
+              severity: warning
+            exp_annotations:
+              summary: Invitation or password-reset e-mails are failing; admins must hand links over
+
+  - interval: 1m
+    input_series:
+      # Certificate valid for 10 more days at t=0.
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://app.example.org/healthz",job="public-https"}'
+        values: '864000x180'
+      - series: 'probe_success{instance="https://app.example.org/healthz",job="public-https"}'
+        values: '1x180'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: MyVitaTLSCertificateExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              instance: https://app.example.org/healthz
+              job: public-https
+              severity: warning
+            exp_annotations:
+              summary: The public TLS certificate expires within 21 days; check renewal
+      - eval_time: 2h
+        alertname: MyVitaTLSCertificateExpiryCritical
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: MyVitaPublicHTTPSProbeMissing
+        exp_alerts: []
+
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: MyVitaPublicHTTPSProbeMissing
+        exp_alerts:
+          - exp_labels:
+              job: public-https
+              severity: warning
+            exp_annotations:
+              summary: No public HTTPS probe is configured (monitoring/targets/public_https.yml)
+      - eval_time: 1m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels:
+              severity: none
+            exp_annotations:
+              summary: Alerting pipeline heartbeat (always firing)
+
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{instance="alertmanager:9093",integration="email",job="alertmanager"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MyVitaAlertDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              instance: alertmanager:9093
+              integration: email
+              job: alertmanager
+              severity: critical
+            exp_annotations:
+              summary: Alertmanager cannot deliver notifications through one of its integrations

@@ -415,7 +415,8 @@ test('UAT-10 Doctor books an appointment in the browser; double click and confli
 test('UAT-11 Clinical record lifecycle: create, update with versions, history, patient read', async ({ page }) => {
   test.setTimeout(120_000)
   const doctor = world['doctor-a']
-  const created = await doctor.post(`/api/v1/patients/${world.patientAId}/medical-records`, { title: 'UAT record', content: 'Synthetic content v1' })
+  // P2.5: records are internal unless shared with the patient explicitly.
+  const created = await doctor.post(`/api/v1/patients/${world.patientAId}/medical-records`, { title: 'UAT record', content: 'Synthetic content v1', share_with_patient: true })
   expect(created.status).toBe(201)
   const id = created.body.id
   const v2 = await doctor.patch(`/api/v1/medical-records/${id}`, { title: 'UAT record', content: 'Synthetic content v2', expected_version: 1 })
@@ -429,6 +430,10 @@ test('UAT-11 Clinical record lifecycle: create, update with versions, history, p
   expect((await world['patient-a'].get(`/api/v1/medical-records/${id}`)).body.content).toBe('Synthetic content v2')
   expect((await world['patient-a'].patch(`/api/v1/medical-records/${id}`, { title: 'x', content: 'x', expected_version: 2 })).status).toBeGreaterThanOrEqual(403)
   expect((await world['patient-a2'].get(`/api/v1/medical-records/${id}`)).status).toBe(404)
+  const internal = await doctor.post(`/api/v1/patients/${world.patientAId}/medical-records`, { title: 'UAT internal', content: 'Synthetic internal note' })
+  expect(internal.status).toBe(201)
+  expect((await world['patient-a'].get(`/api/v1/medical-records/${internal.body.id}`)).status).toBe(404)
+  expect((await world['patient-a'].get(`/api/v1/medical-records/${id}/revisions`)).status).toBe(404)
   await uiLogin(page, email('patient-a'))
   await page.goto('/patient/saude')
   await page.getByRole('tab', { name: 'Registos clínicos' }).click()

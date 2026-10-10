@@ -20,7 +20,7 @@ Ficheiros: `deploy/host/` (cloud-init, encriptação do volume, TLS, wrapper `my
 4. **Passphrase LUKS** gerada e guardada num gestor de passwords partilhado pelos dois fundadores.
 5. **Bucket de backups off-site** (Hetzner Object Storage noutra localização, ou outro fornecedor S3 na UE) com credenciais limitadas a esse bucket.
 6. **Chaves de encriptação dos backups**: cada fundador corre `age-keygen -o myvita-backup-<nome>.key` no seu portátil, guarda o ficheiro no gestor de passwords e põe as chaves públicas (`age-keygen -y …`) em `OFFSITE_AGE_RECIPIENT`. A chave privada nunca vai para o servidor. Sem nenhuma chave privada, os backups off-site são irrecuperáveis.
-7. **Destino de alertas** (email ou webhook) e quem responde — ver `alertmanager.yml` (`pending-human-destination`).
+7. **Destino de alertas** (email ou webhook) e quem responde — ver `ALERT_DELIVERY`/`ALERT_SECRETS_DIR` em `docs/operations.md` (sem destino configurado, o preflight bloqueia).
 
 ## Passos
 

@@ -27,7 +27,9 @@ def test_records_and_revisions_carry_author_and_editor_names_for_staff_and_patie
     assert edited.status_code == 200, edited.text
     # The record keeps its original author; the revision trail names each editor.
     assert edited.json()["author_name"] == doctor_name
-    revisions = patient.get(f"/api/v1/medical-records/{record_id}/revisions")
+    # P2.5: the revision trail is staff-only; the patient gets the same 404 as for a missing record.
+    assert patient.get(f"/api/v1/medical-records/{record_id}/revisions").status_code == 404
+    revisions = doctor.get(f"/api/v1/medical-records/{record_id}/revisions")
     assert revisions.status_code == 200, revisions.text
     assert revisions.json(), revisions.text
     assert {row["editor_name"] for row in revisions.json()} <= {doctor_name, nurse_name}

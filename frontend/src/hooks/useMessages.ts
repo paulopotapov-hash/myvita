@@ -1,16 +1,17 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../lib/apiClient'
 import { messagesService } from '../services/messages'
+import type { ConversationFilters } from '../services/messages'
 import { patientsService } from '../services/patients'
-import type { ConversationCreateRequest } from '../types/api'
+import type { ConversationCreateRequest, ConversationStatus } from '../types/api'
 
 export const CONVERSATIONS_KEY = ['conversations'] as const
 export const MESSAGE_PAGE_SIZE = 30
 
-export function useConversations(page: number, pageSize: number, enabled = true) {
+export function useConversations(page: number, pageSize: number, enabled = true, filters: ConversationFilters = {}) {
   return useQuery({
-    queryKey: [...CONVERSATIONS_KEY, 'list', page, pageSize],
-    queryFn: ({ signal }) => messagesService.list(page, pageSize, signal),
+    queryKey: [...CONVERSATIONS_KEY, 'list', page, pageSize, filters.status ?? null, Boolean(filters.needsReview)],
+    queryFn: ({ signal }) => messagesService.list(page, pageSize, filters, signal),
     enabled,
   })
 }
@@ -58,6 +59,28 @@ export function useMarkConversationRead(conversationId: string) {
         client.invalidateQueries({ queryKey: [...CONVERSATIONS_KEY, 'detail', conversationId] }),
       ]),
   })
+}
+
+function useRefreshConversation(conversationId: string) {
+  const client = useQueryClient()
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: [...CONVERSATIONS_KEY, 'list'] }),
+      client.invalidateQueries({ queryKey: [...CONVERSATIONS_KEY, 'detail', conversationId] }),
+    ])
+}
+
+export function useSetConversationStatus(conversationId: string) {
+  const refresh = useRefreshConversation(conversationId)
+  return useMutation({
+    mutationFn: (status: ConversationStatus) => messagesService.setStatus(conversationId, status),
+    onSuccess: refresh,
+  })
+}
+
+export function useEscalateConversation(conversationId: string) {
+  const refresh = useRefreshConversation(conversationId)
+  return useMutation({ mutationFn: () => messagesService.escalate(conversationId), onSuccess: refresh })
 }
 
 export function useCreateConversation() {

@@ -48,6 +48,46 @@ if [ "${OFFSITE_BACKUP_ENABLED:-false}" = "true" ]; then
     }
 fi
 
+# Human alerting: a real receiver and an external heartbeat (dead man's switch).
+case "${ALERT_DELIVERY:-unconfigured}" in
+    email | webhook | email+webhook) ;;
+    *) echo "BLOCKED: ALERT_DELIVERY must name a real human destination (email, webhook or email+webhook)" >&2; exit 1 ;;
+esac
+[ -n "${ALERT_SECRETS_DIR:-}" ] && [ -s "${ALERT_SECRETS_DIR}/heartbeat_url" ] || {
+    echo "BLOCKED: ALERT_SECRETS_DIR must contain heartbeat_url (external dead man's switch)" >&2; exit 1;
+}
+targets_dir="${MONITORING_TARGETS_DIR:-monitoring/targets}"
+grep -q "https://${PUBLIC_DOMAIN}/" "${targets_dir}/public_https.yml" 2>/dev/null || {
+    echo "BLOCKED: ${targets_dir}/public_https.yml must probe https://${PUBLIC_DOMAIN}/healthz (monitoring/targets/README.md)" >&2; exit 1;
+}
+docker run --rm --entrypoint /bin/sh \
+    -e ALERT_DELIVERY -e ALERT_EMAIL_TO -e ALERT_EMAIL_FROM -e ALERT_SMTP_SMARTHOST -e ALERT_SMTP_USERNAME \
+    -e ALERTMANAGER_RENDER_ONLY=true \
+    -v "$PWD/monitoring/alertmanager/render-and-run.sh:/render.sh:ro" \
+    -v "${ALERT_SECRETS_DIR}:/run/secrets/alerting:ro" \
+    prom/alertmanager:v0.28.1 /render.sh >/dev/null || {
+    echo "BLOCKED: the Alertmanager receiver configuration does not render or validate" >&2; exit 1;
+}
+
+# Transactional e-mail (optional; when enabled it must be complete and use HTTPS links).
+if [ "${EMAIL_DELIVERY_ENABLED:-false}" = "true" ]; then
+    for name in SMTP_HOST SMTP_USERNAME SMTP_PASSWORD EMAIL_FROM PUBLIC_APP_URL; do
+        value="${!name:-}"
+        if [ -z "$value" ] || [[ "$value" == *"<INJECT_"* ]]; then
+            echo "BLOCKED: EMAIL_DELIVERY_ENABLED=true but $name is missing or a placeholder" >&2; exit 1
+        fi
+    done
+    [[ "$PUBLIC_APP_URL" == "https://${PUBLIC_DOMAIN}" || "$PUBLIC_APP_URL" == "https://${PUBLIC_DOMAIN}/" ]] || {
+        echo "BLOCKED: PUBLIC_APP_URL must be https://${PUBLIC_DOMAIN}" >&2; exit 1;
+    }
+fi
+if [ "${SELF_SERVICE_PASSWORD_RESET_ENABLED:-false}" = "true" ]; then
+    [ "${EMAIL_DELIVERY_ENABLED:-false}" = "true" ] || {
+        echo "BLOCKED: SELF_SERVICE_PASSWORD_RESET_ENABLED requires EMAIL_DELIVERY_ENABLED" >&2; exit 1;
+    }
+    echo "NOTE: self-service password reset is enabled; it requires the approved identity-verification policy (docs/email-delivery.md)." >&2
+fi
+
 docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml config --quiet
 docker run --rm --entrypoint /bin/promtool \
     -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v3.5.0 \
@@ -56,4 +96,4 @@ docker run --rm --entrypoint /bin/promtool \
     -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v3.5.0 \
     test rules /etc/prometheus/alerts.test.yml >/dev/null
 
-echo "Preflight configuration checks passed. External TLS, backups, alerts, owners and privacy gates still require evidence."
+echo "Preflight configuration checks passed. External TLS, backups, alert delivery, e-mail delivery, owners and privacy gates still require evidence (docs/operations.md)."

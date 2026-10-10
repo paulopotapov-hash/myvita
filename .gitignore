@@ -41,3 +41,9 @@ frontend/e2e/.auth/
 
 # Local document storage (development default DOCUMENT_STORAGE_DIR)
 backend/var/documents/
+
+# Deployment-specific Prometheus targets (contain the real domain).
+monitoring/targets/public_https.yml
+
+# Deployment-local TLS overlay copied from docker-compose.prod-tls.yml.example.
+docker-compose.prod-tls.yml

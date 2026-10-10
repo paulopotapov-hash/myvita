@@ -42,6 +42,8 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - ./monitoring/alerts.test.yml:/etc/prometheus/alerts.test.yml:ro
+      # Public HTTPS probe target (domain-specific, so not in Git): see monitoring/targets/README.md.
+      - ${MONITORING_TARGETS_DIR:-./monitoring/targets}:/etc/prometheus/targets:ro
       - prometheus_data:/prometheus
     depends_on:
       - metrics-proxy
@@ -57,14 +59,26 @@ services:
     image: prom/alertmanager:v0.28.1
     restart: always
     logging: *default-logging
-    command:
-      - --config.file=/etc/alertmanager/alertmanager.yml
-      - --storage.path=/alertmanager
+    # Renders the receiver configuration from the environment and secret files,
+    # validates it with amtool, then starts Alertmanager (monitoring/alertmanager/render-and-run.sh).
+    entrypoint: ["/bin/sh", "/etc/alertmanager/render-and-run.sh"]
+    environment:
+      ALERT_DELIVERY: ${ALERT_DELIVERY:-unconfigured}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
+      ALERT_SMTP_SMARTHOST: ${ALERT_SMTP_SMARTHOST:-}
+      ALERT_SMTP_USERNAME: ${ALERT_SMTP_USERNAME:-}
     volumes:
-      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/alertmanager/render-and-run.sh:/etc/alertmanager/render-and-run.sh:ro
+      # Directory with smtp_password / webhook_url / heartbeat_url (mode 0644 or readable by
+      # uid 65534). Keep it outside the repository; the default is an empty placeholder.
+      - ${ALERT_SECRETS_DIR:-./monitoring/alertmanager/no-secrets}:/run/secrets/alerting:ro
       - alertmanager_data:/alertmanager
     networks:
       - monitoring
+      # The only monitoring component with outbound access: it must reach the
+      # SMTP relay, the incident webhook and the heartbeat service.
+      - alert-egress
 
   grafana:
     image: grafana/grafana:12.1.0
@@ -152,3 +166,4 @@ networks:
   monitoring:
     internal: true
   monitoring-admin:
+  alert-egress:

@@ -37,6 +37,20 @@ def siem_endpoint_problem(endpoint: str | None) -> str | None:
     if parts.scheme == "http" and parts.hostname not in _LOOPBACK_HOSTS:
         return "SIEM_ENDPOINT must use HTTPS (plain HTTP is only allowed to a loopback host)."
     return None
+def public_app_url_problem(url: str | None, *, production: bool) -> str | None:
+    """PUBLIC_APP_URL must be an origin: https (http only for a loopback dev host), no path or query."""
+    if not url:
+        return "PUBLIC_APP_URL must be set when EMAIL_DELIVERY_ENABLED=true."
+    parts = urlsplit(url)
+    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.path not in {"", "/"}:
+        return "PUBLIC_APP_URL must be an origin such as https://app.example.org (no path)."
+    if parts.query or parts.fragment or parts.username or parts.password:
+        return "PUBLIC_APP_URL must not contain credentials, a query or a fragment."
+    if parts.scheme == "http" and (production or parts.hostname not in {"localhost", "127.0.0.1"}):
+        return "PUBLIC_APP_URL must use HTTPS (plain http only for a local development host)."
+    return None
+
+
 _DEVELOPMENT_DATABASE_URL = "postgresql+psycopg://myvita:myvita@db:5432/myvita"
 
 
@@ -98,11 +112,30 @@ class Settings(BaseSettings):
     # UUIDs, e.g. PUBLIC_CLINIC_IDS=["3f2a..."]; a malformed value fails startup.
     PUBLIC_CLINIC_IDS: list[UUID] = Field(default_factory=list)
 
-    # Account lifecycle. Reset links are issued by a clinic admin and handed
-    # over out of band; self-service delivery (e-mail/SMS) is deliberately
-    # not implemented until a provider and identity-verification policy are
-    # approved (docs/security/account-lifecycle.md).
+    # Account lifecycle. Reset links are issued by a clinic admin (and handed
+    # over out of band unless e-mail delivery is configured below).
     PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=60, ge=5, le=1440)
+
+    # E-mail delivery (docs/email-delivery.md). Off by default: nothing is sent
+    # and every response says `delivery: "disabled"`. When on, invitation and
+    # reset links are e-mailed through an authenticated SMTP relay over TLS
+    # (STARTTLS or implicit TLS, certificate verified). Messages are generic
+    # and never carry clinical content.
+    EMAIL_DELIVERY_ENABLED: bool = False
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = Field(default=587, ge=1, le=65535)
+    SMTP_SECURITY: Literal["starttls", "ssl"] = "starttls"
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: SecretStr | None = None
+    SMTP_TIMEOUT_SECONDS: float = Field(default=10.0, gt=0, le=60)
+    EMAIL_FROM: str | None = None
+    # Public HTTPS origin of the web app, used to build links in e-mails
+    # (never derived from request headers, which a client controls).
+    PUBLIC_APP_URL: str | None = None
+    # Self-service "forgot password" e-mails. Needs EMAIL_DELIVERY_ENABLED and an
+    # approved identity-verification/abuse policy (docs/email-delivery.md).
+    # Clinic administrators are always recovered by an operator instead.
+    SELF_SERVICE_PASSWORD_RESET_ENABLED: bool = False
 
     # Staff MFA (TOTP). When true, staff and clinic admins can do nothing
     # except enrol MFA until they have done so. Must stay true in production.
@@ -175,6 +208,23 @@ class Settings(BaseSettings):
         problem = siem_endpoint_problem(self.SIEM_ENDPOINT)
         if problem:
             raise ValueError(problem)
+        return self
+
+    @model_validator(mode="after")
+    def _email_config_is_coherent(self) -> "Settings":
+        if self.SELF_SERVICE_PASSWORD_RESET_ENABLED and not self.EMAIL_DELIVERY_ENABLED:
+            raise ValueError("SELF_SERVICE_PASSWORD_RESET_ENABLED requires EMAIL_DELIVERY_ENABLED=true.")
+        if not self.EMAIL_DELIVERY_ENABLED:
+            return self
+        if not self.SMTP_HOST or not self.EMAIL_FROM or "@" not in self.EMAIL_FROM:
+            raise ValueError("EMAIL_DELIVERY_ENABLED=true needs SMTP_HOST and a valid EMAIL_FROM.")
+        if bool(self.SMTP_USERNAME) != bool(self.SMTP_PASSWORD and self.SMTP_PASSWORD.get_secret_value()):
+            raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be set together.")
+        problem = public_app_url_problem(self.PUBLIC_APP_URL, production=self.is_production)
+        if problem:
+            raise ValueError(problem)
+        if self.is_production and not self.SMTP_USERNAME:
+            raise ValueError("Production e-mail delivery must authenticate to the SMTP relay.")
         return self
 
     @model_validator(mode="after")

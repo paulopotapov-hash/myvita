@@ -13,6 +13,12 @@ export function notificationLink(
   if (user && notification.target_type === 'conversation' && notification.conversation_target_id) {
     return { to: `${messagesBasePath(user)}/${encodeURIComponent(notification.conversation_target_id)}`, label: 'Abrir conversa' }
   }
+  if (user?.role === 'patient' && notification.target_type === 'result' && notification.result_target_id) {
+    return { to: `/patient/resultados?result=${encodeURIComponent(notification.result_target_id)}`, label: 'Abrir resultado' }
+  }
+  if (user?.role === 'patient' && notification.target_type === 'medical_record' && notification.record_target_id) {
+    return { to: `/patient/registos?record=${encodeURIComponent(notification.record_target_id)}`, label: 'Abrir registo clínico' }
+  }
   if (user?.role === 'patient' && notification.target_type === 'document' && notification.target_id) {
     return { to: `/patient/documentos?document=${encodeURIComponent(notification.target_id)}`, label: 'Abrir documento' }
   }

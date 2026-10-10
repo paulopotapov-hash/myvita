@@ -2,14 +2,20 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.models import Document, Notification, User
+from app.models import Document, User
 from app.modules.documents.schemas import DocumentPublic
 from app.modules.documents.storage import BinaryReader, LocalDocumentStorage
+from app.modules.notifications.events import (
+    TEMPLATES,
+    NotificationEvent,
+    NotificationTarget,
+    TargetType,
+    notify,
+)
 
 # Deliberately generic: notifications live outside the document access rules,
 # so no title, filename or clinical content goes into them.
-NEW_DOCUMENT_NOTIFICATION_TITLE = "Novo documento"
-NEW_DOCUMENT_NOTIFICATION_MESSAGE = "A equipa clínica partilhou um novo documento. Abra os documentos para o consultar."
+NEW_DOCUMENT_NOTIFICATION_TITLE, NEW_DOCUMENT_NOTIFICATION_MESSAGE = TEMPLATES[NotificationEvent.DOCUMENT_ADDED]
 
 
 def to_public(document: Document, uploaded_by_name: str) -> DocumentPublic:
@@ -77,15 +83,13 @@ def persist_document(
         db.add(document)
         # The notification's composite foreign key needs the document row first.
         db.flush()
-        db.add(
-            Notification(
-                clinic_id=clinic_id,
-                user_id=patient_user_id,
-                title=NEW_DOCUMENT_NOTIFICATION_TITLE,
-                message=NEW_DOCUMENT_NOTIFICATION_MESSAGE,
-                target_type="document",
-                target_id=document.id,
-            )
+        notify(
+            db,
+            NotificationEvent.DOCUMENT_ADDED,
+            clinic_id=clinic_id,
+            recipient_user_id=patient_user_id,
+            target=NotificationTarget(TargetType.DOCUMENT, document.id),
+            dedupe_key=str(document.id),
         )
         db.commit()
         db.refresh(document)

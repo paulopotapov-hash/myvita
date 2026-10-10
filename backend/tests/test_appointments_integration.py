@@ -297,7 +297,7 @@ def test_concurrent_overlapping_bookings_allow_only_one(client):
 def test_patient_sees_only_their_own_appointment(client):
     a = _new_clinic_with_staff_and_patient(client, "A")
     headers = _use_identity(client, a["admin"])
-    client.post(
+    booked = client.post(
         "/api/v1/appointments",
         json={
             "patient_id": a["patient_id"],
@@ -306,12 +306,15 @@ def test_patient_sees_only_their_own_appointment(client):
         },
         headers=headers,
     )
+    assert booked.json()["patient_id"] == a["patient_id"]
 
     _use_identity(client, a["patient"])
     r = client.get("/api/v1/appointments")  # GET — no CSRF header needed
     assert r.status_code == 200
     assert len(r.json()) == 1
-    assert r.json()[0]["patient_id"] == a["patient_id"]
+    # The patient view carries no internal ids; the row is exactly the appointment booked for them.
+    assert r.json()[0]["id"] == booked.json()["id"]
+    assert "patient_id" not in r.json()[0]
 
 
 def test_patient_cannot_create_appointments_directly(client):

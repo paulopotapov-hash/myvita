@@ -134,3 +134,60 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: No successful recovery verification within the last 8 days
+
+  - name: myvita-application
+    rules:
+      - alert: MyVitaDocumentStorageUnavailable
+        expr: myvita_document_storage_writable == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: The clinical document store is missing or not writable; uploads fail
+      - alert: MyVitaEmailDeliveryFailing
+        expr: increase(myvita_email_deliveries_total{result="failed"}[30m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Invitation or password-reset e-mails are failing; admins must hand links over
+
+  - name: myvita-edge-tls
+    rules:
+      - alert: MyVitaPublicHTTPSDown
+        expr: probe_success{job="public-https"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: The public HTTPS endpoint fails (DNS, TLS, certificate or proxy)
+      - alert: MyVitaTLSCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="public-https"} - time() < 21 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: The public TLS certificate expires within 21 days; check renewal
+      - alert: MyVitaTLSCertificateExpiryCritical
+        expr: probe_ssl_earliest_cert_expiry{job="public-https"} - time() < 7 * 86400
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: The public TLS certificate expires within 7 days
+      - alert: MyVitaPublicHTTPSProbeMissing
+        expr: absent(probe_success{job="public-https"})
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: No public HTTPS probe is configured (monitoring/targets/public_https.yml)
+
+  - name: myvita-alerting-pipeline
+    rules:
+      # Always firing on purpose. Routed to the external heartbeat service, which
+      # pages a human when the pings STOP (Prometheus, Alertmanager or egress down).
+      - alert: Watchdog
+        expr: vector(1)
+        labels: {severity: none}
+        annotations:
+          summary: Alerting pipeline heartbeat (always firing)
+      - alert: MyVitaAlertDeliveryFailing
+        expr: increase(alertmanager_notifications_failed_total[15m]) > 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Alertmanager cannot deliver notifications through one of its integrations

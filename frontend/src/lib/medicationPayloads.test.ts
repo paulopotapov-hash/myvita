@@ -3,6 +3,7 @@ import { EMPTY_MEDICATION_FORM, medicationToForm, toCreatePayload, toUpdatePaylo
 import type { MedicationPublic } from '../types/api'
 
 const medication: MedicationPublic = {
+  view: 'staff',
   id: 'm1',
   clinic_id: 'c1',
   patient_id: 'p1',

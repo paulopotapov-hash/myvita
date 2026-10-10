@@ -164,4 +164,28 @@ describe('MessagesInboxPage', () => {
     await waitFor(() => expect(screen.getByText('Conversa aberta')).toBeInTheDocument())
     expect(calls.filter((call) => call.method === 'POST').at(-1)?.body).toEqual({ patient_id: 'patient-1' })
   })
+
+  it('gives staff a team inbox with status and review filters, and patients neither', async () => {
+    session.user = DOCTOR_USER
+    const calls = mockFetch((url) =>
+      url.pathname === '/api/v1/conversations'
+        ? json([conversation({ status: 'waiting_for_team', team: { needs_doctor_review: true, escalated_at: '2026-10-02T09:00:00Z', escalated_by_name: 'Enf. Sara', closed_by_name: null } })], 200, { 'X-Total-Count': '1' })
+        : undefined,
+    )
+    const { unmount } = renderAt('/app/mensagens', routes)
+    expect(await screen.findByText('Revisão médica pedida')).toBeInTheDocument()
+    expect(within(screen.getByRole('link')).getByText('A aguardar a equipa')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Estado'), 'closed')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Só revisão médica pedida' }))
+    await waitFor(() => expect(calls.some((call) => call.path.includes('status=closed') && call.path.includes('needs_review=true'))).toBe(true))
+    unmount()
+    vi.unstubAllGlobals()
+
+    session.user = PATIENT_USER
+    mockFetch((url) => (url.pathname === '/api/v1/conversations' ? json([conversation({ status: 'waiting_for_team' })], 200, { 'X-Total-Count': '1' }) : undefined))
+    renderAt('/patient/mensagens', routes)
+    expect(await screen.findByText('Enviada à equipa clínica')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Estado')).not.toBeInTheDocument()
+    expect(screen.queryByText('Revisão médica pedida')).not.toBeInTheDocument()
+  })
 })

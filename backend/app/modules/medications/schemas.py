@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -71,6 +72,9 @@ class MedicationDeactivateRequest(RequestModel):
 
 
 class MedicationPublic(BaseModel):
+    """Professional view (care team): includes the internal identifiers staff workflows use."""
+
+    view: Literal["staff"] = "staff"
     id: uuid.UUID
     clinic_id: uuid.UUID
     patient_id: uuid.UUID
@@ -86,3 +90,27 @@ class MedicationPublic(BaseModel):
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+class MedicationPatientView(BaseModel):
+    """Patient view: what the patient needs to understand and take the medication.
+
+    Built field by field (never from the ORM row), so internal identifiers such as
+    clinic_id, patient_id or prescribed_by_staff_id cannot leak through it.
+    """
+
+    view: Literal["patient"] = "patient"
+    id: uuid.UUID
+    name: str
+    dosage: str
+    route: str | None
+    frequency: str | None
+    instructions: str | None
+    status: MedicationStatus
+    start_date: date
+    end_date: date | None
+    created_at: datetime
+    updated_at: datetime
+
+
+MedicationOut = Annotated[MedicationPublic | MedicationPatientView, Field(discriminator="view")]

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { emailDeliveryNotice } from '../lib/emailDelivery'
+import type { EmailDelivery } from '../types/api'
 import { ApiError } from '../lib/apiClient'
 import { toUserMessage } from '../lib/errorMessages'
 import { formatDateTime } from '../lib/formatDate'
@@ -24,6 +26,7 @@ export function PatientInvitationsPanel() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [invitationLink, setInvitationLink] = useState('')
+  const [delivery, setDelivery] = useState<EmailDelivery | null>(null)
   const [copied, setCopied] = useState(false)
   const [actionError, setActionError] = useState('')
 
@@ -56,6 +59,7 @@ export function PatientInvitationsPanel() {
         setForm(EMPTY_FORM)
         // Fragment, not query string: browsers never send it to any server or log.
         setInvitationLink(`${window.location.origin}/convite#token=${encodeURIComponent(invitation.token)}`)
+        setDelivery(invitation.delivery)
       },
       onError: (error) => {
         setFieldErrors(error instanceof ApiError && error.fieldErrors ? error.fieldErrors : { _root: toUserMessage(error) })
@@ -90,7 +94,8 @@ export function PatientInvitationsPanel() {
 
       {invitationLink && (
         <div role="status" className="flex flex-col gap-2 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
-          <p className="font-medium">Convite criado. Partilhe este link apenas com o paciente — não volta a ser mostrado.</p>
+          <p className="font-medium">Convite criado. O link é de uso único e não volta a ser mostrado.</p>
+          {delivery && <p>{emailDeliveryNotice(delivery)}</p>}
           <label htmlFor="patient-invitation-link" className="sr-only">Link do convite</label>
           <input id="patient-invitation-link" readOnly value={invitationLink} className="w-full min-w-0 rounded-md border border-teal-200 bg-white px-3 py-2 font-mono text-xs" onFocus={(e) => e.target.select()} />
           <div className="flex flex-wrap gap-2">

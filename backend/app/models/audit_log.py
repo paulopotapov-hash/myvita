@@ -109,6 +109,13 @@ class AuditAction(str, enum.Enum):
     CONVERSATION_STATUS_CHANGED = "conversation_status_changed"
     CONVERSATION_ESCALATED = "conversation_escalated"
     CONVERSATION_ESCALATION_CLEARED = "conversation_escalation_cleared"
+    CLINICAL_RESULT_CREATED = "clinical_result_created"
+    CLINICAL_RESULT_DRAFT_UPDATED = "clinical_result_draft_updated"
+    CLINICAL_RESULT_RELEASED = "clinical_result_released"
+    CLINICAL_RESULT_CORRECTED = "clinical_result_corrected"
+    CLINICAL_RESULT_VIEWED = "clinical_result_viewed"
+    MEDICAL_RECORD_SHARED = "medical_record_shared"
+    MEDICAL_RECORD_UNSHARED = "medical_record_unshared"
 
 
 class AuditResult(str, enum.Enum):

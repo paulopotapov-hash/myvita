@@ -1,4 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
+import { emailDeliveryNotice } from '../../lib/emailDelivery'
+import type { EmailDelivery } from '../../types/api'
 import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
@@ -29,6 +31,7 @@ export function StaffManagementPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [invitationLink, setInvitationLink] = useState('')
+  const [delivery, setDelivery] = useState<EmailDelivery | null>(null)
 
   function update<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -49,6 +52,7 @@ export function StaffManagementPage() {
         onSuccess: (invitation) => {
           setForm(EMPTY_FORM)
           setInvitationLink(`${window.location.origin}/convite#token=${encodeURIComponent(invitation.token)}`)
+          setDelivery(invitation.delivery)
         },
         onError: (error) => {
           if (error instanceof ApiError && error.fieldErrors) {
@@ -111,7 +115,8 @@ export function StaffManagementPage() {
             )}
             {invitationLink && (
               <div className="mb-3 rounded-md bg-teal-50 p-3 text-sm text-teal-900">
-                <p className="font-medium">Convite criado. Partilha uma única vez por um canal privado aprovado.</p>
+                <p className="font-medium">Convite criado. O link é de uso único.</p>
+                {delivery && <p className="mt-1">{emailDeliveryNotice(delivery)}</p>}
                 <p className="mt-1 break-all select-all">{invitationLink}</p>
               </div>
             )}

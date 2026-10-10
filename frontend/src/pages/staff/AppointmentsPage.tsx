@@ -15,7 +15,7 @@ import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
 import { appointmentCreateSchema, appointmentUpdateSchema, zodErrorsToRecord } from '../../lib/validation'
-import type { AppointmentPublic, PatientSummary } from '../../types/api'
+import type { AppointmentView, PatientSummary } from '../../types/api'
 
 export function AppointmentsPage() {
   const { user } = useSession()
@@ -27,11 +27,12 @@ export function AppointmentsPage() {
   const appointmentRows = appointments.data?.items
   const total = appointments.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / pageSize))
-  const staff = useStaff()
+  // Patients get the professional's name in each appointment; the roster is staff-only.
+  const staff = useStaff(user?.role !== 'patient')
   const patients = usePatients(canCreate)
-  const [selected, setSelected] = useState<AppointmentPublic | null>(null)
+  const [selected, setSelected] = useState<AppointmentView | null>(null)
   const [feedback, setFeedback] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | AppointmentPublic['status']>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | AppointmentView['status']>('all')
 
   const staffNameById = useMemo(() => new Map((staff.data ?? []).map((entry) => [entry.id, entry.full_name])), [staff.data])
   const patientNameById = useMemo(() => new Map((patients.data ?? []).map((entry) => [entry.id, entry.full_name])), [patients.data])
@@ -70,8 +71,8 @@ export function AppointmentsPage() {
                 <div>
                   <p className="font-medium text-slate-900">{formatDateTime(appointment.scheduled_at)}</p>
                   <p className="text-sm text-slate-500">
-                    {user?.role === 'patient'
-                      ? `Com ${staffNameById.get(appointment.staff_id) ?? 'profissional'}`
+                    {appointment.view === 'patient'
+                      ? `Com ${appointment.staff_name}`
                       : `${patientNameById.get(appointment.patient_id) ?? 'Paciente'} — ${staffNameById.get(appointment.staff_id) ?? 'profissional'}`}
                   </p>
                   {appointment.reason && <p className="text-sm text-slate-600">{appointment.reason}</p>}
@@ -97,8 +98,8 @@ export function AppointmentsPage() {
           appointment={appointmentRows?.find((appointment) => appointment.id === selected.id) ?? selected}
           canEdit={canCreate}
           canHandleReason={canHandleReason}
-          patientName={patientNameById.get(selected.patient_id) ?? (user?.role === 'patient' ? 'O próprio paciente' : 'Paciente')}
-          staffName={staffNameById.get(selected.staff_id) ?? 'Profissional'}
+          patientName={selected.view === 'patient' ? 'O próprio paciente' : patientNameById.get(selected.patient_id) ?? 'Paciente'}
+          staffName={selected.view === 'patient' ? selected.staff_name : staffNameById.get(selected.staff_id) ?? 'Profissional'}
           onClose={() => setSelected(null)}
           onSuccess={(message) => { setFeedback(message); setSelected(null) }}
           onConflict={() => { void appointments.refetch() }}
@@ -109,7 +110,7 @@ export function AppointmentsPage() {
 }
 
 function AppointmentDetailDialog({ appointment, canEdit, canHandleReason, patientName, staffName, onClose, onSuccess, onConflict }: {
-  appointment: AppointmentPublic
+  appointment: AppointmentView
   canEdit: boolean
   canHandleReason: boolean
   patientName: string

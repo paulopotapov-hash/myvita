@@ -219,6 +219,8 @@ def _seed_clinical_resources(tenant: Tenant, hour_offset: int) -> None:
             json={
                 "title": f"Seed record {tenant.name}-{key}",
                 "content": f"{RECORD_MARKER} {tenant.name}-{key}",
+                # Shared with the patient (P2.5), so patient-side access is exercised.
+                "share_with_patient": True,
             },
         )
         assert record.status_code == 201, record.text

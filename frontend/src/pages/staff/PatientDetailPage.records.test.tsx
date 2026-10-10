@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../lib/apiClient'
-import type { MedicalRecordPublic, MedicalRecordRevisionPublic } from '../../types/api'
+import type { MedicalRecordPatientView, MedicalRecordPublic, MedicalRecordRevisionPublic } from '../../types/api'
 import { PatientDetailPage } from './PatientDetailPage'
 
 // Coverage for the live (inline) medical-records section of PatientDetailPage.
@@ -16,6 +16,9 @@ const h = vi.hoisted(() => ({
   revisions: { data: [] as unknown, isLoading: false, isError: false, error: null as unknown, refetch: vi.fn() },
   create: { mutate: vi.fn(), isPending: false },
   update: { mutate: vi.fn(), isPending: false },
+  visibility: { mutate: vi.fn(), isPending: false },
+  single: { data: undefined as unknown, isLoading: false, isError: false, error: null as unknown },
+  singleRequested: [] as Array<string | null>,
 }))
 
 vi.mock('../../hooks/useSession', () => ({
@@ -38,6 +41,8 @@ vi.mock('../../hooks/useClinicalData', () => ({
   useMedicalRecordRevisions: () => h.revisions,
   useCreateMedicalRecord: () => h.create,
   useUpdateMedicalRecord: () => h.update,
+  useChangeRecordVisibility: () => h.visibility,
+  useMedicalRecord: (id: string | null) => { h.singleRequested.push(id); return id ? h.single : { data: undefined, isLoading: false, isError: false, error: null } },
   useMedications: () => ({ data: { items: [], total: 0 }, isLoading: false, isError: false, refetch: vi.fn() }),
   useCreateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
@@ -57,6 +62,7 @@ vi.mock('../../hooks/useConsents', () => ({
 }))
 
 const record: MedicalRecordPublic = {
+  view: 'staff',
   id: 'rec-1',
   clinic_id: 'clinic-1',
   patient_id: 'patient-1',
@@ -64,6 +70,9 @@ const record: MedicalRecordPublic = {
   author_name: 'Dra. Rita Sousa',
   title: 'Avaliação',
   content: 'Evolução clínica',
+  visibility: 'internal',
+  visibility_changed_at: null,
+  visibility_changed_by_name: null,
   version: 2,
   created_at: '2026-09-24T10:00:00Z',
   updated_at: '2026-09-25T10:00:00Z',
@@ -77,7 +86,19 @@ const revision: MedicalRecordRevisionPublic = {
   version: 1,
   title: 'Avaliação',
   content: 'Versão anterior',
+  visibility: 'internal',
   created_at: '2026-09-24T10:00:00Z',
+}
+
+/** What the backend sends a patient: shared records only, without staff ids or versions (P2.5). */
+const patientRecord: MedicalRecordPatientView = {
+  view: 'patient',
+  id: 'rec-1',
+  author_name: 'Dra. Rita Sousa',
+  title: 'Avaliação',
+  content: 'Evolução clínica',
+  created_at: '2026-09-24T10:00:00Z',
+  updated_at: '2026-09-25T10:00:00Z',
 }
 
 type Options = { onSuccess?: () => void; onError?: (error: unknown) => void }
@@ -99,6 +120,9 @@ describe('PatientDetailPage medical records (inline section)', () => {
     h.revisions = { data: [], isLoading: false, isError: false, error: null, refetch: vi.fn() }
     h.create = { mutate: vi.fn(), isPending: false }
     h.update = { mutate: vi.fn(), isPending: false }
+    h.visibility = { mutate: vi.fn(), isPending: false }
+    h.single = { data: undefined, isLoading: false, isError: false, error: null }
+    h.singleRequested = []
   })
 
   it('shows a retryable error state', async () => {
@@ -118,11 +142,81 @@ describe('PatientDetailPage medical records (inline section)', () => {
   it('is read-only for the patient: no form and no edit action', async () => {
     const user = userEvent.setup()
     h.session = { role: 'patient', staff_role: null, patient_id: 'patient-1' }
-    h.list.data = [record]
+    h.list.data = [patientRecord]
     const panel = await openRecords(user)
     expect(within(panel).getByText('Evolução clínica')).toBeInTheDocument()
     expect(within(panel).queryByLabelText('Título do registo')).not.toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument()
+    // No staff-only workflow details in the patient view.
+    expect(panel).not.toHaveTextContent('Versão')
+    expect(panel).not.toHaveTextContent('Nota interna')
+    expect(panel).not.toHaveTextContent('Partilhado com o paciente')
+  })
+
+  it('tells the patient when nothing has been shared yet', async () => {
+    const user = userEvent.setup()
+    h.session = { role: 'patient', staff_role: null, patient_id: 'patient-1' }
+    const panel = await openRecords(user)
+    expect(within(panel).getByText('A tua equipa clínica ainda não partilhou registos contigo.')).toBeInTheDocument()
+  })
+
+  it('labels internal, shared and legacy records for the care team', async () => {
+    const user = userEvent.setup()
+    h.list.data = [
+      record,
+      { ...record, id: 'rec-2', title: 'Plano', visibility: 'shared', visibility_changed_at: '2026-09-26T10:00:00Z', visibility_changed_by_name: 'Enf. João Lima' },
+      { ...record, id: 'rec-3', title: 'Antigo', visibility: 'legacy_shared' },
+    ]
+    const panel = await openRecords(user)
+    expect(within(panel).getByText('Nota interna')).toBeInTheDocument()
+    expect(within(panel).getByText('Partilhado com o paciente')).toBeInTheDocument()
+    expect(within(panel).getByText(/Partilhado por Enf\. João Lima/)).toBeInTheDocument()
+    // Legacy access is shown as such, never as somebody's sharing decision.
+    expect(within(panel).getByText(/anterior à partilha explícita/)).toBeInTheDocument()
+    expect(within(panel).getAllByRole('button', { name: 'Partilhar com o paciente' })).toHaveLength(1)
+    expect(within(panel).getAllByRole('button', { name: 'Confirmar partilha' })).toHaveLength(1)
+    expect(within(panel).getAllByRole('button', { name: 'Deixar de partilhar' })).toHaveLength(2)
+  })
+
+  it('shares the reviewed version only after confirmation and reports a stale version', async () => {
+    const user = userEvent.setup()
+    h.list.data = [record]
+    const panel = await openRecords(user)
+    await user.click(within(panel).getByRole('button', { name: 'Partilhar com o paciente' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('versão 2')
+    expect(dialog).toHaveTextContent('notificação genérica')
+    await user.click(within(dialog).getByRole('button', { name: 'Partilhar' }))
+    expect(h.visibility.mutate).toHaveBeenCalledWith({ id: 'rec-1', share: true, expectedVersion: 2 }, expect.any(Object))
+    const options = h.visibility.mutate.mock.calls[0][1] as Options
+    act(() => options.onError?.(new ApiError(409, 'x', { detail: 'conflict' })))
+    expect(within(panel).getByRole('alert')).toHaveTextContent('Revê a versão atual antes de o partilhar.')
+  })
+
+  it('unshares after confirming that access ends immediately', async () => {
+    const user = userEvent.setup()
+    h.list.data = [{ ...record, visibility: 'shared', visibility_changed_at: '2026-09-26T10:00:00Z', visibility_changed_by_name: 'Dra. Rita Sousa' }]
+    const panel = await openRecords(user)
+    await user.click(within(panel).getByRole('button', { name: 'Deixar de partilhar' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('mesmo a partir de notificações antigas')
+    await user.click(within(dialog).getByRole('button', { name: 'Deixar de partilhar' }))
+    expect(h.visibility.mutate).toHaveBeenCalledWith({ id: 'rec-1', share: false, expectedVersion: 2 }, expect.any(Object))
+    const options = h.visibility.mutate.mock.calls[0][1] as Options
+    act(() => options.onSuccess?.())
+    expect(within(panel).getByRole('status')).toHaveTextContent('O paciente deixou de ter acesso a este registo.')
+  })
+
+  it('shares a new record with the patient only when explicitly asked', async () => {
+    const user = userEvent.setup()
+    const panel = await openRecords(user)
+    const share = within(panel).getByRole('checkbox', { name: /Partilhar com o paciente/ })
+    expect(share).not.toBeChecked()
+    await user.type(within(panel).getByLabelText('Título do registo'), 'Plano')
+    await user.type(within(panel).getByLabelText('Conteúdo clínico'), 'Repouso.')
+    await user.click(share)
+    await user.click(within(panel).getByRole('button', { name: 'Criar registo' }))
+    expect(h.create.mutate).toHaveBeenCalledWith({ title: 'Plano', content: 'Repouso.', share_with_patient: true }, expect.any(Object))
   })
 
   it('requires title and content and sends no request otherwise', async () => {
@@ -139,7 +233,8 @@ describe('PatientDetailPage medical records (inline section)', () => {
     await user.type(within(panel).getByLabelText('Título do registo'), 'Nota de consulta')
     await user.type(within(panel).getByLabelText('Conteúdo clínico'), 'Sem queixas.')
     await user.click(within(panel).getByRole('button', { name: 'Criar registo' }))
-    expect(h.create.mutate).toHaveBeenCalledWith({ title: 'Nota de consulta', content: 'Sem queixas.' }, expect.any(Object))
+    // Internal by default (P2.5).
+    expect(h.create.mutate).toHaveBeenCalledWith({ title: 'Nota de consulta', content: 'Sem queixas.', share_with_patient: false }, expect.any(Object))
     const options = h.create.mutate.mock.calls[0][1] as Options
     act(() => options.onSuccess?.())
     expect(within(panel).getByRole('status')).toHaveTextContent('Registo clínico guardado.')
@@ -162,6 +257,47 @@ describe('PatientDetailPage medical records (inline section)', () => {
       { id: 'rec-1', payload: { title: 'Avaliação', content: 'Evolução favorável', expected_version: 2 } },
       expect.any(Object),
     )
+  })
+
+  it('never changes visibility from the edit form and warns when the patient sees the edit', async () => {
+    const user = userEvent.setup()
+    h.list.data = [{ ...record, visibility: 'shared', visibility_changed_at: '2026-09-26T10:00:00Z', visibility_changed_by_name: 'Dra. Rita Sousa' }]
+    const panel = await openRecords(user)
+    await user.click(within(panel).getByRole('button', { name: 'Editar' }))
+    expect(within(panel).queryByRole('checkbox', { name: /Partilhar com o paciente/ })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('note')).toHaveTextContent('as alterações que guardares ficam visíveis de imediato')
+    await user.click(within(panel).getByRole('button', { name: 'Guardar alterações' }))
+    expect(h.update.mutate).toHaveBeenCalledWith(
+      { id: 'rec-1', payload: { title: 'Avaliação', content: 'Evolução clínica', expected_version: 2 } },
+      expect.any(Object),
+    )
+  })
+
+  it('highlights a record opened from a notification, for the patient', () => {
+    h.session = { role: 'patient', staff_role: null, patient_id: 'patient-1' }
+    h.list.data = [patientRecord]
+    render(
+      <MemoryRouter initialEntries={['/patient/registos?record=rec-1']}>
+        <Routes><Route path="/patient/registos" element={<PatientDetailPage own section="records" />} /></Routes>
+      </MemoryRouter>,
+    )
+    const row = screen.getByText('Evolução clínica').closest('li') as HTMLElement
+    expect(row).toHaveAttribute('aria-current', 'true')
+    expect(h.singleRequested.every((id) => id === null)).toBe(true)
+    expect(screen.queryByRole('button', { name: /partilhar/i })).not.toBeInTheDocument()
+  })
+
+  it('tells the patient when a linked record is no longer available (unshared or never shared)', () => {
+    h.session = { role: 'patient', staff_role: null, patient_id: 'patient-1' }
+    h.list.data = []
+    h.single = { data: undefined, isLoading: false, isError: true, error: new ApiError(404, 'x') }
+    render(
+      <MemoryRouter initialEntries={['/patient/registos?record=rec-9']}>
+        <Routes><Route path="/patient/registos" element={<PatientDetailPage own section="records" />} /></Routes>
+      </MemoryRouter>,
+    )
+    expect(h.singleRequested).toContain('rec-9')
+    expect(screen.getByRole('alert')).toHaveTextContent('Este registo não está disponível.')
   })
 
   it('explains a concurrent edit (409) with the backend reason', async () => {
@@ -191,7 +327,7 @@ describe('PatientDetailPage medical records (inline section)', () => {
   ])('shows author and editor display names, never internal staff ids, to %s', async (_label, session) => {
     const user = userEvent.setup()
     h.session = session
-    h.list.data = [record]
+    h.list.data = [session.role === 'patient' ? patientRecord : record]
     h.revisions.data = [revision]
     const panel = await openRecords(user)
     expect(within(panel).getByText(/Autor Dra\. Rita Sousa/)).toBeInTheDocument()

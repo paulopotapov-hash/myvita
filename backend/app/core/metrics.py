@@ -37,6 +37,7 @@ auth_failures_total = _Counter()  # no labels
 authorization_denials_total = _Counter()  # no labels
 rate_limit_events_total = _Counter()  # no labels
 db_errors_total = _Counter()  # no labels
+email_deliveries_total = _Counter()  # labels: (result,) — sent / failed / disabled
 
 
 def status_class(status_code: int) -> str:
@@ -54,7 +55,8 @@ def _render(name: str, counter: _Counter, label_names: tuple[str, ...]) -> list[
     return lines
 
 
-def render_prometheus_text() -> str:
+def render_prometheus_text(gauges: dict[str, float] | None = None) -> str:
+    """`gauges` are point-in-time values computed at scrape time (unlabelled)."""
     lines: list[str] = []
     lines += _render("myvita_http_requests_total", http_requests_total, ("method", "status_class"))
     lines += _render(
@@ -67,4 +69,7 @@ def render_prometheus_text() -> str:
     lines += _render("myvita_authorization_denials_total", authorization_denials_total, ())
     lines += _render("myvita_rate_limit_events_total", rate_limit_events_total, ())
     lines += _render("myvita_db_errors_total", db_errors_total, ())
+    lines += _render("myvita_email_deliveries_total", email_deliveries_total, ("result",))
+    for name, value in sorted((gauges or {}).items()):
+        lines += [f"# TYPE {name} gauge", f"{name} {value}"]
     return "\n".join(lines) + "\n"

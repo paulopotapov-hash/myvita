@@ -182,6 +182,10 @@ jobs:
         run: docker build -t myvita-proxy:ci proxy
       - name: Build metrics proxy image
         run: docker build -t myvita-metrics-proxy:ci monitoring/metrics-proxy
+      - name: Alertmanager receiver rendering (no real destination)
+        run: REQUIRE_AMTOOL=1 bash scripts/test_alertmanager_config.sh
+      - name: TLS renewal install path and TLS proxy template (no CA or domain)
+        run: bash scripts/test_tls_renewal.sh
       - name: Validate monitoring configuration and alert behavior
         run: |
           docker run --rm --entrypoint /bin/promtool \
@@ -215,7 +219,19 @@ jobs:
           CORS_ORIGINS: '["https://pilot-ci.example.test"]'
           METRICS_TOKEN: ci-generated-metrics-ABCdef1234567890!
           GRAFANA_ADMIN_PASSWORD: ci-grafana-only
-        run: scripts/production_preflight.sh
+          # Throwaway alerting inputs: the preflight refuses an unconfigured receiver,
+          # a missing heartbeat and a missing public HTTPS probe target.
+          ALERT_DELIVERY: webhook
+          ALERT_SECRETS_DIR: ${{ runner.temp }}/alert-secrets
+          MONITORING_TARGETS_DIR: ${{ runner.temp }}/monitoring-targets
+        run: |
+          mkdir -p "$ALERT_SECRETS_DIR" "$MONITORING_TARGETS_DIR"
+          printf 'https://hooks.invalid/ci\n' >"$ALERT_SECRETS_DIR/webhook_url"
+          printf 'https://heartbeat.invalid/ci\n' >"$ALERT_SECRETS_DIR/heartbeat_url"
+          chmod 0644 "$ALERT_SECRETS_DIR"/*
+          sed "s/<PUBLIC_DOMAIN>/${PUBLIC_DOMAIN}/" monitoring/targets/public_https.yml.example \
+            >"$MONITORING_TARGETS_DIR/public_https.yml"
+          scripts/production_preflight.sh
 
   frontend:
     name: Frontend (typecheck, lint, tests, build)

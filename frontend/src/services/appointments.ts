@@ -1,5 +1,5 @@
 import { api } from '../lib/apiClient'
-import type { AppointmentCreateRequest, AppointmentPublic, AppointmentUpdateRequest } from '../types/api'
+import type { AppointmentCreateRequest, AppointmentPublic, AppointmentUpdateRequest, AppointmentView } from '../types/api'
 
 export const appointmentsService = {
   create: (payload: AppointmentCreateRequest) => api.post<AppointmentPublic>('/api/v1/appointments', payload),
@@ -7,11 +7,11 @@ export const appointmentsService = {
    * entirely server-side based on the session (patients see only their
    * own; staff/admin see their clinic's). Passing a filter here would be
    * meaningless: the backend doesn't accept one, by design. */
-  list: (signal?: AbortSignal) => api.get<AppointmentPublic[]>('/api/v1/appointments', signal),
+  list: (signal?: AbortSignal) => api.get<AppointmentView[]>('/api/v1/appointments', signal),
   listPage: (page: number, pageSize: number, signal?: AbortSignal) =>
-    api.getPage<AppointmentPublic>(`/api/v1/appointments?page=${page}&page_size=${pageSize}`, signal),
+    api.getPage<AppointmentView>(`/api/v1/appointments?page=${page}&page_size=${pageSize}`, signal),
   detail: (appointmentId: string, signal?: AbortSignal) =>
-    api.get<AppointmentPublic>(`/api/v1/appointments/${appointmentId}`, signal),
+    api.get<AppointmentView>(`/api/v1/appointments/${appointmentId}`, signal),
   update: (appointmentId: string, payload: AppointmentUpdateRequest) =>
     api.patch<AppointmentPublic>(`/api/v1/appointments/${appointmentId}`, payload),
   cancel: (appointmentId: string) =>

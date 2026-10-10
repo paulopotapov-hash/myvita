@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -41,6 +42,9 @@ class ConsentCreateRequest(RequestModel):
 
 
 class ConsentPublic(BaseModel):
+    """Professional view (assigned care team)."""
+
+    view: Literal["staff"] = "staff"
     id: uuid.UUID
     clinic_id: uuid.UUID
     patient_id: uuid.UUID
@@ -56,3 +60,22 @@ class ConsentPublic(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ConsentPatientView(BaseModel):
+    """The patient's own consent history, without internal clinic, patient or user identifiers."""
+
+    view: Literal["patient"] = "patient"
+    id: uuid.UUID
+    consent_type: ConsentType
+    purpose: str
+    policy_version: str | None
+    policy_text: str | None
+    status: ConsentStatus
+    granted_at: datetime
+    revoked_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+ConsentOut = Annotated[ConsentPublic | ConsentPatientView, Field(discriminator="view")]

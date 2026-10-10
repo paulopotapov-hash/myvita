@@ -240,6 +240,8 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   await page.getByRole('tab', { name: 'Registos clínicos' }).click()
   await page.getByLabel('Título do registo').fill('Observação E2E')
   await page.getByLabel('Conteúdo clínico').fill('Conteúdo clínico sintético para validação E2E.')
+  // P2.5: the patient only sees records explicitly shared with them.
+  await page.getByRole('checkbox', { name: /Partilhar com o paciente/ }).check()
   await page.getByRole('button', { name: 'Criar registo' }).click()
   await expect(page.getByRole('status')).toHaveText('Registo clínico guardado.')
   await page.getByRole('button', { name: 'Editar' }).click()
@@ -266,8 +268,13 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   await expect(page.getByText('Conteúdo clínico sintético atualizado.')).toBeVisible()
   await page.goto('/patient/notificacoes')
   await expect(page.getByText('Consulta confirmada')).toBeVisible()
+  // P2.6: sharing the record notified the patient generically, without its title or content.
+  const shared = page.getByRole('listitem').filter({ hasText: 'Nova informação clínica partilhada' })
+  await expect(shared).toBeVisible()
+  await expect(shared).not.toContainText('Observação E2E')
+  await expect(shared).not.toContainText('Conteúdo clínico sintético')
   await page.getByRole('button', { name: 'Marcar como lida' }).first().click()
-  await expect(page.getByLabel('1 não lidas nesta página')).toBeVisible()
+  await expect(page.getByLabel('2 não lidas nesta página')).toBeVisible()
   await page.goto('/patient/consentimentos')
   await page.getByLabel('Finalidade').fill('Validação sintética E2E')
   await page.getByRole('button', { name: 'Conceder' }).click()

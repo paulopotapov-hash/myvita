@@ -4,6 +4,7 @@ real migrated PostgreSQL schema (no mocked services or dependencies).
 """
 
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 
@@ -11,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models import Consent
 from tests.account_support import PASSWORD
 from tests.clinical_support import (
     audit,
@@ -264,19 +266,35 @@ def test_flow_b_medical_record_lifecycle(client: TestClient, tenant):
         (2, "Revised findings"),
     ]
 
-    # The nurse sees the same record; the patient reads it but can never edit it.
+    # The nurse sees the same record. P2.5: it is internal until shared, so the
+    # patient gets the same 404 as for a missing record and does not see it listed.
     tenant.act(client, "nurse")
     assert client.get(f"/api/v1/medical-records/{record_id}").status_code == 200
     tenant.act(client, "patient")
-    assert client.get(f"/api/v1/medical-records/{record_id}").status_code == 200
+    assert client.get(f"/api/v1/medical-records/{record_id}").status_code == 404
+    assert client.get(f"/api/v1/patients/{tenant.patient_id}/medical-records").json() == []
+
+    shared = client.post(
+        f"/api/v1/medical-records/{record_id}/share",
+        headers=tenant.act(client, "doctor"),
+        json={"expected_version": 2},
+    )
+    assert shared.status_code == 200, shared.text
+    assert shared.json()["version"] == 3 and shared.json()["visibility"] == "shared"
+
+    # Once shared, the patient reads it but can never edit it.
+    tenant.act(client, "patient")
+    patient_view = client.get(f"/api/v1/medical-records/{record_id}")
+    assert patient_view.status_code == 200
+    assert patient_view.json()["content"] == "Revised findings"
     denied = client.patch(
         f"/api/v1/medical-records/{record_id}",
         headers=use(client, tenant.who["patient"]),
-        json={"title": "Edited", "content": "By patient", "expected_version": 2},
+        json={"title": "Edited", "content": "By patient", "expected_version": 3},
     )
     assert denied.status_code in {403, 404}
     tenant.act(client, "doctor")
-    assert client.get(f"/api/v1/medical-records/{record_id}").json()["version"] == 2
+    assert client.get(f"/api/v1/medical-records/{record_id}").json()["version"] == 3
 
 
 def test_medical_record_validation(client: TestClient, tenant):
@@ -462,9 +480,13 @@ def test_flow_d_consent_lifecycle(client: TestClient, tenant):
     assert consent["status"] == "granted"
     assert consent["revoked_at"] is None
     assert consent["purpose"] == "Care coordination"
-    assert consent["clinic_id"] == tenant.clinic_id
-    assert consent["patient_id"] == tenant.patient_id
-    assert consent["recorded_by_user_id"] == tenant.user_ids["patient"]
+    # The patient's own view omits internal ids; the stored consent carries them.
+    assert not {"clinic_id", "patient_id", "recorded_by_user_id"} & set(consent)
+    with client.session_factory() as db:  # type: ignore[attr-defined]
+        stored = db.get(Consent, uuid.UUID(consent_id))
+        assert str(stored.clinic_id) == tenant.clinic_id
+        assert str(stored.patient_id) == tenant.patient_id
+        assert str(stored.recorded_by_user_id) == tenant.user_ids["patient"]
     granted_at = datetime.fromisoformat(consent["granted_at"])
     assert abs(datetime.now(UTC) - granted_at) < timedelta(minutes=1)
     _audit_actor_and_clinic(audit(client, "consent_granted", resource_id=consent_id), tenant, "patient")

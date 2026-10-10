@@ -45,7 +45,7 @@ umask 077
 # hold data, so a restore must bring them back too.
 EXPECTED_TABLES=(
     alembic_version appointment_requests appointments audit_logs clinical_care_assignments
-    clinical_conversations clinical_document_versions clinical_documents clinical_messages
+    clinical_conversations clinical_document_versions clinical_documents clinical_messages clinical_results
     clinics consents conversations deprecated_notification_targets documents invitations
     medical_record_revisions medical_records medications messages mfa_recovery_codes
     notifications password_reset_tokens patients staff user_mfa users
@@ -57,6 +57,8 @@ EXPECTED_CONSTRAINTS=(
     patients.uq_patients_id_clinic patients.uq_patients_user_id staff.uq_staff_user_id
     medications.fk_medications_patient_clinic conversations.fk_conversations_patient_clinic
     documents.fk_documents_patient_clinic conversations.uq_conversations_patient_staff
+    clinical_results.fk_clinical_results_patient_clinic clinical_results.fk_clinical_results_corrects_same_patient
+    medical_records.ck_medical_records_visibility_decision notifications.fk_notification_record_target
 )
 EXPECTED_INDEXES=(
     ix_users_email ix_appointments_clinic_scheduled_at ix_notifications_user_created

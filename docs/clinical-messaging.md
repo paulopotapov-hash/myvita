@@ -1,25 +1,49 @@
 # Clinical messaging
 
-Clinical messaging is a patient communication channel separate from Documents and Medical Records. A doctor or nurse with an active Phase 1 care assignment starts each conversation and sends the first message. Patients can only reply to existing conversations; they cannot open a new conversation with the clinic.
+Clinical messaging is secure communication between a patient and their **current care team**. It is not a chat between arbitrary users. It is separate from Documents, Results and Medical Records. Implementation: `backend/app/modules/messages/`. UI: `frontend/src/pages/messages/`.
 
-## Access and workflow
+## Participants and access
 
-- Conversations are clinic and patient scoped. Every inbox, conversation, reply, status, and escalation request rechecks the shared clinical access policy and active patient assignment.
-- Doctors and nurses can read, start and reply to conversations for assigned patients. Physiotherapists and administrative roles receive no messaging permission in the current policy.
-- Nurses can change non-closed statuses and explicitly flag a conversation for doctor review. Only a doctor may close a conversation. A doctor reply clears the outstanding review flag.
-- Patients see only their own conversations and can reply while a conversation is open. A closed conversation is read-only.
-- The team inbox is shared by currently authorized assigned doctors and nurses. The first staff member opening a patient reply clears the shared team unread flag.
+- A conversation belongs to one patient and is opened by one doctor or nurse who has the messaging permission and an **active care assignment** to that patient (`staff_id` is the opener). One conversation exists per patient/opener pair.
+- **Team inbox.** Every doctor and nurse currently assigned to the patient sees and can answer all of that patient's conversations. Access is re-evaluated on every request. Ending an assignment removes the conversations from that professional's inbox at once, and any direct access returns the same 404 as an unknown conversation.
+- Patients see only their own conversations. They cannot start one; they reply in threads opened by the team.
+- Physiotherapists, administrative staff and clinic administrators have no messaging access. Other clinics never see anything.
+- A patient can reply only while the conversation is not closed and at least one active, assigned doctor or nurse could read the reply. This keeps a patient message from landing where nobody would read it.
+
+## Lifecycle
+
+| Status | Meaning | Set by |
+|---|---|---|
+| `open` | new or reopened | starting the conversation; a doctor reopening it |
+| `waiting_for_team` | the patient wrote last | automatically, on a patient message; nurse triage |
+| `waiting_for_patient` | the team wrote last | automatically, on a team message; nurse triage |
+| `closed` | finished; read-only for everyone | a doctor only |
+
+- **Triage.** Nurses (and doctors) can move a conversation between the three open states.
+- **Escalation.** A nurse can request a doctor's review (`POST /conversations/{id}/escalate`). The care team's doctors get a generic notification, and the inbox can filter on `needs_review=true`. The request is resolved by a doctor's reply, or when a doctor closes the conversation. Repeating a pending request changes nothing.
+- **Close and reopen.** Only a doctor closes (`POST /conversations/{id}/status`). The patient gets a generic notification. Closed conversations accept no messages from anyone, and the backend enforces it. Only a doctor reopens through the status endpoint. Starting a conversation again with the same patient reopens that clinician's closed thread; this is audited as a status change with `operation=start`.
+- Triage metadata (review requested, by whom, who closed) is returned to staff only. The patient sees a simplified status.
+
+## Messages and read state
+
+- Plain text, 5,000 characters at most. There is no edit or delete endpoint; corrections are new messages. The runtime database role may update only `messages.read_at` and has no DELETE.
+- Each message carries the sender's display name and role (patient, doctor, nurse) and `is_mine`. Internal user ids are not exposed.
+- Read state is a shared team flag. The first care-team member who opens the thread marks the patient's messages read for the team. The patient marks the team's messages read. Staff never mark each other's messages.
 
 ## Notifications and audit
 
-Team messages notify the patient. Patient replies notify active assigned doctors and nurses. Nurse escalation notifies only active assigned doctors. Notifications contain a short generic message and typed conversation reference, never the message body. Opening the link rechecks authorization through the conversation API.
+- Team message: the patient is notified. Patient message: every active, assigned doctor and nurse. Escalation: the assigned doctors. Close: the patient.
+- Notifications use the central event module with fixed generic text and a deep link to the conversation, which is re-authorized on open. A burst of messages leaves one unread notification per recipient and conversation. Notification and message commit in the same transaction.
+- Audited: conversation views (including inbox listing), creation, messages, reads, status changes (`from`/`to`), escalation, escalation cleared by a doctor's reply, and every denial (403/404). Audit rows hold identifiers and status codes, never message bodies.
 
-Conversation views, creation, messages, status changes, escalations, escalation resolution by a doctor reply, and denied access use the existing append-only audit log. Audit entries contain conversation identifiers and limited status metadata, not message bodies.
+## Deliberate limits
 
-Messages have no edit or delete endpoint. A database trigger rejects message row updates and deletes, and the runtime database role has insert-only access with no truncate privilege. Correcting a message requires another message.
+There is no real-time transport (refresh and query invalidation only), no attachments, no external e-mail or SMS for messages, no automatic doctor assignment, no response-time tracking and no medical-advice automation.
 
-## Deliberate limits and decisions
+**Decisions required from the clinic before production use:**
 
-There is no doctor auto-assignment, complex queue, external email/SMS, attachment, real-time transport, or medical advice automation. Inbox updates use explicit refresh and normal query invalidation. The shared team unread flag means one authorized staff member reading a reply clears it for the team; per-user read state is deferred.
+- who monitors the team inbox and escalations, and expected response times;
+- what patients are told about response times and emergencies;
+- the retention period for conversations.
 
-The clinic must decide its operational retention period, who is responsible for monitoring escalations, and expected response times before production use. Those policies depend on the clinic's clinical governance and applicable legal review; this implementation does not make a compliance certification or define clinical service-level commitments.
+These depend on clinical governance and legal review; this implementation makes no service-level or compliance claim.

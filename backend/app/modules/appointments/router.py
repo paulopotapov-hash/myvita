@@ -10,6 +10,8 @@ from app.core.security import get_current_clinic_id, get_current_user, require_r
 from app.models import Appointment, AuditAction, AuditResult, Patient, Staff, StaffRole, User, UserRole
 from app.modules.appointments.schemas import (
     AppointmentCreateRequest,
+    AppointmentOut,
+    AppointmentPatientView,
     AppointmentPublic,
     AppointmentUpdateRequest,
 )
@@ -28,6 +30,37 @@ router = APIRouter()
 # the linter (and readers) don't mistake it for a mutable default re-evaluated
 # on every call, which is the actual footgun B008 exists to catch.
 _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
+
+
+_UNKNOWN_PROFESSIONAL = "Profissional de saúde"
+
+
+def _staff_names(db: Session, staff_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+    if not staff_ids:
+        return {}
+    rows = db.query(Staff.id, User.full_name).join(User, User.id == Staff.user_id).filter(Staff.id.in_(staff_ids)).all()
+    return {staff_id: name for staff_id, name in rows}
+
+
+def _for_audience(
+    appointments: list[Appointment], user: User, db: Session, *, may_read_reason: bool | None = None
+) -> list[AppointmentPublic | AppointmentPatientView]:
+    """Explicit per-audience schemas: patients get the professional's display name, never ids."""
+    if user.role != UserRole.PATIENT:
+        return [_public(appointment, user, db, may_read_reason=may_read_reason) for appointment in appointments]
+    names = _staff_names(db, {appointment.staff_id for appointment in appointments})
+    return [
+        AppointmentPatientView(
+            id=appointment.id,
+            staff_name=names.get(appointment.staff_id, _UNKNOWN_PROFESSIONAL),
+            scheduled_at=appointment.scheduled_at,
+            duration_minutes=appointment.duration_minutes,
+            status=appointment.status,
+            # A patient always reads the reason of their own appointment.
+            reason=appointment.reason,
+        )
+        for appointment in appointments
+    ]
 
 
 def _public(
@@ -136,7 +169,7 @@ def create(
     return _public(appointment, _staff_user, db)
 
 
-@router.get("", response_model=list[AppointmentPublic])
+@router.get("", response_model=list[AppointmentOut])
 def list_mine(
     request: Request,
     response: Response,
@@ -144,7 +177,7 @@ def list_mine(
     page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> list[AppointmentPublic]:
+) -> list[AppointmentPublic | AppointmentPatientView]:
     """
     Patients get their own appointments; clinic admins and administrative staff
     every appointment in their own clinic; clinicians only their care team's.
@@ -179,17 +212,17 @@ def list_mine(
     may_read_reason = user.role == UserRole.PATIENT or (
         staff is not None and has_role_action(staff.staff_role, ClinicalAction.VIEW_APPOINTMENT_REASON)
     )
-    return [_public(appointment, user, db, may_read_reason=may_read_reason) for appointment in appointments]
+    return _for_audience(appointments, user, db, may_read_reason=may_read_reason)
 
 
-@router.get("/{appointment_id}", response_model=AppointmentPublic)
+@router.get("/{appointment_id}", response_model=AppointmentOut)
 def detail(
     appointment_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
     clinic_id: str = Depends(get_current_clinic_id),
     _user: User = Depends(get_current_user),
-) -> AppointmentPublic:
+) -> AppointmentPublic | AppointmentPatientView:
     with audit_denials(request, _user, "appointment", appointment_id):
         appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
         if _user.role == UserRole.PATIENT:
@@ -215,7 +248,7 @@ def detail(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return _public(appointment, _user, db)
+    return _for_audience([appointment], _user, db)[0]
 
 
 @router.patch("/{appointment_id}", response_model=AppointmentPublic)

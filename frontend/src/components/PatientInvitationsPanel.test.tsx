@@ -47,7 +47,7 @@ describe('PatientInvitationsPanel', () => {
       if (method === 'GET' && path.startsWith('/api/v1/invitations')) return json(listed, 200, { 'X-Total-Count': String(listed.length) })
       if (method === 'POST' && path === '/api/v1/invitations/patients') {
         listed = [pendingInvitation]
-        return json({ ...pendingInvitation, token: 'secret-token/with+chars' }, 201)
+        return json({ ...pendingInvitation, token: 'secret-token/with+chars', delivery: 'sent' }, 201)
       }
       return undefined
     })
@@ -59,6 +59,7 @@ describe('PatientInvitationsPanel', () => {
 
     const link = await screen.findByLabelText('Link do convite')
     expect(link).toHaveValue(`${window.location.origin}/convite#token=${encodeURIComponent('secret-token/with+chars')}`)
+    expect(screen.getByText(/Enviámos o link por email/)).toBeInTheDocument()
     // Only name and email are sent: clinic/patient identity is decided server-side.
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ full_name: 'Ana Convidada', email: 'ana@example.pt' })
     const list = await screen.findByRole('list', { name: 'Convites pendentes' })

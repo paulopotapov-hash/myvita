@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, record_audit_event
 from app.core.database import get_db
+from app.core.email import deliver, password_reset_email
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import require_roles
 from app.models import AuditAction, AuditResult, User, UserRole
@@ -95,9 +96,17 @@ def issue_password_reset(
     assert admin.clinic_id is not None
     target = service.get_clinic_user(db, user_id, admin.clinic_id)
     token, expires_at = service.issue_password_reset(db, target, admin)
-    # The token is returned to the admin exactly once and never audited.
-    _audit(request, admin, AuditAction.PASSWORD_RESET_ISSUED, target, {"expires_at": expires_at.isoformat()})
-    return PasswordResetIssued(user_id=target.id, token=token, expires_at=expires_at)
+    # E-mailed when delivery is configured; returned to the admin exactly once either
+    # way (fallback when the e-mail fails) and never audited or logged.
+    delivery = deliver(password_reset_email(target.email, token))
+    _audit(
+        request,
+        admin,
+        AuditAction.PASSWORD_RESET_ISSUED,
+        target,
+        {"expires_at": expires_at.isoformat(), "delivery": delivery},
+    )
+    return PasswordResetIssued(user_id=target.id, token=token, expires_at=expires_at, delivery=delivery)
 
 
 @router.post("/{user_id}/require-password-change", response_model=AccountSummary)

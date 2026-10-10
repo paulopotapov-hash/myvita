@@ -20,6 +20,7 @@ vi.mock('../../hooks/useClinicalData', () => ({
 }))
 
 const active: MedicationPublic = {
+  view: 'staff',
   id: 'med-1',
   clinic_id: 'clinic-1',
   patient_id: 'patient-1',

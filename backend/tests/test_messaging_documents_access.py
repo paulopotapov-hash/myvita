@@ -184,21 +184,19 @@ def test_same_clinic_roles_without_clinical_access_are_denied(client: TestClient
     _assert_unchanged(client, a, seeds["A"], "A")
 
 
-def test_threads_are_one_to_one_even_inside_the_care_team(client: TestClient, world):
-    """B's model is kept: an assigned nurse does not see the doctor's thread (no shared inbox)."""
+def test_the_assigned_care_team_shares_the_thread_in_its_inbox(client: TestClient, world):
+    """Team inbox (docs/clinical-messaging.md): an assigned nurse sees and answers the doctor's thread.
+    Only the CURRENT care team: other patients, unassigned staff and other clinics stay denied
+    (see the isolation tests above and the ended-assignment test below)."""
     a, _b, seeds = world
     conversation = seeds["A"]["conversation"]
-    assert _conversation_row(client, a, "nurse", conversation) is None
-    assert_denied(client, a, "nurse", "GET", f"/api/v1/conversations/{conversation}", resource_id=conversation)
-    assert_denied(
-        client,
-        a,
-        "nurse",
-        "POST",
-        f"/api/v1/conversations/{conversation}/messages",
-        resource_id=conversation,
-        json={"body": "INJ"},
-    )
+    row = _conversation_row(client, a, "nurse", conversation)
+    assert row is not None and row["can_reply"] is True
+    assert _send(client, a, "nurse", conversation, "Resposta da enfermagem").status_code == 201
+    a.act(client, "patient")
+    messages = client.get(f"/api/v1/conversations/{conversation}").json()["messages"]
+    assert [(m["sender_role"], m["is_mine"]) for m in messages] == [("nurse", False), ("doctor", False)]
+    assert all("sender_user_id" not in m for m in messages)
 
 
 # --- patient: reads, replies, never authors ----------------------------------
@@ -310,6 +308,13 @@ def test_ended_assignment_hides_threads_from_the_professional_and_freezes_them_f
         f"/api/v1/patients/{a.patient_id}/care-team/{a.staff_ids['doctor']}", headers=a.act(client, "clinic_admin")
     )
     assert removed.status_code == 200, removed.text
+    # The nurse is still on the care team, so the patient can still reach the team.
+    row = _conversation_row(client, a, "patient", conversation)
+    assert row is not None and row["can_reply"] is True
+    removed = client.delete(
+        f"/api/v1/patients/{a.patient_id}/care-team/{a.staff_ids['nurse']}", headers=a.act(client, "clinic_admin")
+    )
+    assert removed.status_code == 200, removed.text
 
     # M1: the professional gets exactly the not-found answer, on list, read and reply.
     assert _conversation_row(client, a, "doctor", conversation) is None
@@ -329,7 +334,8 @@ def test_ended_assignment_hides_threads_from_the_professional_and_freezes_them_f
     )
     assert_denied(client, a, "doctor", "GET", f"/api/v1/documents/{document}/download", resource_id=document)
 
-    # M2: the patient keeps the history but the thread is read-only, enforced by the backend.
+    # M2: with nobody left on the care team, the patient keeps the history but the
+    # thread is read-only, enforced by the backend.
     row = _conversation_row(client, a, "patient", conversation)
     assert row is not None and row["can_reply"] is False
     a.act(client, "patient")
@@ -370,10 +376,12 @@ def test_ended_assignment_hides_threads_from_the_professional_and_freezes_them_f
 def test_deactivated_professional_makes_the_thread_read_only_for_the_patient(client: TestClient, world):
     a, _b, seeds = world
     conversation = seeds["A"]["conversation"]
-    deactivated = client.post(
-        f"/api/v1/staff/{a.staff_ids['doctor']}/deactivate", headers=a.act(client, "clinic_admin")
-    )
-    assert deactivated.status_code == 200, deactivated.text
+    # Every clinician of the care team is deactivated: nobody could read a reply.
+    for role in ("doctor", "nurse"):
+        deactivated = client.post(
+            f"/api/v1/staff/{a.staff_ids[role]}/deactivate", headers=a.act(client, "clinic_admin")
+        )
+        assert deactivated.status_code == 200, deactivated.text
     row = _conversation_row(client, a, "patient", conversation)
     assert row is not None and row["can_reply"] is False
     refused = assert_denied(

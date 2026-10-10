@@ -128,12 +128,56 @@ def test_runtime_role_has_no_access_to_deprecated_tables(runtime_role):
 # the role may UPDATE. Exactly what the services write; nothing table-wide beyond that.
 _NEW_TABLE_GRANTS = {
     "documents": ((True, True, False, False, False, False, False), set()),
-    "conversations": ((True, True, False, False, False, False, False), {"updated_at"}),
+    "conversations": (
+        (True, True, False, False, False, False, False),
+        {
+            "updated_at",
+            "status",
+            "needs_doctor_review",
+            "escalated_at",
+            "escalated_by_staff_id",
+            "closed_at",
+            "closed_by_staff_id",
+        },
+    ),
     "messages": ((True, True, False, False, False, False, False), {"read_at"}),
     "invitations": ((True, True, False, False, False, False, False), {"status", "accepted_at"}),
     "appointment_requests": (
         (True, True, False, False, False, False, False),
         {"status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at"},
+    ),
+    # P2.5: the edit and sharing history of a record is append-only.
+    "medical_record_revisions": ((True, True, False, False, False, False, False), set()),
+    "medical_records": (
+        (True, True, False, False, False, False, False),
+        {
+            "title",
+            "content",
+            "version",
+            "patient_visibility",
+            "visibility_changed_at",
+            "visibility_changed_by_staff_id",
+            "updated_at",
+        },
+    ),
+    # P2.4: no DELETE; patient, clinic, author and correction link are fixed at creation.
+    "clinical_results": (
+        (True, True, False, False, False, False, False),
+        {
+            "category",
+            "title",
+            "value",
+            "unit",
+            "reference_range",
+            "summary",
+            "result_date",
+            "document_id",
+            "correction_reason",
+            "status",
+            "released_at",
+            "released_by_staff_id",
+            "updated_at",
+        },
     ),
 }
 
@@ -170,6 +214,46 @@ def test_runtime_role_grants_on_new_tables_are_exactly_what_the_app_needs(runtim
     _expect_denied(runtime, "DELETE FROM messages")
     _expect_denied(runtime, "DELETE FROM documents")
     _expect_denied(runtime, "UPDATE documents SET title = 'x'")
+
+
+def test_runtime_role_can_run_the_clinical_workflow_updates_and_nothing_more(runtime_role):
+    """P2.4/P2.5: the exact column sets the services write are granted (a draft edit, a
+    release, a correction draft edit, a record edit and a visibility change), while
+    deleting results, re-pointing them, or rewriting record history is refused.
+    Column privileges are checked when the statement is planned, so WHERE false suffices."""
+    _, runtime, _ = runtime_role
+    with runtime.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE clinical_results SET category = category, title = title, value = value, unit = unit, "
+                "reference_range = reference_range, summary = summary, result_date = result_date, "
+                "document_id = document_id, correction_reason = correction_reason, updated_at = now() "
+                "WHERE false"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE clinical_results SET status = 'released', released_at = now(), "
+                "released_by_staff_id = released_by_staff_id, updated_at = now() WHERE false"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE medical_records SET title = title, content = content, version = version + 1, "
+                "patient_visibility = 'shared', visibility_changed_at = now(), "
+                "visibility_changed_by_staff_id = visibility_changed_by_staff_id, updated_at = now() WHERE false"
+            )
+        )
+    _expect_denied(runtime, "DELETE FROM clinical_results")
+    for column in ("patient_id", "clinic_id", "author_staff_id", "corrects_result_id", "created_at"):
+        _expect_denied(runtime, f"UPDATE clinical_results SET {column} = {column} WHERE false")
+    _expect_denied(runtime, "DELETE FROM medical_records")
+    for column in ("patient_id", "clinic_id", "author_staff_id", "created_at"):
+        _expect_denied(runtime, f"UPDATE medical_records SET {column} = {column} WHERE false")
+    _expect_denied(runtime, "UPDATE medical_record_revisions SET content = content WHERE false")
+    _expect_denied(runtime, "DELETE FROM medical_record_revisions")
+    # Only the owner can switch off the released-result guard (migration 8d9e0f1a2b3c).
+    _expect_denied(runtime, "ALTER TABLE clinical_results DISABLE TRIGGER clinical_results_released_immutable")
 
 
 def test_runtime_role_has_application_dml_but_no_ddl(runtime_role):

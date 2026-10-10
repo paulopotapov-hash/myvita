@@ -217,7 +217,9 @@ def test_staff_and_patient_exchange_messages(client):
     assert sent.status_code == 201
     assert sent.json()["body"] == "Bom dia, como se sente?"
     assert sent.json()["read_at"] is None
-    assert sent.json()["sender_user_id"] == str(_user_id(client, doctor["email"]))
+    assert sent.json()["is_mine"] is True
+    assert (sent.json()["sender_name"], sent.json()["sender_role"]) == ("doctor flow", "doctor")
+    assert "sender_user_id" not in sent.json()
 
     _use(client, patient["identity"])
     listed = client.get("/api/v1/conversations")
@@ -381,7 +383,6 @@ def test_non_participants_in_same_clinic_cannot_access_conversation(client):
     # (identity, email, may use messaging at all)
     outsiders = [
         (tenant["doctor2"]["identity"], tenant["doctor2"]["email"], True),  # another doctor
-        (tenant["nurse"]["identity"], tenant["nurse"]["email"], True),  # same care team, other thread
         (tenant["patient2"]["identity"], tenant["patient2"]["email"], True),  # another patient
         (tenant["admin"], "msg-admin-same-clinic@example.pt", False),
         (tenant["office"]["identity"], tenant["office"]["email"], False),
@@ -550,10 +551,10 @@ def test_notification_failure_rolls_back_message(client, monkeypatch):
     conversation_id = _open(client, tenant["doctor"], tenant["patient"])
     from app.modules.messages import service
 
-    def broken_notification(**_kwargs):
+    def broken_notification(*_args, **_kwargs):
         raise RuntimeError("synthetic notification failure")
 
-    monkeypatch.setattr(service, "Notification", broken_notification)
+    monkeypatch.setattr(service, "notify", broken_notification)
     with pytest.raises(RuntimeError, match="synthetic notification failure"):
         _send(client, tenant["doctor"], conversation_id, "Não deve persistir")
     db = client.test_session()

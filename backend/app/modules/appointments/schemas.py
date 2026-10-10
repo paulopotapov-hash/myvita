@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -30,6 +31,9 @@ class AppointmentCreateRequest(RequestModel):
 
 
 class AppointmentPublic(BaseModel):
+    """Staff and clinic-admin view: the identifiers scheduling workflows use."""
+
+    view: Literal["staff"] = "staff"
     id: uuid.UUID
     clinic_id: uuid.UUID
     patient_id: uuid.UUID
@@ -40,6 +44,22 @@ class AppointmentPublic(BaseModel):
     reason: str | None
 
     model_config = {"from_attributes": True}
+
+
+class AppointmentPatientView(BaseModel):
+    """Patient view: when, with whom (display name only) and why. No internal
+    clinic, patient or staff identifiers; patients cannot resolve them anyway."""
+
+    view: Literal["patient"] = "patient"
+    id: uuid.UUID
+    staff_name: str
+    scheduled_at: datetime
+    duration_minutes: int
+    status: AppointmentStatus
+    reason: str | None
+
+
+AppointmentOut = Annotated[AppointmentPublic | AppointmentPatientView, Field(discriminator="view")]
 
 
 class AppointmentUpdateRequest(RequestModel):

@@ -9,6 +9,15 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 async function expectNoViolations(page: Page, label: string): Promise<void> {
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
   await expect(page.getByText('A carregar')).toHaveCount(0)
+  // Scan the settled UI, not an intermediate animation frame: after a failed login the
+  // button is re-enabled while its 150 ms opacity transition (from disabled 60%) is still
+  // running, and axe measured contrast mid-fade (intermittent color-contrast failure).
+  // Infinite animations (spinners) are ignored; rules and expectations are unchanged.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((animation) => animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity),
+  )
   const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze()
   const summary = violations.map(
     (violation) => `${violation.id} (${violation.impact}): ${violation.help} -> ${violation.nodes.map((node) => node.target.join(' ')).join(' | ')}`,

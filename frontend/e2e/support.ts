@@ -128,6 +128,8 @@ export async function seedClinicalContent(tag: string): Promise<void> {
   await apiAs('doctor', 'POST', `/api/v1/patients/${patientId}/medical-records`, {
     title: `Registo ${tag}`,
     content: 'Conteúdo clínico de teste com texto suficientemente longo para testar a quebra de linha em ecrãs pequenos.',
+    // Shared, so the patient-side clinical screens have content too (P2.5).
+    share_with_patient: true,
   })
   await apiAs('doctor', 'POST', `/api/v1/patients/${patientId}/medications`, {
     name: `Medicamento ${tag}`,

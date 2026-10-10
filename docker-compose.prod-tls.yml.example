@@ -1,10 +1,13 @@
-# HTTPS overlay example. Copy it outside the repository, replace the example
-# certificate directory, and use real certificates supplied by the deployment
-# platform. Never commit private keys or certificate material.
+# HTTPS overlay example. Copy it outside the repository (or to
+# docker-compose.prod-tls.yml, which is not committed), and point TLS_CERT_DIR at
+# the directory scripts/renew_tls_certificate.sh installs certificates into.
+# Never commit private keys or certificate material. See docs/tls-certificates.md.
 services:
   proxy:
     ports:
       - "443:8443"
     volumes:
       - ./proxy/nginx.tls.conf.template.example:/etc/nginx/templates/default.conf.template:ro
-      - /absolute/path/to/certificates:/etc/nginx/tls:ro
+      - ${TLS_CERT_DIR:?Set TLS_CERT_DIR to the installed certificate directory}:/etc/nginx/tls:ro
+      # ACME HTTP-01 challenge files written by the renewal script.
+      - ${ACME_WEBROOT:-/var/lib/myvita/acme}:/var/www/acme:ro

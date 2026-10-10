@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { authState, loadSeed, openPatientFile } from './support'
+import { apiStatus, authState, loadSeed, openPatientFile } from './support'
 
 const seed = loadSeed()
 
@@ -29,6 +29,8 @@ test.describe.serial('medical records', () => {
 
       await section.getByLabel('Título do registo').fill('Avaliação inicial E2E')
       await section.getByLabel('Conteúdo clínico').fill('Sem queixas relevantes.')
+      // P2.5: shared explicitly; records are internal notes by default.
+      await section.getByRole('checkbox', { name: /Partilhar com o paciente/ }).check()
       await section.getByRole('button', { name: 'Criar registo' }).click()
       await expect(section.getByRole('status').filter({ hasText: 'Registo clínico guardado.' })).toBeVisible()
 
@@ -44,19 +46,55 @@ test.describe.serial('medical records', () => {
       await expect(section.getByRole('status').filter({ hasText: 'Registo clínico guardado.' })).toBeVisible()
       await expect(record).toContainText('Queixas de cansaço.')
       await expect(record).toContainText('Versão 2')
+      await expect(record).toContainText('Partilhado com o paciente')
+    })
+
+    test('keeps an internal note away from the patient', async ({ page }) => {
+      await openPatient(page)
+      const section = recordsPanel(page)
+      await section.getByLabel('Título do registo').fill('Nota interna E2E')
+      await section.getByLabel('Conteúdo clínico').fill('Observação só para a equipa.')
+      await section.getByRole('button', { name: 'Criar registo' }).click()
+      await expect(section.getByRole('status').filter({ hasText: 'Registo clínico guardado.' })).toBeVisible()
+      await expect(section.getByRole('listitem').filter({ hasText: 'Nota interna E2E' })).toContainText('Nota interna')
+    })
+  })
+
+  test.describe('sharing decisions', () => {
+    test.use({ storageState: authState('doctor') })
+
+    test('shares an internal note explicitly after confirmation, then withdraws it', async ({ page }) => {
+      await openPatient(page)
+      const section = recordsPanel(page)
+      const note = section.getByRole('listitem').filter({ hasText: 'Nota interna E2E' })
+      await note.getByRole('button', { name: 'Partilhar com o paciente' }).click()
+      const dialog = page.getByRole('alertdialog', { name: 'Partilhar com o paciente' })
+      await expect(dialog).toContainText('notificação genérica')
+      await dialog.getByRole('button', { name: 'Partilhar' }).click()
+      await expect(section.getByRole('status')).toHaveText('Registo partilhado com o paciente.')
+      await expect(note).toContainText('Partilhado com o paciente')
+      expect(await apiStatus('patient', 'GET', `/api/v1/patients/${seed.patientIds.patient}/medical-records`)).toBe(200)
+
+      await note.getByRole('button', { name: 'Deixar de partilhar' }).click()
+      await page.getByRole('alertdialog', { name: 'Deixar de partilhar' }).getByRole('button', { name: 'Deixar de partilhar' }).click()
+      await expect(section.getByRole('status')).toHaveText('O paciente deixou de ter acesso a este registo.')
+      await expect(note).toContainText('Nota interna')
     })
   })
 
   test.describe('as the patient', () => {
     test.use({ storageState: authState('patient') })
 
-    test('can read their record but not write it', async ({ page }) => {
+    test('can read the shared record but not write it, and never sees internal notes', async ({ page }) => {
       await page.goto('/patient/saude')
       await page.getByRole('tab', { name: 'Registos clínicos' }).click()
       const section = recordsPanel(page)
       await expect(section.getByRole('listitem').filter({ hasText: 'Avaliação inicial E2E' })).toBeVisible()
+      await expect(section.getByText('Nota interna E2E')).toHaveCount(0)
+      await expect(section.getByText('Observação só para a equipa.')).toHaveCount(0)
       await expect(section.getByLabel('Título do registo')).toHaveCount(0)
       await expect(section.getByRole('button', { name: 'Editar' })).toHaveCount(0)
+      await expect(section).not.toContainText('Versão')
     })
   })
 

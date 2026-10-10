@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_access, record_denied_access
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AuditAction, Medication, MedicationStatus, User
+from app.models import AuditAction, Medication, MedicationStatus, User, UserRole
 from app.modules.medications.schemas import (
     MedicationCreateRequest,
     MedicationDeactivateRequest,
+    MedicationOut,
+    MedicationPatientView,
     MedicationPublic,
     MedicationUpdateRequest,
 )
@@ -25,6 +27,25 @@ from app.modules.medications.service import (
 router = APIRouter()
 
 
+def _for_audience(medication: Medication, user: User) -> MedicationPublic | MedicationPatientView:
+    """Explicit per-audience schemas: patients never receive internal clinic or staff identifiers."""
+    if user.role == UserRole.PATIENT:
+        return MedicationPatientView(
+            id=medication.id,
+            name=medication.name,
+            dosage=medication.dosage,
+            route=medication.route,
+            frequency=medication.frequency,
+            instructions=medication.instructions,
+            status=medication.status,
+            start_date=medication.start_date,
+            end_date=medication.end_date,
+            created_at=medication.created_at,
+            updated_at=medication.updated_at,
+        )
+    return MedicationPublic.model_validate(medication)
+
+
 def _audit(request: Request, user: User, action: AuditAction, medication: Medication) -> None:
     record_access(request, user, action, "medication", medication.id, metadata={"patient_id": medication.patient_id})
 
@@ -35,7 +56,7 @@ def _audit_and_raise(request: Request, user: User, resource_id: uuid.UUID, exc: 
     raise exc
 
 
-@router.get("/patients/{patient_id}/medications", response_model=list[MedicationPublic])
+@router.get("/patients/{patient_id}/medications", response_model=list[MedicationOut])
 def list_for_patient(
     patient_id: uuid.UUID,
     request: Request,
@@ -45,7 +66,7 @@ def list_for_patient(
     page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> list[Medication]:
+) -> list[MedicationPublic | MedicationPatientView]:
     try:
         medications, total = list_medications(
             db,
@@ -61,7 +82,7 @@ def list_for_patient(
     record_access(
         request, user, AuditAction.MEDICATION_VIEWED, "medication_list", patient_id, metadata={"count": len(medications)}
     )
-    return medications
+    return [_for_audience(medication, user) for medication in medications]
 
 
 @router.post("/patients/{patient_id}/medications", response_model=MedicationPublic, status_code=201)
@@ -80,19 +101,19 @@ def create(
     return medication
 
 
-@router.get("/medications/{medication_id}", response_model=MedicationPublic)
+@router.get("/medications/{medication_id}", response_model=MedicationOut)
 def detail(
     medication_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Medication:
+) -> MedicationPublic | MedicationPatientView:
     try:
         medication = get_medication(db, medication_id, user)
     except HTTPException as exc:
         _audit_and_raise(request, user, medication_id, exc)
     _audit(request, user, AuditAction.MEDICATION_VIEWED, medication)
-    return medication
+    return _for_audience(medication, user)
 
 
 @router.patch("/medications/{medication_id}", response_model=MedicationPublic)

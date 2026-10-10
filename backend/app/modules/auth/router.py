@@ -1,14 +1,16 @@
 import logging
 import uuid
+from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core import mfa
 from app.core.audit import client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.email import OutgoingEmail, deliver, password_reset_email
 from app.core.privacy import email_fingerprint, mask_email
 from app.core.rate_limit import (
     AUTHENTICATED_WRITE_RATE_LIMIT,
@@ -27,7 +29,7 @@ from app.core.security import (
     set_session_cookie,
     verify_password,
 )
-from app.models import AuditAction, AuditResult, Patient, Staff, User
+from app.models import AuditAction, AuditResult, Patient, Staff, User, UserRole
 from app.modules.auth import mfa_service, password_reset
 from app.modules.auth.schemas import (
     GenericMessage,
@@ -323,39 +325,80 @@ def password_reset_confirm(
     _audit(request, AuditAction.PASSWORD_RESET_COMPLETED, user=user, resource_id=user.id)
 
 
+_SELF_SERVICE_COOLDOWN = timedelta(minutes=5)
+_RESET_REQUEST_ANSWER_ADMIN = (
+    "Se existir uma conta com este email, contacte o administrador da sua clínica para obter uma ligação de redefinição."
+)
+_RESET_REQUEST_ANSWER_EMAIL = (
+    "Se existir uma conta com este email, enviámos uma ligação de redefinição. "
+    "Se não a receber, contacte o administrador da sua clínica."
+)
+
+
 @router.post("/password-reset/request", status_code=202, response_model=GenericMessage)
 @limiter.limit(PASSWORD_RESET_RATE_LIMIT)
 def password_reset_request(
     payload: PasswordResetRequest,
     request: Request,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> GenericMessage:
     """
-    Self-service entry point. No delivery channel (e-mail/SMS) is approved
-    yet, so this never issues a token: it records the request for the
-    clinic's audit trail and always answers the same way, whether or not the
+    Self-service entry point. Always answers the same way, whether or not the
     address has an account, so it cannot be used to enumerate users.
+
+    With SELF_SERVICE_PASSWORD_RESET_ENABLED (which requires e-mail delivery),
+    an active staff or patient account gets a reset link by e-mail, at most
+    once per cooldown period. The e-mail is sent after the response, so its
+    timing does not reveal whether the account exists. Clinic administrators
+    are never reset this way (operator recovery, docs/security/account-lifecycle.md).
+    Otherwise no token is issued and the request is only recorded for the
+    clinic's audit trail.
     """
     account = db.query(User).filter(User.email_matches(payload.email)).first()
     target = account if account is not None and account.is_active else None
+    self_service = settings.SELF_SERVICE_PASSWORD_RESET_ENABLED
+    eligible = (
+        self_service
+        and target is not None
+        and target.role != UserRole.CLINIC_ADMIN
+        and not password_reset.recently_issued(db, target.id, within=_SELF_SERVICE_COOLDOWN)
+    )
     # The requester is anonymous: there is never an actor. A matching active
     # account is recorded as the *resource* (and its clinic, so the clinic
     # admin sees the request); the typed address only masked/fingerprinted.
+    base_metadata = {
+        "account_found": target is not None,
+        "email_masked": mask_email(payload.email),
+        "email_fingerprint": email_fingerprint(payload.email),
+    }
+    audit_context: dict[str, Any] = {
+        "clinic_id": target.clinic_id if target else None,
+        "resource_type": "user" if target else None,
+        "resource_id": target.id if target else None,
+        "ip_address": client_ip(request),
+        "user_agent": request.headers.get("user-agent"),
+    }
+    if eligible and target is not None:
+        token, _expires_at = password_reset.issue(db, target, issued_by=None)
+        outgoing = password_reset_email(target.email, token)
+        background.add_task(_send_self_service_reset, outgoing, audit_context, base_metadata)
+    else:
+        record_audit_event(
+            action=AuditAction.PASSWORD_RESET_REQUESTED,
+            result=AuditResult.SUCCESS,
+            metadata={"delivery": "disabled" if not self_service else "not_sent", **base_metadata},
+            **audit_context,
+        )
+    return GenericMessage(detail=_RESET_REQUEST_ANSWER_EMAIL if self_service else _RESET_REQUEST_ANSWER_ADMIN)
+
+
+def _send_self_service_reset(outgoing: OutgoingEmail, audit_context: dict[str, Any], metadata: dict[str, Any]) -> None:
+    """Runs after the response. The audit row records the real delivery outcome."""
+    delivery = deliver(outgoing)
     record_audit_event(
         action=AuditAction.PASSWORD_RESET_REQUESTED,
-        result=AuditResult.SUCCESS,
-        clinic_id=target.clinic_id if target else None,
-        resource_type="user" if target else None,
-        resource_id=target.id if target else None,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={
-            "delivery": "disabled",
-            "account_found": target is not None,
-            "email_masked": mask_email(payload.email),
-            "email_fingerprint": email_fingerprint(payload.email),
-        },
-    )
-    return GenericMessage(
-        detail="Se existir uma conta com este email, contacte o administrador da sua clínica para obter uma ligação de redefinição."
+        result=AuditResult.SUCCESS if delivery == "sent" else AuditResult.FAILURE,
+        metadata={"delivery": delivery, "via": "self_service", **metadata},
+        **audit_context,
     )

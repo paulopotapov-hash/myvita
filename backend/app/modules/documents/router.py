@@ -190,6 +190,8 @@ def download(
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}",
             "X-Content-Type-Options": "nosniff",
+            # Clinical files must not linger in browser or intermediary caches.
+            "Cache-Control": "no-store",
         },
     )
 

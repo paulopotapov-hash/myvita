@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -49,6 +50,9 @@ class InvitationPublic(BaseModel):
 
 class InvitationCreated(InvitationPublic):
     token: str
+    # E-mail delivery of the link (app/core/email.py): "sent" means the relay
+    # accepted it; "failed"/"disabled" mean the admin must hand the link over.
+    delivery: Literal["sent", "failed", "disabled"] = "disabled"
 
 
 class InvitationPreview(BaseModel):

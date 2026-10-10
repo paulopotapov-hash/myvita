@@ -38,9 +38,11 @@ from app.models import AuditAction, AuditResult
 from app.modules.appointment_requests.router import router as appointment_requests_router
 from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
+from app.modules.clinical_results.router import router as clinical_results_router
 from app.modules.clinics.router import router as clinics_router
 from app.modules.consents.router import router as consents_router
 from app.modules.documents.router import router as documents_router
+from app.modules.documents.storage import LocalDocumentStorage
 from app.modules.invitations.router import router as invitations_router
 from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
@@ -272,7 +274,17 @@ def metrics(request: Request) -> Response:
         raise HTTPException(status_code=404)
     if request.headers.get("x-metrics-token") != settings.METRICS_TOKEN:
         raise HTTPException(status_code=404)
-    return PlainTextResponse(render_prometheus_text(), media_type="text/plain; version=0.0.4")
+    gauges = {"myvita_document_storage_writable": 1.0 if _document_storage_writable() else 0.0}
+    return PlainTextResponse(render_prometheus_text(gauges), media_type="text/plain; version=0.0.4")
+
+
+def _document_storage_writable() -> bool:
+    """Checked at scrape time; a misconfigured or read-only volume otherwise only shows up
+    as failed uploads. Exposed as a metric only, never in the public health responses."""
+    try:
+        return LocalDocumentStorage(settings.DOCUMENT_STORAGE_DIR).is_writable()
+    except OSError:
+        return False
 
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
@@ -285,6 +297,7 @@ app.include_router(appointment_requests_router, prefix="/api/v1/appointment-requ
 app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
+app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
 app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])

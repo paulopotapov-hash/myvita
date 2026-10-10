@@ -2,7 +2,8 @@
 One-time password reset tokens.
 
 Tokens are 384-bit random values handed to the user exactly once (by a
-clinic admin, out of band); only their SHA-256 is stored. Completing a
+clinic admin, out of band or by e-mail, or by the self-service e-mail flow
+when it is enabled); only their SHA-256 is stored. Completing a
 reset revokes every session and every other outstanding reset token for
 the account, and clears any forced-password-change flag. A reset does not
 bypass MFA: the next login still requires the second factor.
@@ -34,6 +35,22 @@ def revoke_outstanding(db: Session, user_id: object) -> None:
     db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == user_id, PasswordResetToken.used_at.is_(None)
     ).update({PasswordResetToken.used_at: datetime.now(UTC)}, synchronize_session=False)
+
+
+def recently_issued(db: Session, user_id: object, *, within: timedelta) -> bool:
+    """An unused, unexpired token was issued for the account within `within` (self-service cooldown)."""
+    now = datetime.now(UTC)
+    return (
+        db.query(PasswordResetToken.id)
+        .filter(
+            PasswordResetToken.user_id == user_id,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+            PasswordResetToken.created_at > now - within,
+        )
+        .first()
+        is not None
+    )
 
 
 def issue(db: Session, target: User, *, issued_by: User | None) -> tuple[str, datetime]:

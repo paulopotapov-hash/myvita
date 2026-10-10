@@ -18,7 +18,6 @@ from app.models import (
     AppointmentRequest,
     AppointmentRequestStatus,
     ClinicalCareAssignment,
-    Notification,
     Patient,
     Staff,
     StaffRole,
@@ -28,6 +27,7 @@ from app.models import (
 from app.modules.appointment_requests.schemas import AppointmentRequestAccept, AppointmentRequestCreate
 from app.modules.appointments.schemas import AppointmentCreateRequest
 from app.modules.appointments.service import create_appointment
+from app.modules.notifications.events import NotificationEvent, notify
 
 MAX_PENDING_PER_PATIENT = 5
 _NOT_FOUND = "Pedido de consulta não encontrado."
@@ -39,11 +39,6 @@ def _not_found() -> HTTPException:
 
 def _not_pending() -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail="O pedido já foi processado.")
-
-
-def _notify(db: Session, clinic_id: uuid.UUID, user_id: uuid.UUID, title: str, message: str) -> None:
-    # Generic text only: notifications never carry the request reason.
-    db.add(Notification(clinic_id=clinic_id, user_id=user_id, title=title, message=message))
 
 
 def own_patient(db: Session, user: User) -> Patient:
@@ -81,6 +76,7 @@ def create_request(db: Session, user: User, payload: AppointmentRequestCreate) -
         reason=payload.reason,
     )
     db.add(request)
+    db.flush()
     # Scheduling roles of the clinic: clinic admins and administrative staff.
     schedulers = (
         db.query(User.id)
@@ -94,12 +90,13 @@ def create_request(db: Session, user: User, payload: AppointmentRequestCreate) -
         .all()
     )
     for (scheduler_id,) in schedulers:
-        _notify(
+        # Generic text only: notifications never carry the request reason.
+        notify(
             db,
-            patient.clinic_id,
-            scheduler_id,
-            "Novo pedido de consulta",
-            "Um paciente pediu uma consulta. Reveja os pedidos pendentes.",
+            NotificationEvent.APPOINTMENT_REQUEST_RECEIVED,
+            clinic_id=patient.clinic_id,
+            recipient_user_id=scheduler_id,
+            dedupe_key=str(request.id),
         )
     db.commit()
     db.refresh(request)
@@ -195,12 +192,12 @@ def accept_request(
     request.status = AppointmentRequestStatus.ACCEPTED
     request.decided_by_user_id = actor.id
     request.decided_at = datetime.now(UTC)
-    _notify(
+    notify(
         db,
-        patient.clinic_id,
-        patient.user_id,
-        "Pedido de consulta aceite",
-        "O seu pedido de consulta foi aceite e a consulta foi marcada.",
+        NotificationEvent.APPOINTMENT_REQUEST_ACCEPTED,
+        clinic_id=patient.clinic_id,
+        recipient_user_id=patient.user_id,
+        dedupe_key=str(request.id),
     )
     # Existing scheduling path: clinic advisory lock, staff/patient tenant
     # checks and overlap detection. It commits the request change, the
@@ -232,12 +229,12 @@ def reject_request(db: Session, request_id: uuid.UUID, clinic_id: uuid.UUID, act
     request.status = AppointmentRequestStatus.REJECTED
     request.decided_by_user_id = actor.id
     request.decided_at = datetime.now(UTC)
-    _notify(
+    notify(
         db,
-        patient.clinic_id,
-        patient.user_id,
-        "Pedido de consulta recusado",
-        "O seu pedido de consulta não pôde ser aceite. Contacte a clínica se precisar.",
+        NotificationEvent.APPOINTMENT_REQUEST_REJECTED,
+        clinic_id=patient.clinic_id,
+        recipient_user_id=patient.user_id,
+        dedupe_key=str(request.id),
     )
     db.commit()
     db.refresh(request)

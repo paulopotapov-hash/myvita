@@ -10,7 +10,6 @@ from app.models import (
     Appointment,
     AppointmentStatus,
     ClinicalCareAssignment,
-    Notification,
     Patient,
     Staff,
     StaffRole,
@@ -21,6 +20,7 @@ from app.modules.appointments.schemas import (
     AppointmentCreateRequest,
     AppointmentUpdateRequest,
 )
+from app.modules.notifications.events import NotificationEvent, notify
 
 _VALID_STATUS_TRANSITIONS: dict[AppointmentStatus, set[AppointmentStatus]] = {
     AppointmentStatus.SCHEDULED: {AppointmentStatus.CONFIRMED},
@@ -41,26 +41,16 @@ def _lock_clinic_schedule(db: Session, clinic_id: str) -> None:
     )
 
 
-def _add_patient_notification(db: Session, patient: Patient, *, title: str, message: str) -> None:
-    db.add(
-        Notification(
-            clinic_id=patient.clinic_id,
-            user_id=patient.user_id,
-            title=title,
-            message=message,
-        )
-    )
+def _add_patient_notification(
+    db: Session, patient: Patient, *, event: NotificationEvent, dedupe_key: str | None = None
+) -> None:
+    notify(db, event, clinic_id=patient.clinic_id, recipient_user_id=patient.user_id, dedupe_key=dedupe_key)
 
 
-def _add_staff_notification(db: Session, staff: Staff, *, title: str, message: str) -> None:
-    db.add(
-        Notification(
-            clinic_id=staff.clinic_id,
-            user_id=staff.user_id,
-            title=title,
-            message=message,
-        )
-    )
+def _add_staff_notification(
+    db: Session, staff: Staff, *, event: NotificationEvent, dedupe_key: str | None = None
+) -> None:
+    notify(db, event, clinic_id=staff.clinic_id, recipient_user_id=staff.user_id, dedupe_key=dedupe_key)
 
 
 def _ensure_no_conflict(
@@ -130,18 +120,11 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
         reason=payload.reason,
     )
     db.add(appointment)
+    db.flush()
     _add_patient_notification(
-        db,
-        patient,
-        title="Consulta criada",
-        message="Foi criada uma consulta na sua agenda.",
+        db, patient, event=NotificationEvent.APPOINTMENT_CREATED, dedupe_key=str(appointment.id)
     )
-    _add_staff_notification(
-        db,
-        staff,
-        title="Consulta atribuída",
-        message="Foi atribuída uma consulta à sua agenda.",
-    )
+    _add_staff_notification(db, staff, event=NotificationEvent.APPOINTMENT_ASSIGNED, dedupe_key=str(appointment.id))
     db.commit()
     db.refresh(appointment)
     return appointment
@@ -215,18 +198,12 @@ def update_appointment(
     )
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(appointment, field, value)
-    status_messages = {
-        AppointmentStatus.CONFIRMED: ("Consulta confirmada", "Uma consulta da sua agenda foi confirmada."),
-        AppointmentStatus.COMPLETED: ("Consulta concluída", "Uma consulta da sua agenda foi concluída."),
-        AppointmentStatus.NO_SHOW: (
-            "Falta registada",
-            "Foi registada uma falta numa consulta da sua agenda.",
-        ),
+    status_events = {
+        AppointmentStatus.CONFIRMED: NotificationEvent.APPOINTMENT_CONFIRMED,
+        AppointmentStatus.COMPLETED: NotificationEvent.APPOINTMENT_COMPLETED,
+        AppointmentStatus.NO_SHOW: NotificationEvent.APPOINTMENT_NO_SHOW,
     }
-    title, message = status_messages.get(
-        appointment.status,
-        ("Consulta atualizada", "Uma consulta da sua agenda foi atualizada."),
-    )
+    event = status_events.get(appointment.status, NotificationEvent.APPOINTMENT_UPDATED)
     if meaningful_change:
         recipient_patients = {patient.id: patient}
         recipient_staff = {staff.id: staff}
@@ -238,10 +215,12 @@ def update_appointment(
             old_staff = db.get(Staff, old_staff_id)
             if old_staff is not None and str(old_staff.clinic_id) == str(clinic_id):
                 recipient_staff[old_staff.id] = old_staff
+        # Repeated edits are separate events: no dedupe key (the status ones
+        # cannot repeat, the transition table only moves forward).
         for patient_recipient in recipient_patients.values():
-            _add_patient_notification(db, patient_recipient, title=title, message=message)
+            _add_patient_notification(db, patient_recipient, event=event)
         for staff_recipient in recipient_staff.values():
-            _add_staff_notification(db, staff_recipient, title=title, message=message)
+            _add_staff_notification(db, staff_recipient, event=event)
     db.commit()
     db.refresh(appointment)
     return appointment
@@ -259,18 +238,12 @@ def cancel_appointment(db: Session, appointment_id: uuid.UUID, clinic_id: str) -
     if patient is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Paciente da consulta indisponível.")
     _add_patient_notification(
-        db,
-        patient,
-        title="Consulta cancelada",
-        message="Uma consulta da sua agenda foi cancelada.",
+        db, patient, event=NotificationEvent.APPOINTMENT_CANCELLED, dedupe_key=str(appointment.id)
     )
     staff = db.get(Staff, appointment.staff_id)
     if staff is not None and str(staff.clinic_id) == str(clinic_id):
         _add_staff_notification(
-            db,
-            staff,
-            title="Consulta cancelada",
-            message="Uma consulta atribuída à sua agenda foi cancelada.",
+            db, staff, event=NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF, dedupe_key=str(appointment.id)
         )
     db.commit()
     db.refresh(appointment)

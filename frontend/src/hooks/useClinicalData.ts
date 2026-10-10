@@ -18,6 +18,21 @@ export function useUpdateMedicalRecord(patientId: string) {
   const client = useQueryClient()
   return useMutation({ mutationFn: ({ id, payload }: { id: string; payload: MedicalRecordUpdateRequest }) => medicalRecordsService.update(id, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medical-records'] }) })
 }
+/** A single record, e.g. opened from a notification deep link (access re-checked by the backend). */
+export function useMedicalRecord(recordId: string | null) {
+  return useQuery({ queryKey: ['medical-records', recordId], queryFn: ({ signal }) => medicalRecordsService.detail(recordId ?? '', signal), enabled: Boolean(recordId), retry: false })
+}
+export function useChangeRecordVisibility(patientId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, share, expectedVersion }: { id: string; share: boolean; expectedVersion: number }) =>
+      share ? medicalRecordsService.share(id, expectedVersion) : medicalRecordsService.unshare(id),
+    onSuccess: (_record, { id }) => Promise.all([
+      client.invalidateQueries({ queryKey: ['patients', patientId, 'medical-records'] }),
+      client.invalidateQueries({ queryKey: ['medical-records', id] }),
+    ]),
+  })
+}
 export function useMedications(patientId: string, enabled = true) {
   return useQuery({
     queryKey: ['patients', patientId, 'medications'],

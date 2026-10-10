@@ -1,0 +1,3 @@
+# Copy to public_https.yml (outside Git or untracked) and replace <PUBLIC_DOMAIN>.
+- targets:
+    - https://<PUBLIC_DOMAIN>/healthz

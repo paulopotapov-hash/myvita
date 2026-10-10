@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr
 
@@ -25,8 +26,10 @@ class AccountSummary(BaseModel):
 
 
 class PasswordResetIssued(BaseModel):
-    """Returned once. The admin hands the link to the person out of band."""
+    """Returned once. E-mailed when delivery is configured; otherwise (or if the
+    e-mail failed) the admin hands the link to the person out of band."""
 
     user_id: uuid.UUID
     token: str
     expires_at: datetime
+    delivery: Literal["sent", "failed", "disabled"] = "disabled"

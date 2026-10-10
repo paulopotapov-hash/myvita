@@ -1,5 +1,6 @@
 """Private local document storage, behind a small replaceable interface."""
 
+import os
 import re
 import uuid
 from pathlib import Path
@@ -30,11 +31,25 @@ class LocalDocumentStorage:
         return path
 
     def save(self, key: str, source: BinaryReader) -> None:
+        """Write the object durably, or leave nothing behind.
+
+        The file is fsynced before the caller commits the database row, so a
+        committed document never points at data still in the page cache. Any
+        failure (disk full, I/O error, a failing source) removes the partial file.
+        """
         path = self._path(key)
-        # x+b is exclusive: even a collision cannot overwrite an existing object.
-        with path.open("x+b") as target:
-            while chunk := source.read(64 * 1024):
-                target.write(chunk)
+        try:
+            # x+b is exclusive: even a collision cannot overwrite an existing object.
+            with path.open("x+b") as target:
+                while chunk := source.read(64 * 1024):
+                    target.write(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+        except FileExistsError:
+            raise
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
 
     def open(self, key: str) -> BinaryIO:
         return self._path(key).open("rb")
@@ -42,6 +57,11 @@ class LocalDocumentStorage:
     def delete(self, key: str) -> None:
         """Only for undoing a save whose database insert failed. Stored documents are never deleted."""
         self._path(key).unlink(missing_ok=True)
+
+    def is_writable(self) -> bool:
+        """Health signal for monitoring: the storage directory exists and accepts new files.
+        Checks permissions only (no write), so it is cheap enough for every scrape."""
+        return self.root.is_dir() and os.access(self.root, os.W_OK | os.X_OK)
 
     def exists(self, key: str) -> bool:
         return self._path(key).is_file()

@@ -426,7 +426,11 @@ def test_each_clinic_lists_only_its_own_data(client: TestClient, world: World):
             tenant.act(client, role)
             appointments = client.get("/api/v1/appointments").json()
             assert [row["id"] for row in appointments] == [seed.appointment]
-            assert {row["clinic_id"] for row in appointments} == {tenant.clinic_id}
+            if role == "patient":
+                # The patient view carries no internal ids; the exact id above proves the scope.
+                assert all(row["view"] == "patient" and "clinic_id" not in row for row in appointments)
+            else:
+                assert {row["clinic_id"] for row in appointments} == {tenant.clinic_id}
             assert other.appointment not in client.get("/api/v1/appointments").text
 
         tenant.act(client, "doctor")

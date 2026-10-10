@@ -5,20 +5,25 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_denials, audit_request
+from app.core.clinical_access import staff_profile
 from app.core.database import get_db
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, limiter
 from app.core.security import get_current_user
-from app.models import AuditAction, Message, User
+from app.models import AuditAction, ConversationStatus, StaffRole, User, UserRole
 from app.modules.messages.schemas import (
     ConversationCreateRequest,
     ConversationDetail,
     ConversationPublic,
+    ConversationStatusRequest,
     MarkReadResponse,
     MessageCreateRequest,
     MessagePublic,
+    SenderRole,
 )
 from app.modules.messages.service import (
+    change_status,
     create_conversation,
+    escalate,
     get_conversation_detail,
     list_conversations,
     mark_conversation_read,
@@ -84,11 +89,21 @@ def create(
     conversations; patients reply in threads opened by staff.
     """
     with audit_denials(request, user, "patient", payload.patient_id):
-        conversation, created = create_conversation(db, payload, user)
-    if created:
+        result = create_conversation(db, payload, user)
+    conversation = result.conversation
+    if result.created:
         _audit(request, user, AuditAction.CONVERSATION_CREATED, "conversation", conversation.id)
     else:
         response.status_code = status.HTTP_200_OK
+    if result.reopened_from is not None:
+        _audit(
+            request,
+            user,
+            AuditAction.CONVERSATION_STATUS_CHANGED,
+            "conversation",
+            conversation.id,
+            metadata={"from": result.reopened_from.value, "to": conversation.status.value, "operation": "start"},
+        )
     return conversation
 
 
@@ -98,15 +113,25 @@ def list_mine(
     response: Response,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
+    status_filter: ConversationStatus | None = Query(default=None, alias="status"),
+    needs_review: bool | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ConversationPublic]:
     """Conversations visible to the caller, most recently active first. Total in `X-Total-Count`.
 
-    Professionals only see threads of patients they are currently assigned to.
+    Professionals see the team inbox: every thread of the patients they are
+    currently assigned to. `needs_review` filters on pending doctor review (staff only).
     """
     with audit_denials(request, user, "conversation", user.id):
-        conversations, total = list_conversations(db, user, offset=(page - 1) * page_size, limit=page_size)
+        conversations, total = list_conversations(
+            db,
+            user,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+            status_filter=status_filter,
+            needs_review=needs_review,
+        )
     response.headers["X-Total-Count"] = str(total)
     # Parent A pattern: listing is a read of each conversation shown.
     for conversation in conversations:
@@ -160,11 +185,13 @@ def send(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Message:
-    """Send a plain-text message. The other participant gets a generic notification (no content)
-    linking to the conversation. 403 when the thread is read-only (professional no longer assigned)."""
+) -> MessagePublic:
+    """Send a plain-text message. The other side gets a generic notification (no content)
+    linking to the conversation: the patient for team messages, the active care team for
+    patient messages. 403 when the thread is closed or read-only."""
     with audit_denials(request, user, "conversation", conversation_id):
-        message = send_message(db, conversation_id, payload.body, user)
+        result = send_message(db, conversation_id, payload.body, user)
+    message = result.message
     _audit(
         request,
         user,
@@ -173,7 +200,93 @@ def send(
         message.id,
         metadata={"conversation_id": str(message.conversation_id)},
     )
-    return message
+    if result.escalation_cleared:
+        _audit(
+            request,
+            user,
+            AuditAction.CONVERSATION_ESCALATION_CLEARED,
+            "conversation",
+            message.conversation_id,
+            metadata={"operation": "doctor_reply"},
+        )
+    return MessagePublic(
+        id=message.id,
+        conversation_id=message.conversation_id,
+        sender_name=user.full_name,
+        sender_role=_own_role(db, user),
+        is_mine=True,
+        body=message.body,
+        read_at=message.read_at,
+        created_at=message.created_at,
+    )
+
+
+def _own_role(db: Session, user: User) -> SenderRole:
+    if user.role == UserRole.PATIENT:
+        return "patient"
+    staff = staff_profile(db, user)
+    if staff is not None and staff.staff_role == StaffRole.DOCTOR:
+        return "doctor"
+    if staff is not None and staff.staff_role == StaffRole.NURSE:
+        return "nurse"
+    return "staff"
+
+
+@router.post(
+    "/{conversation_id}/status",
+    response_model=ConversationPublic,
+    responses={
+        **_NOT_FOUND_RESPONSE,
+        403: {"description": "Nurses cannot close or reopen; only doctors can."},
+    },
+)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def set_status(
+    conversation_id: uuid.UUID,
+    payload: ConversationStatusRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ConversationPublic:
+    """Triage (nurse: open/waiting states) or close/reopen (doctor). Closing notifies the
+    patient generically and makes the conversation read-only. Same status: no change."""
+    with audit_denials(request, user, "conversation", conversation_id):
+        conversation, previous = change_status(db, conversation_id, payload.status, user)
+    if previous is not None:
+        _audit(
+            request,
+            user,
+            AuditAction.CONVERSATION_STATUS_CHANGED,
+            "conversation",
+            conversation_id,
+            metadata={"from": previous.value, "to": conversation.status.value},
+        )
+    return conversation
+
+
+@router.post(
+    "/{conversation_id}/escalate",
+    response_model=ConversationPublic,
+    responses={
+        **_NOT_FOUND_RESPONSE,
+        403: {"description": "Only nurses request a doctor's review."},
+        409: {"description": "The conversation is closed."},
+    },
+)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def request_doctor_review(
+    conversation_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ConversationPublic:
+    """A nurse flags the conversation for the care team's doctors, who get a generic
+    notification. A doctor's reply clears the flag. Repeating it while pending changes nothing."""
+    with audit_denials(request, user, "conversation", conversation_id):
+        conversation, changed = escalate(db, conversation_id, user)
+    if changed:
+        _audit(request, user, AuditAction.CONVERSATION_ESCALATED, "conversation", conversation_id)
+    return conversation
 
 
 @router.post("/{conversation_id}/read", response_model=MarkReadResponse, responses=_NOT_FOUND_RESPONSE)
