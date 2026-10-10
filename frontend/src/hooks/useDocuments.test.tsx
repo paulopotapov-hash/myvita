@@ -53,7 +53,7 @@ describe('useDocuments', () => {
   })
 
   it('downloads via the authenticated endpoint and names the file from Content-Disposition', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['%PDF-']), {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('%PDF-', {
       status: 200,
       headers: { 'content-type': 'application/pdf', 'content-disposition': "attachment; filename*=UTF-8''an%C3%A1lises.pdf" },
     }))

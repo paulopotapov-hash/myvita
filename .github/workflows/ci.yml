@@ -33,6 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The check compares HEAD with its parent; the default shallow
+          # clone (depth 1) has no HEAD~1 and fails with exit 128.
+          fetch-depth: 2
       - name: Reject whitespace errors
         run: git diff --check HEAD~1 HEAD
 
