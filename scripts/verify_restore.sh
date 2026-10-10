@@ -38,18 +38,25 @@
 set -euo pipefail
 umask 077
 
-# The current myVita schema (backend/app/models). scripts/test_restore_verification.sh
+# The current myVita schema (alembic head). scripts/test_restore_verification.sh
 # compares this list with a freshly migrated database, so it cannot silently go stale.
+# clinical_* (except clinical_care_assignments) and deprecated_notification_targets
+# are deprecated after the main/messages-backend merge but still exist and may
+# hold data, so a restore must bring them back too.
 EXPECTED_TABLES=(
-    alembic_version appointments audit_logs clinics consents conversations documents
-    invitations medical_record_revisions medical_records medications messages
-    notifications patients staff users
+    alembic_version appointment_requests appointments audit_logs clinical_care_assignments
+    clinical_conversations clinical_document_versions clinical_documents clinical_messages
+    clinics consents conversations deprecated_notification_targets documents invitations
+    medical_record_revisions medical_records medications messages mfa_recovery_codes
+    notifications password_reset_tokens patients staff user_mfa users
 )
 # Constraints/indexes that encode tenant isolation or core access paths.
+# Constraints are <table>.<name>: names are only unique per table (the deprecated
+# clinical_documents reuses fk_documents_patient_clinic).
 EXPECTED_CONSTRAINTS=(
-    uq_patients_id_clinic uq_patients_user_id uq_staff_user_id
-    fk_medications_patient_clinic fk_conversations_patient_clinic
-    fk_documents_patient_clinic uq_conversations_patient_staff
+    patients.uq_patients_id_clinic patients.uq_patients_user_id staff.uq_staff_user_id
+    medications.fk_medications_patient_clinic conversations.fk_conversations_patient_clinic
+    documents.fk_documents_patient_clinic conversations.uq_conversations_patient_staff
 )
 EXPECTED_INDEXES=(
     ix_users_email ix_appointments_clinic_scheduled_at ix_notifications_user_created
@@ -193,7 +200,8 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 
 for constraint in "${EXPECTED_CONSTRAINTS[@]}"; do
-    [ "$(psql_q "select count(*) from pg_constraint where conname = '${constraint}' and convalidated")" = "1" ] \
+    table="${constraint%%.*}"; name="${constraint#*.}"
+    [ "$(psql_q "select count(*) from pg_constraint where conrelid = to_regclass('public.${table}') and conname = '${name}' and convalidated")" = "1" ] \
         || fail "missing or unvalidated constraint: ${constraint}"
 done
 for index in "${EXPECTED_INDEXES[@]}"; do

@@ -101,6 +101,22 @@ api() {
     curl -sS -f -b "$jar" -c "$jar" -X "$method" -H "X-CSRF-Token: ${csrf}" "http://127.0.0.1:${port}${path}" "$@"
 }
 json_field() { python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
+# RFC 6238 TOTP (SHA-1, 30 s, 6 digits) from a base32 secret; staff and clinic
+# admins must enrol MFA before any clinical action.
+totp() {
+    python3 -c 'import base64,hmac,hashlib,struct,sys,time
+s=sys.argv[1]; k=base64.b32decode(s.upper()+"="*(-len(s)%8))
+h=hmac.new(k,struct.pack(">Q",int(time.time())//30),hashlib.sha1).digest(); o=h[-1]&15
+print("%06d"%((struct.unpack(">I",h[o:o+4])[0]&0x7fffffff)%1000000))' "$1"
+}
+# enrol_mfa <jar> <port>: enrols TOTP on the session's user and prints the secret.
+enrol_mfa() {
+    local secret
+    secret="$(api "$1" "$2" POST /api/v1/auth/mfa/setup | json_field secret)"
+    api "$1" "$2" POST /api/v1/auth/mfa/enable -H 'Content-Type: application/json' \
+        -d "{\"code\":\"$(totp "$secret")\"}" >/dev/null
+    echo "$secret"
+}
 s3_env=(
     -e "OFFSITE_S3_BUCKET=${bucket}" -e OFFSITE_S3_PREFIX=myvita -e "OFFSITE_S3_ENDPOINT=http://${s3}:8333"
     -e OFFSITE_S3_REGION=us-east-1 -e "AWS_ACCESS_KEY_ID=${s3_key}" -e "AWS_SECRET_ACCESS_KEY=${s3_secret}"
@@ -155,19 +171,26 @@ src_port="$(start_api "$src_api" "$src_db" "$src_docs")"
 admin="${work}/admin.jar"; doctor="${work}/doctor.jar"; patient="${work}/patient.jar"
 clinic_id="$(api "$admin" "$src_port" POST /api/v1/clinics -H 'Content-Type: application/json' \
     -d '{"clinic_name":"DR Clinic","admin_full_name":"DR Admin","admin_email":"admin@dr-recovery.example.pt","admin_password":"SenhaForte123!"}' | json_field id)"
-api "$admin" "$src_port" POST /api/v1/staff -H 'Content-Type: application/json' \
-    -d '{"full_name":"DR Doctor","email":"doctor@dr-recovery.example.pt","password":"SenhaForte123!","staff_role":"doctor"}' >/dev/null
+enrol_mfa "$admin" "$src_port" >/dev/null
+staff_id="$(api "$admin" "$src_port" POST /api/v1/staff -H 'Content-Type: application/json' \
+    -d '{"full_name":"DR Doctor","email":"doctor@dr-recovery.example.pt","password":"SenhaForte123!","staff_role":"doctor"}' | json_field id)"
 patient_id="$(api "$patient" "$src_port" POST /api/v1/patients/register -H 'Content-Type: application/json' \
     -d "{\"clinic_id\":\"${clinic_id}\",\"full_name\":\"DR Patient\",\"email\":\"patient@dr-recovery.example.pt\",\"password\":\"SenhaForte123!\"}" | json_field id)"
+api "$admin" "$src_port" POST "/api/v1/patients/${patient_id}/care-team" -H 'Content-Type: application/json' \
+    -d "{\"staff_id\":\"${staff_id}\"}" >/dev/null
+# Staff created by an admin must change the temporary password and enrol MFA first.
 api "$doctor" "$src_port" POST /api/v1/auth/login -H 'Content-Type: application/json' \
     -d '{"email":"doctor@dr-recovery.example.pt","password":"SenhaForte123!"}' >/dev/null
+api "$doctor" "$src_port" POST /api/v1/auth/change-password -H 'Content-Type: application/json' \
+    -d '{"current_password":"SenhaForte123!","new_password":"SenhaNova456!"}' >/dev/null
+doctor_mfa_secret="$(enrol_mfa "$doctor" "$src_port")"
 printf '%%PDF-1.7\nsynthetic disaster-recovery report %s\n' "$sfx" > "${work}/report.pdf"
 printf '\x89PNG\r\n\x1a\n' > "${work}/scan.png"; head -c 50000 /dev/urandom >> "${work}/scan.png"
 sha_list="${work}/original_sha.txt"; : > "$sha_list"
 for f in report.pdf:application/pdf scan.png:image/png; do
     name="${f%%:*}"; mime="${f#*:}"
     id="$(api "$doctor" "$src_port" POST "/api/v1/patients/${patient_id}/documents" \
-        -F "file=@${work}/${name};type=${mime};filename=${name}" | json_field id)"
+        -F "file=@${work}/${name};type=${mime};filename=${name}" -F "title=DR ${name}" | json_field id)"
     echo "${id} $(sha256sum "${work}/${name}" | awk '{print $1}')" >> "$sha_list"
 done
 conversation_id="$(api "$doctor" "$src_port" POST /api/v1/conversations -H 'Content-Type: application/json' \
@@ -297,7 +320,10 @@ step "Application reads on the recovered system"
 dst_port="$(start_api "$dst_api" "$dst_db" "$dst_docs")"
 rdoctor="${work}/rdoctor.jar"; rpatient="${work}/rpatient.jar"
 api "$rdoctor" "$dst_port" POST /api/v1/auth/login -H 'Content-Type: application/json' \
-    -d '{"email":"doctor@dr-recovery.example.pt","password":"SenhaForte123!"}' >/dev/null || die "doctor cannot log in after recovery"
+    -d '{"email":"doctor@dr-recovery.example.pt","password":"SenhaNova456!"}' >/dev/null || die "doctor cannot log in after recovery"
+# The MFA enrolment (encrypted seed) must survive the recovery too.
+api "$rdoctor" "$dst_port" POST /api/v1/auth/mfa/verify -H 'Content-Type: application/json' \
+    -d "{\"code\":\"$(totp "$doctor_mfa_secret")\"}" >/dev/null || die "doctor MFA does not verify after recovery"
 listed="$(api "$rdoctor" "$dst_port" GET "/api/v1/patients/${patient_id}/documents" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 [ "$listed" = 2 ] || die "expected 2 documents after recovery, got ${listed}"
 downloads_ok=0

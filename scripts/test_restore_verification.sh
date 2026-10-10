@@ -106,9 +106,9 @@ insert into messages (id, conversation_id, clinic_id, sender_user_id, body) valu
 insert into notifications (id, clinic_id, user_id, title, message, is_read) values
   ('88888888-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002',
    'Nova mensagem', 'synthetic', false);
-insert into documents (id, clinic_id, patient_id, uploaded_by_user_id, original_filename, storage_key, content_type, file_size) values
+insert into documents (id, clinic_id, patient_id, uploaded_by_user_id, original_filename, title, storage_key, content_type, file_size) values
   ('99999999-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', '44444444-0000-0000-0000-000000000001',
-   '22222222-0000-0000-0000-000000000001', 'synthetic.pdf', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'application/pdf', 10);
+   '22222222-0000-0000-0000-000000000001', 'synthetic.pdf', 'Synthetic report', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'application/pdf', 10);
 SQL
 
 run_backup_tool() {
