@@ -139,6 +139,9 @@ grep -q 'pg_dump failed' "${work_dir}/last.log"
 expect_failure "backup of a non-existent database" in_env DB_NAME_OVERRIDE=does_not_exist run_backup_tool backup_db.sh /backups
 grep -q 'does not exist' "${work_dir}/last.log"
 [ "$(count_dumps)" = "$before" ] || { echo "FAIL: a failed backup left a dump behind" >&2; exit 1; }
+# backup_db.sh runs as root in the container and writes 0600 files (as in
+# production); hand them to the CI user so the host-side checks can read them.
+docker run --rm -v "${work_dir}/backups:/backups" alpine:3 chown -R "$(id -u):$(id -g)" /backups
 
 step "Restore verification into an isolated PostgreSQL (with alembic upgrade/check)"
 EXPECTED_ALEMBIC_REVISION="$head_revision" "${repo_root}/scripts/verify_restore.sh" "$dump" \

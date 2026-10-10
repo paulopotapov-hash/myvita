@@ -213,6 +213,9 @@ grep -q 'Documents backup completed successfully: .* files=2 ' "${work}/schedule
 for secret in "$db_password" "$s3_secret" "synthetic disaster-recovery report"; do
     grep -q "$secret" "${work}/scheduled.log" && die "a secret or document content appeared in the backup log"
 done
+# The job runs as root and keeps /backups at 0700 (as in production); hand the
+# tree to the CI user for the host-side reads below. Modes are left untouched.
+docker run --rm -v "${work}/backups:/backups" alpine:3 chown -R "$(id -u):$(id -g)" /backups
 metrics="$(cat "${work}/backups/metrics/myvita_backup.prom")"
 for m in 'myvita_backup_last_run_success 1' 'myvita_documents_backup_last_run_success 1' \
          'myvita_documents_backup_last_file_count 2' 'myvita_offsite_backup_last_run_success 1'; do
