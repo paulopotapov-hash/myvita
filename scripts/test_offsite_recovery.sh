@@ -42,13 +42,25 @@ s3_key="dr-test-only-access"
 s3_secret="dr-test-only-secret-${sfx}"
 jwt="dr-test-only-not-a-real-secret-0123456789abcdef"
 
+dump_service_logs() {
+    local c
+    for c in "$src_api" "$dst_api" "$src_db" "$dst_db" "$s3"; do
+        docker inspect "$c" >/dev/null 2>&1 || continue
+        echo "===== last log lines of ${c} ($(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null))" >&2
+        docker logs --tail 60 "$c" >&2 2>&1 || true
+    done
+}
 cleanup() {
+    local rc=$?
+    trap - EXIT INT TERM
+    [ "$rc" = 0 ] || dump_service_logs
     docker rm -f "$s3" "$src_db" "$src_api" "$dst_db" "$dst_api" >/dev/null 2>&1 || true
     docker volume rm "$src_docs" "$dst_docs" >/dev/null 2>&1 || true
     docker network rm "$net" >/dev/null 2>&1 || true
     docker run --rm -v "${work}:/w" alpine:3 sh -c 'rm -rf /w/* /w/.[!.]*' >/dev/null 2>&1 || true
     rm -rf "$work"
     docker rmi "$backup_image" "$backend_image" >/dev/null 2>&1 || true
+    exit "$rc"
 }
 trap cleanup EXIT INT TERM
 
@@ -64,7 +76,7 @@ report() {
     done
 }
 step() { echo "--- $*"; }
-die() { echo "FAIL: $*" >&2; report; exit 1; }
+die() { echo "FAIL: $*" >&2; report >&2; exit 1; }
 expect_failure() {
     local label="$1"; shift
     if "$@" >"${work}/last.log" 2>&1; then cat "${work}/last.log" >&2; die "${label} unexpectedly succeeded"; fi
@@ -87,20 +99,48 @@ start_api() { # name db documents_volume
         -e "DATABASE_URL=postgresql+psycopg://myvita:${db_password}@$2:5432/myvita" \
         -v "$3:/var/lib/myvita/documents" "$backend_image" >/dev/null
     local port; port="$(docker port "$1" 8000/tcp | head -n1 | sed 's/.*://')"
+    # Bounded wait (60 s) on the real readiness probe: /ready runs SELECT 1
+    # against the database, /health only proves the process is up.
     for _ in $(seq 1 60); do
-        curl -fsS "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && { echo "$port"; return 0; }
+        [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ] \
+            || die "backend $1 exited during startup"
+        curl -fsS "http://127.0.0.1:${port}/ready" >/dev/null 2>&1 && { echo "$port"; return 0; }
         sleep 1
     done
-    docker logs "$1" >&2; die "backend $1 did not become healthy"
+    die "backend $1 did not become ready (GET /ready) within 60 s"
 }
 # api <jar> <port> <method> <path> [curl args...] — sends the CSRF header from the jar.
+# Prints the response body on 2xx. Otherwise names the request, prints the HTTP
+# status and the (truncated) error body on stderr, and fails. Request bodies are
+# never printed: they carry test passwords.
 api() {
     local jar="$1" port="$2" method="$3" path="$4"; shift 4
-    local csrf=""
+    local csrf="" body code rc
     [ ! -f "$jar" ] || csrf="$(awk '$6 == "myvita_csrf" {print $7}' "$jar" | tail -n1)"
-    curl -sS -f -b "$jar" -c "$jar" -X "$method" -H "X-CSRF-Token: ${csrf}" "http://127.0.0.1:${port}${path}" "$@"
+    body="$(mktemp "${work}/api-body.XXXXXX")"
+    rc=0
+    code="$(curl -sS -b "$jar" -c "$jar" -X "$method" -H "X-CSRF-Token: ${csrf}" -o "$body" -w '%{http_code}' \
+        "http://127.0.0.1:${port}${path}" "$@")" || rc=$?
+    if [ "$rc" != 0 ]; then
+        echo "FAIL: ${method} ${path} on port ${port}: no HTTP response (curl exit ${rc})" >&2
+        rm -f "$body"; return 1
+    fi
+    case "$code" in
+        2??) cat "$body"; rm -f "$body"; return 0 ;;
+    esac
+    echo "FAIL: ${method} ${path} on port ${port} returned HTTP ${code}: $(head -c 500 "$body")" >&2
+    rm -f "$body"; return 1
 }
-json_field() { python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
+# json_field <name>: reads a JSON object on stdin; refuses empty or non-JSON input explicitly.
+json_field() {
+    python3 -c 'import json,sys
+raw=sys.stdin.read()
+if not raw.strip(): sys.exit("FAIL: expected a JSON response with field %r, got an empty body" % sys.argv[1])
+try: data=json.loads(raw)
+except ValueError: sys.exit("FAIL: expected JSON with field %r, got: %s" % (sys.argv[1], raw[:300]))
+if not isinstance(data, dict) or sys.argv[1] not in data: sys.exit("FAIL: field %r missing from response: %s" % (sys.argv[1], raw[:300]))
+print(data[sys.argv[1]])' "$1"
+}
 # RFC 6238 TOTP (SHA-1, 30 s, 6 digits) from a base32 secret; staff and clinic
 # admins must enrol MFA before any clinical action.
 totp() {
@@ -166,7 +206,8 @@ docker run --rm --network "$net" --entrypoint aws -e "AWS_ACCESS_KEY_ID=${s3_key
 step "Migrating source and creating realistic data through the API"
 docker run --rm --network "$net" "${backend_env[@]}" \
     -e "DATABASE_URL=postgresql+psycopg://myvita:${db_password}@${src_db}:5432/myvita" \
-    "$backend_image" alembic upgrade head >/dev/null 2>&1
+    "$backend_image" alembic upgrade head > "${work}/migrate.log" 2>&1 \
+    || { cat "${work}/migrate.log" >&2; die "alembic upgrade head failed on the source database"; }
 src_port="$(start_api "$src_api" "$src_db" "$src_docs")"
 admin="${work}/admin.jar"; doctor="${work}/doctor.jar"; patient="${work}/patient.jar"
 clinic_id="$(api "$admin" "$src_port" POST /api/v1/clinics -H 'Content-Type: application/json' \
@@ -331,7 +372,7 @@ listed="$(api "$rdoctor" "$dst_port" GET "/api/v1/patients/${patient_id}/documen
 [ "$listed" = 2 ] || die "expected 2 documents after recovery, got ${listed}"
 downloads_ok=0
 while read -r id expected_sha; do
-    api "$rdoctor" "$dst_port" GET "/api/v1/documents/${id}/download" -o "${work}/dl-${id}" || die "download of ${id} failed"
+    api "$rdoctor" "$dst_port" GET "/api/v1/documents/${id}/download" > "${work}/dl-${id}" || die "download of ${id} failed"
     [ "$(sha256sum "${work}/dl-${id}" | awk '{print $1}')" = "$expected_sha" ] || die "downloaded document ${id} differs"
     downloads_ok=$((downloads_ok + 1))
 done < "$sha_list"

@@ -1,8 +1,12 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+# DOCUMENT_STORAGE_DIR points at the image's private, writable document store
+# (created below). The settings default (./var/documents) resolves to /app/var,
+# which is read-only in this image, so every upload would fail with 503.
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    DOCUMENT_STORAGE_DIR=/var/lib/myvita/documents
 
 COPY requirements-runtime.txt .
 RUN pip install --no-cache-dir --no-compile -r requirements-runtime.txt
