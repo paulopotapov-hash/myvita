@@ -225,6 +225,8 @@ api "$doctor" "$src_port" POST /api/v1/auth/login -H 'Content-Type: application/
 api "$doctor" "$src_port" POST /api/v1/auth/change-password -H 'Content-Type: application/json' \
     -d '{"current_password":"SenhaForte123!","new_password":"SenhaNova456!"}' >/dev/null
 doctor_mfa_secret="$(enrol_mfa "$doctor" "$src_port")"
+# The enrolment consumed this TOTP step; the server never accepts a used step again.
+doctor_mfa_step=$(( $(date +%s) / 30 ))
 printf '%%PDF-1.7\nsynthetic disaster-recovery report %s\n' "$sfx" > "${work}/report.pdf"
 printf '\x89PNG\r\n\x1a\n' > "${work}/scan.png"; head -c 50000 /dev/urandom >> "${work}/scan.png"
 sha_list="${work}/original_sha.txt"; : > "$sha_list"
@@ -242,6 +244,11 @@ api "$doctor" "$src_port" POST "/api/v1/conversations/${conversation_id}/message
 echo "ok: clinic, doctor, patient, 2 documents, 1 conversation created"
 
 step "Scheduled backup job: PostgreSQL + documents + off-site upload"
+# The job is started directly (no crond), so do what backup_entrypoint.sh does in
+# production: /backups belongs to postgres with mode 0700. The dump step drops to
+# postgres and cannot write into a directory owned by the CI user on Linux.
+docker run --rm -v "${work}/backups:/backups" --entrypoint sh "$backup_image" \
+    -c 'chown postgres:postgres /backups && chmod 700 /backups'
 docker run --rm --network "$net" --entrypoint /opt/myvita/run_scheduled_backup.sh "${s3_env[@]}" \
     -e "DB_HOST=${src_db}" -e DB_PORT=5432 -e DB_NAME=myvita -e DB_USER=myvita -e "PGPASSWORD=${db_password}" \
     -e DOCUMENTS_BACKUP_ENABLED=true -e DOCUMENT_STORAGE_DIR=/documents -e OFFSITE_BACKUP_ENABLED=true \
@@ -366,6 +373,10 @@ rdoctor="${work}/rdoctor.jar"; rpatient="${work}/rpatient.jar"
 api "$rdoctor" "$dst_port" POST /api/v1/auth/login -H 'Content-Type: application/json' \
     -d '{"email":"doctor@dr-recovery.example.pt","password":"SenhaNova456!"}' >/dev/null || die "doctor cannot log in after recovery"
 # The MFA enrolment (encrypted seed) must survive the recovery too.
+# A fast run reaches this point inside the enrolment's 30 s step, whose code is
+# (correctly) refused as a replay: wait, bounded, for the next step.
+for _ in $(seq 1 35); do [ $(( $(date +%s) / 30 )) -gt "$doctor_mfa_step" ] && break; sleep 1; done
+[ $(( $(date +%s) / 30 )) -gt "$doctor_mfa_step" ] || die "no fresh TOTP step after 35 s"
 api "$rdoctor" "$dst_port" POST /api/v1/auth/mfa/verify -H 'Content-Type: application/json' \
     -d "{\"code\":\"$(totp "$doctor_mfa_secret")\"}" >/dev/null || die "doctor MFA does not verify after recovery"
 listed="$(api "$rdoctor" "$dst_port" GET "/api/v1/patients/${patient_id}/documents" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
