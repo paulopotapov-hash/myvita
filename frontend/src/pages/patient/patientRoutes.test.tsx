@@ -23,9 +23,12 @@ function stubApi() {
     const { pathname } = new URL(String(input), 'http://localhost')
     if (pathname === '/api/v1/auth/me') return json(PATIENT)
     if (pathname === '/api/v1/patients/p1') {
-      return json({ id: 'p1', clinic_id: 'c1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', national_health_number: '123456789', is_active: true })
+      return json({ id: 'p1', clinic_id: 'c1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', address: { street: null, postal_code: null, locality: null }, identifiers: { nif: '••••••789', niss: null, national_health_number: null }, is_active: true })
     }
     if (pathname === '/api/v1/clinics/c1') return json({ id: 'c1', name: 'Clínica Centro' })
+    if (pathname === '/api/v1/patients/p1/identification') {
+      return json({ id: 'p1', full_name: 'Ana Silva', identifiers: { nif: '••••••789', niss: null, national_health_number: null }, can_edit: false })
+    }
     if (pathname.endsWith('/unread-count')) return json({ count: 0 })
     if (pathname.startsWith('/api/v1/medical-records/')) return new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } })
     // Every list endpoint: empty.

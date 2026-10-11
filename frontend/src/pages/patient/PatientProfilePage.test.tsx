@@ -13,6 +13,9 @@ const { patientState, refetch, updateMutate } = vi.hoisted(() => ({
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({ user: { id: 'u1', full_name: 'Ana Silva', email: 'ana@example.pt', role: 'patient', patient_id: 'p1' } }),
 }))
+vi.mock('../../components/PatientIdentifiersCard', () => ({
+  PatientIdentifiersCard: ({ patientId }: { patientId: string }) => <p>Cartão de identificação {patientId}</p>,
+}))
 vi.mock('../../hooks/useOwnClinicName', () => ({ useOwnClinicName: () => 'Clínica Centro' }))
 vi.mock('../../hooks/useClinicData', () => ({
   usePatient: (id: string) => {
@@ -43,7 +46,8 @@ describe('PatientProfilePage', () => {
   it('shows demographic fields from the patient endpoint when available', () => {
     patientState.data = {
       id: 'p1', clinic_id: 'c1', full_name: 'Ana Silva', birth_date: '1990-01-02',
-      phone: '912345678', national_health_number: null, is_active: true,
+      phone: '912345678', address: { street: null, postal_code: null, locality: null },
+      identifiers: { nif: null, niss: null, national_health_number: null }, is_active: true,
     }
     patientState.isLoading = false
     patientState.isError = false
@@ -63,10 +67,11 @@ describe('PatientProfilePage', () => {
     expect(refetch).toHaveBeenCalledOnce()
   })
 
-  it('shows personal data with the health number and email read-only, and lets the patient edit only the phone', async () => {
+  it('shows personal data and the identifiers card, keeps the email read-only and lets the patient edit the phone', async () => {
     patientState.data = {
       id: 'p1', clinic_id: 'c1', full_name: 'Ana Silva', birth_date: '1990-01-02',
-      phone: '912345678', national_health_number: '123456789', is_active: true,
+      phone: '912345678', address: { street: 'Rua Sintética, 1', postal_code: '1000-001', locality: 'Lisboa' },
+      identifiers: { nif: '••••••789', niss: null, national_health_number: '••••••321' }, is_active: true,
     }
     patientState.isLoading = false
     patientState.isError = false
@@ -75,10 +80,14 @@ describe('PatientProfilePage', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: 'O meu perfil' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Dados pessoais' })).toBeInTheDocument()
-    expect(screen.getByText('123456789')).toBeInTheDocument()
+    expect(screen.getByText('Rua Sintética, 1, 1000-001 Lisboa')).toBeInTheDocument()
+    expect(screen.getByText('Cartão de identificação p1')).toBeInTheDocument()
     expect(screen.getByText('ana@example.pt')).toBeInTheDocument()
-    // Only the phone can be edited by the patient (email and health number are read-only).
-    expect(screen.getAllByRole('button', { name: /Editar/ })).toHaveLength(1)
+    // The patient edits phone and address; the email has no edit action.
+    expect(screen.getAllByRole('button', { name: /Editar/ }).map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Editar telefone',
+      'Editar morada',
+    ])
 
     await user.click(screen.getByRole('button', { name: 'Editar telefone' }))
     const field = screen.getByLabelText('Telefone')
@@ -91,5 +100,36 @@ describe('PatientProfilePage', () => {
     act(() => options.onSuccess())
     expect(screen.getByRole('status')).toHaveTextContent('Telefone atualizado.')
     expect(screen.queryByLabelText('Telefone')).not.toBeInTheDocument()
+  })
+
+  it('lets the patient edit the address and checks the postal code format first', async () => {
+    patientState.data = {
+      id: 'p1', clinic_id: 'c1', full_name: 'Ana Silva', birth_date: null, phone: null,
+      address: { street: null, postal_code: null, locality: null },
+      identifiers: { nif: null, niss: null, national_health_number: null }, is_active: true,
+    }
+    patientState.isLoading = false
+    patientState.isError = false
+    updateMutate.mockReset()
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Editar morada' }))
+    await user.type(screen.getByLabelText('Rua'), 'Rua Sintética, 1')
+    await user.type(screen.getByLabelText('Código postal'), '1000001')
+    await user.type(screen.getByLabelText('Localidade'), 'Lisboa')
+    await user.click(screen.getByRole('button', { name: 'Guardar morada' }))
+    expect(screen.getByText('O código postal deve ter o formato 0000-000.')).toBeInTheDocument()
+    expect(updateMutate).not.toHaveBeenCalled()
+
+    await user.clear(screen.getByLabelText('Código postal'))
+    await user.type(screen.getByLabelText('Código postal'), '1000-001')
+    await user.click(screen.getByRole('button', { name: 'Guardar morada' }))
+    expect(updateMutate).toHaveBeenCalledWith(
+      { address_street: 'Rua Sintética, 1', address_postal_code: '1000-001', address_locality: 'Lisboa' },
+      expect.any(Object),
+    )
+    const options = updateMutate.mock.calls[0][1] as { onSuccess: () => void }
+    act(() => options.onSuccess())
+    expect(screen.getByRole('status')).toHaveTextContent('Morada atualizada.')
   })
 })

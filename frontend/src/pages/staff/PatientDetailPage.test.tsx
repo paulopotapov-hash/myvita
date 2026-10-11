@@ -4,21 +4,35 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientDetailPage } from './PatientDetailPage'
 
-const { grantMutate, revokeMutate, sessionState, usePatient } = vi.hoisted(() => ({
+const { grantMutate, revokeMutate, sessionState, usePatient, usePatientIdentification } = vi.hoisted(() => ({
   grantMutate: vi.fn(),
   revokeMutate: vi.fn(),
   sessionState: { role: 'clinic_admin', staff_role: null as 'doctor' | 'nurse' | 'admin' | null, patient_id: null as string | null },
   usePatient: vi.fn(),
+  usePatientIdentification: vi.fn(),
+}))
+
+vi.mock('../../components/PatientIdentifiersCard', () => ({
+  PatientIdentifiersCard: ({ patientId }: { patientId: string }) => <p>Cartão de identificação {patientId}</p>,
 }))
 
 vi.mock('../../hooks/useClinicData', () => ({
   usePatient: (id: string) => {
     usePatient(id)
     return {
-    data: { id: 'patient-1', clinic_id: 'clinic-1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', national_health_number: '123456789', is_active: true },
+    data: { id: 'patient-1', clinic_id: 'clinic-1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', address: { street: 'Rua Sintética, 1', postal_code: '1000-001', locality: 'Lisboa' }, identifiers: { nif: '••••••789', niss: null, national_health_number: '••••••321' }, is_active: true },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
+    }
+  },
+  usePatientIdentification: (id: string) => {
+    usePatientIdentification(id)
+    return {
+      data: { id: 'patient-1', full_name: 'Ana Silva', identifiers: { nif: '••••••789', niss: null, national_health_number: null }, can_edit: true },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
     }
   },
   useUpdatePatient: () => ({ mutate: vi.fn(), isPending: false }),
@@ -78,8 +92,9 @@ describe('PatientDetailPage consent workflow', () => {
     grantMutate.mockReset()
     revokeMutate.mockReset()
     usePatient.mockReset()
-    sessionState.role = 'clinic_admin'
-    sessionState.staff_role = null
+    usePatientIdentification.mockReset()
+    sessionState.role = 'staff'
+    sessionState.staff_role = 'doctor'
     sessionState.patient_id = null
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
@@ -102,26 +117,45 @@ describe('PatientDetailPage consent workflow', () => {
     expect(screen.queryByRole('button', { name: 'Revogar' })).not.toBeInTheDocument()
   })
 
-  it('keeps the tabbed file for staff, starting on Dados pessoais', () => {
-    sessionState.role = 'staff'
-    sessionState.staff_role = 'doctor'
+  it('keeps the tabbed file for doctors and nurses, with address and identifiers in Dados pessoais', () => {
     renderPage()
     expect(screen.getByRole('tab', { name: 'Dados pessoais', selected: true })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Registos clínicos' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Número de utente')).toBeInTheDocument()
+    const panel = screen.getByRole('tabpanel')
+    expect(panel).toHaveTextContent('Rua Sintética, 1, 1000-001 Lisboa')
+    expect(panel).toHaveTextContent('Cartão de identificação patient-1')
+    expect(screen.getByLabelText('Código postal')).toHaveValue('1000-001')
+    // Identifiers are edited in their own card, never in this form.
+    expect(screen.queryByLabelText('Número de utente')).not.toBeInTheDocument()
+  })
+})
+
+describe('PatientDetailPage for administrative roles', () => {
+  beforeEach(() => {
+    usePatient.mockReset()
+    usePatientIdentification.mockReset()
+    sessionState.patient_id = null
+  })
+
+  it.each([
+    ['the clinic administrator', 'clinic_admin', null],
+    ['administrative staff', 'staff', 'admin'],
+  ] as const)('gives %s only the identification card, never the clinical file', (_label, role, staffRole) => {
+    sessionState.role = role
+    sessionState.staff_role = staffRole
+    renderPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Ana Silva' })).toBeInTheDocument()
+    expect(screen.getByText('Cartão de identificação patient-1')).toBeInTheDocument()
+    expect(usePatientIdentification).toHaveBeenCalledWith('patient-1')
+    expect(usePatient).not.toHaveBeenCalled()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Documentos' })).not.toBeInTheDocument()
   })
 })
 
 describe('PatientDetailPage documents tab', () => {
   beforeEach(() => {
-    sessionState.role = 'clinic_admin'
-    sessionState.staff_role = null
     sessionState.patient_id = null
-  })
-
-  it('hides Documentos from clinic_admin, who has no clinical access in the backend', () => {
-    renderPage()
-    expect(screen.queryByRole('tab', { name: 'Documentos' })).not.toBeInTheDocument()
   })
 
   it('lets a doctor open the patient documents with upload controls and the patient name', async () => {

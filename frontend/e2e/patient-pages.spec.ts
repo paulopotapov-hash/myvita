@@ -44,13 +44,16 @@ test.describe('patient section pages', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Os meus resultados')
   })
 
-  test('personal data live in the profile; the email and health number are read-only', async ({ page }) => {
+  test('personal data live in the profile; the patient edits phone and address, never email or identifiers', async ({ page }) => {
     await page.goto('/patient/perfil')
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('O meu perfil')
     const personal = page.getByRole('region', { name: 'Dados pessoais' })
-    await expect(personal).toContainText('Número de utente')
-    await expect(page.getByRole('button', { name: /Editar/ })).toHaveCount(1)
+    await expect(personal).toContainText('Morada')
+    await expect(page.getByRole('region', { name: 'Dados identificativos' })).toContainText('Nº de utente')
+    const edits = page.getByRole('button', { name: /Editar/ })
+    await expect(edits).toHaveCount(2)
     await expect(page.getByRole('button', { name: 'Editar telefone' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Editar morada' })).toBeVisible()
   })
 
   test('the old records link opens the health summary', async ({ page }) => {

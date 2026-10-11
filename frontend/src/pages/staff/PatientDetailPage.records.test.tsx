@@ -26,9 +26,11 @@ vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({ user: { id: 'user-1', email: 'u@example.com', full_name: 'Utilizador', clinic_id: 'clinic-1', ...h.session } }),
 }))
 
+vi.mock('../../components/PatientIdentifiersCard', () => ({ PatientIdentifiersCard: () => null }))
+
 vi.mock('../../hooks/useClinicData', () => ({
   usePatient: () => ({
-    data: { id: 'patient-1', clinic_id: 'clinic-1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', national_health_number: '123456789', is_active: true },
+    data: { id: 'patient-1', clinic_id: 'clinic-1', full_name: 'Ana Silva', birth_date: '1990-01-02', phone: '912345678', address: { street: 'Rua Sintética, 1', postal_code: '1000-001', locality: 'Lisboa' }, identifiers: { nif: '••••••789', niss: null, national_health_number: '••••••321' }, is_active: true },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),

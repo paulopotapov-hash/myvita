@@ -102,10 +102,12 @@ test.describe.serial('medical records', () => {
   test.describe('as the clinic administrator', () => {
     test.use({ storageState: authState('clinic_admin') })
 
-    test('is refused the patient file and gets no clinical content', async ({ page }) => {
+    test('gets only the patient identification, never clinical content', async ({ page }) => {
       await page.goto(`/app/pacientes/${seed.patientIds.patient}`)
-      // The backend answers 403 for the patient record; the page shows that instead of any clinical content.
-      await expect(page.getByRole('alert')).toBeVisible()
+      // Administrative roles see the name and identifiers only; the clinical file stays closed (403 in the API).
+      await expect(page.getByRole('heading', { level: 1, name: seed.names.patient })).toBeVisible()
+      await expect(page.getByRole('region', { name: 'Dados identificativos' })).toBeVisible()
+      expect(await apiStatus('clinic_admin', 'GET', `/api/v1/patients/${seed.patientIds.patient}/medical-records`)).toBe(403)
       await expect(page.getByRole('tab', { name: 'Registos clínicos' })).toHaveCount(0)
       await expect(recordsPanel(page)).toHaveCount(0)
       await expect(page.getByText('Avaliação inicial E2E')).toHaveCount(0)

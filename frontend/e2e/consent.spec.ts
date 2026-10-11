@@ -62,10 +62,11 @@ test.describe.serial('consent', () => {
   test.describe('as the clinic administrator', () => {
     test.use({ storageState: authState('clinic_admin') })
 
-    test('is refused the patient file and never offered consents', async ({ page }) => {
+    test('gets only the patient identification and is never offered consents', async ({ page }) => {
       await page.goto(`/app/pacientes/${seed.patientIds.patient}`)
-      // The backend answers 403 for the patient record; the page shows that instead of any clinical content.
-      await expect(page.getByRole('alert')).toBeVisible()
+      // Administrative roles see the name and identifiers only; consents stay with the care team.
+      await expect(page.getByRole('region', { name: 'Dados identificativos' })).toBeVisible()
+      await expect(page.getByRole('tab', { name: 'Consentimentos' })).toHaveCount(0)
       await expect(page.getByRole('tabpanel', { name: 'Consentimentos' })).toHaveCount(0)
     })
   })
