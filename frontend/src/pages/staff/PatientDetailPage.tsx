@@ -7,11 +7,15 @@ import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { PatientIdentifiersCard } from '../../components/PatientIdentifiersCard'
 import { TextField } from '../../components/TextField'
-import { useAppointments, usePatient, useUpdatePatient } from '../../hooks/useClinicData'
+import { useAppointments, usePatient, usePatientIdentification, useUpdatePatient } from '../../hooks/useClinicData'
 import { useSession } from '../../hooks/useSession'
+import { formatAddress } from '../../lib/address'
+import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDate, formatDateTime } from '../../lib/formatDate'
+import { addressSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { PatientPublic } from '../../types/api'
 import { ConsentSection } from '../../components/ConsentSection'
 import { MedicalRecordsSection } from '../../components/MedicalRecordsSection'
@@ -20,26 +24,49 @@ import { MedicationsSection } from './MedicationsSection'
 function PatientUpdateForm({ patient }: { patient: PatientPublic }) {
   const update = useUpdatePatient(patient.id)
   const [phone, setPhone] = useState(patient.phone ?? '')
-  const [healthNumber, setHealthNumber] = useState(patient.national_health_number ?? '')
+  const [address, setAddress] = useState({
+    street: patient.address.street ?? '',
+    postal_code: patient.address.postal_code ?? '',
+    locality: patient.address.locality ?? '',
+  })
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [message, setMessage] = useState('')
 
   return (
     <form
+      noValidate
       className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2"
       onSubmit={(event) => {
         event.preventDefault()
         setMessage('')
+        const parsed = addressSchema.safeParse(address)
+        if (!parsed.success) {
+          setErrors(zodErrorsToRecord(parsed.error))
+          return
+        }
+        setErrors({})
         update.mutate(
-          { phone: phone || null, national_health_number: healthNumber || null },
+          {
+            phone: phone.trim() || null,
+            address_street: parsed.data.street || null,
+            address_postal_code: parsed.data.postal_code || null,
+            address_locality: parsed.data.locality || null,
+          },
           {
             onSuccess: () => setMessage('Dados atualizados com sucesso.'),
-            onError: (error) => setMessage(toUserMessage(error)),
+            onError: (error) => {
+              const fields = error instanceof ApiError ? error.fieldErrors : null
+              if (fields?.address_postal_code) setErrors({ postal_code: fields.address_postal_code })
+              setMessage(toUserMessage(error))
+            },
           },
         )
       }}
     >
-      <TextField label="Telefone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-      <TextField label="Número de utente" value={healthNumber} onChange={(event) => setHealthNumber(event.target.value)} />
+      <TextField label="Telefone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={30} />
+      <TextField label="Rua" value={address.street} onChange={(event) => setAddress({ ...address, street: event.target.value })} error={errors.street} maxLength={200} />
+      <TextField label="Código postal" placeholder="0000-000" inputMode="numeric" value={address.postal_code} onChange={(event) => setAddress({ ...address, postal_code: event.target.value })} error={errors.postal_code} maxLength={8} />
+      <TextField label="Localidade" value={address.locality} onChange={(event) => setAddress({ ...address, locality: event.target.value })} error={errors.locality} maxLength={100} />
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <Button type="submit" isLoading={update.isPending}>Guardar dados</Button>
         {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
@@ -50,10 +77,53 @@ function PatientUpdateForm({ patient }: { patient: PatientPublic }) {
 
 type PatientSection = 'personal' | 'appointments' | 'records' | 'results' | 'medications' | 'documents' | 'consents'
 
-/** Staff patient file with tabs (patients have one page per section, see pages/patient). */
+/**
+ * Staff patient page. Doctors and nurses get the tabbed clinical file; administrative
+ * staff and the clinic administrator only the patient's identification (NIF, NISS,
+ * Nº de utente), which they may manage without any clinical access.
+ * Patients have one page per section instead (see pages/patient).
+ */
 export function PatientDetailPage() {
-  const { id: routeId = '' } = useParams()
+  const { user } = useSession()
+  const administrative = user?.role === 'clinic_admin' || (user?.role === 'staff' && user.staff_role === 'admin')
+  return administrative ? <AdministrativePatientPage /> : <ClinicalPatientFile />
+}
+
+function Breadcrumb({ name }: { name: string }) {
   const location = useLocation()
+  return (
+    <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
+      <Link to={{ pathname: '/app/pacientes', search: location.search }} className="hover:text-teal-700 hover:underline">Voltar à lista de pacientes</Link>
+      <span aria-hidden="true"> / </span>
+      <span>{name}</span>
+    </nav>
+  )
+}
+
+function AdministrativePatientPage() {
+  const { id = '' } = useParams()
+  const identification = usePatientIdentification(id)
+
+  if (identification.isLoading) return <LoadingSpinner label="A carregar paciente…" />
+  if (identification.isError) {
+    return <ErrorState message={toUserMessage(identification.error)} onRetry={() => identification.refetch()} />
+  }
+  if (!identification.data) return <ErrorState message="Paciente não encontrado ou sem acesso nesta clínica." />
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Breadcrumb name={identification.data.full_name} />
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">{identification.data.full_name}</h1>
+        <p className="text-sm text-slate-500">Identificação do paciente. Os dados clínicos são reservados à equipa clínica.</p>
+      </div>
+      <div className="max-w-2xl"><PatientIdentifiersCard patientId={id} /></div>
+    </div>
+  )
+}
+
+function ClinicalPatientFile() {
+  const { id: routeId = '' } = useParams()
   const { user } = useSession()
   const [activeSection, setActiveSection] = useState<PatientSection>('personal')
   const id = routeId
@@ -74,11 +144,7 @@ export function PatientDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
-        <Link to={{ pathname: '/app/pacientes', search: location.search }} className="hover:text-teal-700 hover:underline">Voltar à lista de pacientes</Link>
-        <span aria-hidden="true"> / </span>
-        <span>{patient.full_name}</span>
-      </nav>
+      <Breadcrumb name={patient.full_name} />
 
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">{patient.full_name}</h1>
@@ -97,16 +163,18 @@ export function PatientDetailPage() {
         ))}
       </nav>
 
-      {activeSection === 'personal' && <section id="patient-panel-personal" role="tabpanel" aria-labelledby="patient-tab-personal" className="rounded-xl border border-slate-200 bg-white p-6">
+      {activeSection === 'personal' && <div id="patient-panel-personal" role="tabpanel" aria-labelledby="patient-tab-personal" className="flex flex-col gap-6"><section className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-medium">Dados pessoais</h2>
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Detail label="Data de nascimento" value={patient.birth_date ? formatDate(patient.birth_date) : '—'} />
           <Detail label="Telefone" value={patient.phone ?? '—'} />
-          <Detail label="Número de utente" value={patient.national_health_number ?? '—'} />
+          <Detail label="Morada" value={formatAddress(patient.address) ?? '—'} />
           <Detail label="Estado" value={patient.is_active ? 'Ativo' : 'Inativo'} />
         </dl>
         <PatientUpdateForm patient={patient} />
-      </section>}
+      </section>
+      <PatientIdentifiersCard patientId={patient.id} />
+      </div>}
 
       {activeSection === 'appointments' && <section id="patient-panel-appointments" role="tabpanel" aria-labelledby="patient-tab-appointments" className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-medium">Consultas</h2><Link to="/app/consultas" className="text-sm font-medium text-teal-700 hover:underline">Abrir agenda</Link></div>
