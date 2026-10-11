@@ -47,10 +47,12 @@ describe('MessagesInboxPage', () => {
 
     const unreadLink = await screen.findByRole('link', { name: /Dr\. Rui/ })
     expect(unreadLink).toHaveAttribute('href', '/patient/mensagens/c-unread')
-    // Unread is conveyed as text, not only by colour.
-    expect(within(unreadLink).getByText('2 não lidas')).toBeInTheDocument()
+    // Unread is conveyed as text (and bold), not only by colour.
+    expect(within(unreadLink).getByText('2 mensagens novas')).toBeInTheDocument()
+    expect(within(unreadLink).getByText('Dr. Rui')).toHaveClass('font-bold')
     const readLink = screen.getByRole('link', { name: /Enf\. Marta/ })
-    expect(within(readLink).getByText('Sem mensagens por ler')).toBeInTheDocument()
+    expect(within(readLink).getByText('Equipa clínica · Ativa')).toBeInTheDocument()
+    expect(within(readLink).getByText('Enf. Marta')).not.toHaveClass('font-bold')
     // The patient's own name is never shown as "the other participant".
     expect(screen.queryByText('Ana Paciente')).not.toBeInTheDocument()
     expect(calls[0].path).toBe('/api/v1/conversations?page=1&page_size=20')
@@ -184,7 +186,7 @@ describe('MessagesInboxPage', () => {
     session.user = PATIENT_USER
     mockFetch((url) => (url.pathname === '/api/v1/conversations' ? json([conversation({ status: 'waiting_for_team' })], 200, { 'X-Total-Count': '1' }) : undefined))
     renderAt('/patient/mensagens', routes)
-    expect(await screen.findByText('Enviada à equipa clínica')).toBeInTheDocument()
+    expect(await screen.findByText('Equipa clínica · Enviada à equipa clínica')).toBeInTheDocument()
     expect(screen.queryByLabelText('Estado')).not.toBeInTheDocument()
     expect(screen.queryByText('Revisão médica pedida')).not.toBeInTheDocument()
   })

@@ -19,15 +19,20 @@ const PATHS = {
   user: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0',
   shield: 'M12 3l7 3v5.5c0 4.3-3 7.8-7 9-4-1.2-7-4.7-7-9V6l7-3z',
   logout: 'M15 4h3a1 1 0 011 1v14a1 1 0 01-1 1h-3M10 16l-4-4 4-4M6 12h10',
+  back: 'M15 5l-7 7 7 7',
+  more: 'M12 5.5v.01M12 12v.01M12 18.5v.01',
+  send: 'M4.5 12L20 4.5 16 20l-4-6.5-7.5-1.5zM12 13.5l8-9',
+  tick: 'M5 12.5l4 4L19 7',
+  ticks: 'M2 12.5l4 4L14 8M9.5 15.5l1 1L18.5 8',
   pill: 'M10.5 20.5a5 5 0 01-7-7l7-7a5 5 0 017 7l-7 7zM7 10l7 7',
   calendarPlus: 'M7 3v3M17 3v3M4 8.5h16M5 5.5h14a1 1 0 011 1V19a1 1 0 01-1 1H5a1 1 0 01-1-1V6.5a1 1 0 011-1zM12 11.5v6M9 14.5h6',
 } as const
 
 export type IconName = keyof typeof PATHS
 
-export function Icon({ name, className = 'h-6 w-6' }: { name: IconName; className?: string }) {
+export function Icon({ name, className = 'h-6 w-6', strokeWidth = 1.8 }: { name: IconName; className?: string; strokeWidth?: number }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <path d={PATHS[name]} />
     </svg>
   )

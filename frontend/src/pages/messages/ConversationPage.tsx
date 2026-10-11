@@ -8,6 +8,7 @@ import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { useConversationMessages, useEscalateConversation, useMarkConversationRead, useSendMessage, useSetConversationStatus } from '../../hooks/useMessages'
 import { useSession } from '../../hooks/useSession'
+import { PatientConversation } from './patient/PatientConversation'
 import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
@@ -25,7 +26,13 @@ import {
 import { MESSAGE_MAX_LENGTH } from '../../types/api'
 import type { ConversationPublic, ConversationStatus, MessagePublic, UserPublic } from '../../types/api'
 
+/** Patients get the chat-style conversation; staff keep the current view unchanged. */
 export function ConversationPage() {
+  const { user } = useSession()
+  return user?.role === 'patient' ? <PatientConversation /> : <StaffConversationPage />
+}
+
+function StaffConversationPage() {
   const { conversationId = '' } = useParams()
   const { user } = useSession()
   const allowed = canUseMessaging(user)

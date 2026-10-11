@@ -102,8 +102,9 @@ describe('ConversationPage', () => {
       'Mensagem enviada por si',
     ])
     expect(within(items[0]).getByText('Bom dia, como se sente?')).toBeInTheDocument()
-    expect(within(items[1]).getByText('Você')).toBeInTheDocument()
-    expect(within(items[1]).getByText(/Enviada/)).toBeInTheDocument()
+    // My message: on the right, time inside the bubble, ✓ announced as "Enviada" (not read yet).
+    expect(within(items[1]).getByText('Enviada')).toHaveClass('sr-only')
+    expect(within(items[1]).getByText(/^\d{2}:\d{2}$/)).toBeInTheDocument()
   })
 
   it('shows an empty state for a conversation without messages and does not mark anything read', async () => {
@@ -271,7 +272,7 @@ describe('ConversationPage', () => {
       fakeBackend({ currentUserId: PATIENT_USER.id, canReply: false, conversation: { status: 'closed', closed_at: '2026-10-03T09:00:00Z' } })
       renderAt('/patient/mensagens/conv-1', routes)
       expect(await screen.findByText('Esta conversa foi encerrada pela equipa clínica.')).toBeInTheDocument()
-      expect(screen.getByText('Encerrada')).toBeInTheDocument()
+      expect(screen.getByText('Equipa clínica · Encerrada')).toBeInTheDocument()
       expect(screen.queryByRole('region', { name: 'Gestão da conversa' })).not.toBeInTheDocument()
       expect(screen.queryByLabelText('Mensagem')).not.toBeInTheDocument()
       expect(screen.queryByText(/Revisão médica/)).not.toBeInTheDocument()

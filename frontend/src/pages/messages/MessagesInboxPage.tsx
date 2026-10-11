@@ -8,6 +8,7 @@ import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { TextField } from '../../components/TextField'
 import { useConversations, useCreateConversation, usePatientContactSearch } from '../../hooks/useMessages'
 import { useSession } from '../../hooks/useSession'
+import { PatientInbox } from './patient/PatientInbox'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime } from '../../lib/formatDate'
 import { canUseMessaging, CONVERSATION_STATUS_LABELS, messagesBasePath, otherParticipantName, patientStatusLabel } from '../../lib/messaging'
@@ -15,7 +16,13 @@ import type { ConversationPublic, ConversationStatus, UserPublic } from '../../t
 
 const PAGE_SIZE = 20
 
+/** Patients get the chat-style list; staff keep the team inbox unchanged. */
 export function MessagesInboxPage() {
+  const { user } = useSession()
+  return user?.role === 'patient' ? <PatientInbox /> : <StaffMessagesInbox />
+}
+
+function StaffMessagesInbox() {
   const { user } = useSession()
   const allowed = canUseMessaging(user)
   const [page, setPage] = useState(1)
