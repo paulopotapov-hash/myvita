@@ -9,6 +9,8 @@ export interface NavItem {
   label: string
   icon: IconName
   badge?: NavBadge
+  /** The page's own title (its h1 and the browser tab), when it differs from the menu label. */
+  pageTitle?: string
 }
 
 export interface AccountLinks {
@@ -36,13 +38,13 @@ export function navigationFor(user: Pick<UserPublic, 'role' | 'staff_role'>): Na
       account: { profile: '/patient/perfil', security: '/patient/seguranca' },
       items: [
         { to: '/patient', label: 'Início', icon: 'home' },
-        { to: '/patient/consultas', label: 'Consultas', icon: 'calendar' },
+        { to: '/patient/consultas', label: 'Consultas', icon: 'calendar', pageTitle: 'As minhas consultas' },
         { to: '/patient/mensagens', label: 'Mensagens', icon: 'chat', badge: 'messages' },
-        { to: '/patient/resultados', label: 'Resultados', icon: 'results' },
-        { to: '/patient/medicacao', label: 'Medicação', icon: 'pill' },
-        { to: '/patient/documentos', label: 'Documentos', icon: 'document' },
-        { to: '/patient/saude', label: 'Dados clínicos', icon: 'clipboard' },
-        { to: '/patient/consentimentos', label: 'Consentimentos', icon: 'check' },
+        { to: '/patient/resultados', label: 'Resultados', icon: 'results', pageTitle: 'Os meus resultados' },
+        { to: '/patient/medicacao', label: 'Medicação', icon: 'pill', pageTitle: 'A minha medicação' },
+        { to: '/patient/documentos', label: 'Documentos', icon: 'document', pageTitle: 'Os meus documentos' },
+        { to: '/patient/saude', label: 'Dados clínicos', icon: 'clipboard', pageTitle: 'Resumo de saúde' },
+        { to: '/patient/consentimentos', label: 'Consentimentos', icon: 'check', pageTitle: 'Os meus consentimentos' },
         { to: '/patient/notificacoes', label: 'Notificações', icon: 'bell', badge: 'notifications' },
       ],
     }

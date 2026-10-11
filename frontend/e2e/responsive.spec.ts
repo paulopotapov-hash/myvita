@@ -94,7 +94,7 @@ for (const viewport of VIEWPORTS) {
       test.use({ storageState: authState('patient') })
 
       // Merged UI: the patient area lives under /patient.
-      for (const path of ['/patient', '/patient/consultas', '/patient/saude', '/patient/perfil', '/patient/notificacoes', '/patient/documentos', '/patient/mensagens']) {
+      for (const path of ['/patient', '/patient/consultas', '/patient/saude', '/patient/perfil', '/patient/notificacoes', '/patient/documentos', '/patient/mensagens', '/patient/resultados', '/patient/medicacao', '/patient/consentimentos']) {
         test(`${path} fits`, async ({ page }) => {
           await page.goto(path)
           await expectFits(page, `${path} @ ${viewport.name}`)

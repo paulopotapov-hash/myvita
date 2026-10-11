@@ -53,7 +53,7 @@ export function AppointmentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-slate-900">Consultas</h1>
+      <h1 className="text-2xl font-semibold text-slate-900">{user?.role === 'patient' ? 'As minhas consultas' : 'Consultas'}</h1>
       {feedback && <p role="status" className="text-sm text-teal-700">{feedback}</p>}
       <AppointmentRequestsPanel />
       {canCreate && <CreateAppointmentForm canHandleReason={canHandleReason} />}

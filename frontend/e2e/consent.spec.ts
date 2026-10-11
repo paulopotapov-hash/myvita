@@ -8,9 +8,10 @@ test.describe.serial('consent', () => {
     test.use({ storageState: authState('patient') })
 
     test('validates, grants and revokes a consent while keeping the history', async ({ page }) => {
-      // Merged UI (Parent B base): the patient's consents are a tab of their own file.
+      // The patient's consents have their own page (one page per section).
       await page.goto('/patient/consentimentos')
-      const section = page.getByRole('tabpanel', { name: 'Consentimentos' })
+      await expect(page.getByRole('heading', { level: 1, name: 'Os meus consentimentos' })).toBeVisible()
+      const section = page.getByRole('main')
 
       await section.getByRole('button', { name: 'Conceder' }).click()
       await expect(section.getByText('Indica a finalidade do consentimento.')).toBeVisible()

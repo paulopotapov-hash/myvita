@@ -15,7 +15,12 @@ vi.mock('./pages/DashboardPage', () => ({ DashboardPage: () => <div>App dashboar
 vi.mock('./pages/patient/PatientDashboard', () => ({ PatientDashboard: () => <div>Patient dashboard</div> }))
 vi.mock('./pages/patient/PatientProfilePage', () => ({ PatientProfilePage: () => <div>Patient profile</div> }))
 vi.mock('./pages/staff/AppointmentsPage', () => ({ AppointmentsPage: () => <div>Appointments</div> }))
-vi.mock('./pages/staff/PatientDetailPage', () => ({ PatientDetailPage: () => <div>Patient health</div> }))
+vi.mock('./pages/staff/PatientDetailPage', () => ({ PatientDetailPage: () => <div>Staff patient file</div> }))
+vi.mock('./pages/patient/HealthSummaryPage', () => ({ HealthSummaryPage: () => <div>Patient health</div> }))
+vi.mock('./pages/patient/PatientResultsPage', () => ({ PatientResultsPage: () => <div>Patient results</div> }))
+vi.mock('./pages/patient/PatientMedicationPage', () => ({ PatientMedicationPage: () => <div>Patient medication</div> }))
+vi.mock('./pages/patient/PatientDocumentsPage', () => ({ PatientDocumentsPage: () => <div>Patient documents</div> }))
+vi.mock('./pages/patient/PatientConsentsPage', () => ({ PatientConsentsPage: () => <div>Patient consents</div> }))
 vi.mock('./pages/NotificationsPage', () => ({ NotificationsPage: () => <div>Notifications</div> }))
 vi.mock('./pages/staff/PatientsPage', () => ({ PatientsPage: () => <div>Patients</div> }))
 vi.mock('./pages/admin/StaffManagementPage', () => ({ StaffManagementPage: () => <div>Team</div> }))
@@ -45,12 +50,17 @@ describe('role-separated application routes', () => {
     ['/patient', 'Patient dashboard'],
     ['/patient/perfil', 'Patient profile'],
     ['/patient/saude', 'Patient health'],
+    ['/patient/resultados', 'Patient results'],
+    ['/patient/medicacao', 'Patient medication'],
+    ['/patient/documentos', 'Patient documents'],
+    ['/patient/consentimentos', 'Patient consents'],
     ['/patient/consultas', 'Appointments'],
     ['/patient/notificacoes', 'Notifications'],
   ])('allows a patient to navigate directly to %s', async (path, content) => {
     renderPath(path, 'patient')
     await waitFor(() => expect(screen.getByText(content)).toBeInTheDocument())
     expect(screen.getByText('Patient layout')).toBeInTheDocument()
+    expect(screen.queryByText('Staff patient file')).not.toBeInTheDocument()
   })
 
   it.each(['/app/pacientes', '/app/equipa'])('redirects a patient opening %s to /patient', async (path) => {

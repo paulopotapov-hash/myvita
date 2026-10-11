@@ -265,7 +265,6 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   await page.goto('/patient/consultas')
   await expect(page.locator('span').filter({ hasText: 'Confirmada' })).toBeVisible()
   await page.goto('/patient/saude')
-  await page.getByRole('tab', { name: 'Registos clínicos' }).click()
   await expect(page.getByText('Conteúdo clínico sintético atualizado.')).toBeVisible()
   await page.goto('/patient/notificacoes')
   await expect(page.getByText('Consulta confirmada')).toBeVisible()

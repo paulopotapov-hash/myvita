@@ -73,14 +73,6 @@ function renderPage() {
   )
 }
 
-function renderOwnPage() {
-  return render(
-    <MemoryRouter initialEntries={['/app/saude']}>
-      <Routes><Route path="/app/saude" element={<PatientDetailPage own />} /></Routes>
-    </MemoryRouter>,
-  )
-}
-
 describe('PatientDetailPage consent workflow', () => {
   beforeEach(() => {
     grantMutate.mockReset()
@@ -101,33 +93,22 @@ describe('PatientDetailPage consent workflow', () => {
     expect(screen.getByText('Concedido')).toBeInTheDocument()
   })
 
-  it('grants and revokes using the real B5 payload shape', async () => {
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
+  it('shows staff the consent history without the patient-only grant form', async () => {
     const user = userEvent.setup()
     renderPage()
+    expect(usePatient).toHaveBeenCalledWith('patient-1')
     await user.click(screen.getByRole('tab', { name: 'Consentimentos' }))
-    await user.type(screen.getByLabelText('Finalidade'), 'Partilha assistencial')
-    await user.click(screen.getByRole('button', { name: 'Conceder' }))
-    expect(grantMutate).toHaveBeenCalledWith(
-      { consent_type: 'treatment', purpose: 'Partilha assistencial' },
-      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Revogar' }))
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('histórico'))
-    expect(revokeMutate).toHaveBeenCalledWith(
-      'consent-1',
-      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
-    )
+    expect(screen.queryByLabelText('Finalidade')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Revogar' })).not.toBeInTheDocument()
   })
 
-  it('uses patient_id from the restored session for patient self-service', () => {
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
-    renderOwnPage()
-    expect(usePatient).toHaveBeenCalledWith('patient-1')
-    expect(screen.getByRole('heading', { name: 'Ana Silva' })).toBeInTheDocument()
+  it('keeps the tabbed file for staff, starting on Dados pessoais', () => {
+    sessionState.role = 'staff'
+    sessionState.staff_role = 'doctor'
+    renderPage()
+    expect(screen.getByRole('tab', { name: 'Dados pessoais', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Registos clínicos' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Número de utente')).toBeInTheDocument()
   })
 })
 
@@ -152,18 +133,5 @@ describe('PatientDetailPage documents tab', () => {
     expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
     expect(screen.getByText('Documentos de Ana Silva')).toBeInTheDocument()
     expect(screen.getByRole('form', { name: 'Carregar documento' })).toBeInTheDocument()
-  })
-
-  it('opens the documents section directly for a patient without upload controls', () => {
-    sessionState.role = 'patient'
-    sessionState.patient_id = 'patient-1'
-    render(
-      <MemoryRouter initialEntries={['/patient/documentos']}>
-        <Routes><Route path="/patient/documentos" element={<PatientDetailPage own section="documents" />} /></Routes>
-      </MemoryRouter>,
-    )
-    expect(screen.getByRole('tab', { name: 'Documentos', selected: true })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
-    expect(screen.queryByRole('form', { name: 'Carregar documento' })).not.toBeInTheDocument()
   })
 })

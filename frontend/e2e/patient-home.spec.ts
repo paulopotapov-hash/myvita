@@ -44,6 +44,6 @@ test.describe('patient home', () => {
     await page.goto('/patient')
     await page.getByRole('navigation', { name: 'Atalhos' }).getByRole('link', { name: 'Medicação' }).click()
     await expect(page).toHaveURL(/\/patient\/medicacao$/)
-    await expect(page.getByRole('tab', { name: 'Medicamentos' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('heading', { level: 1, name: 'A minha medicação' })).toBeVisible()
   })
 })

@@ -437,7 +437,6 @@ test('UAT-11 Clinical record lifecycle: create, update with versions, history, p
   expect((await world['patient-a'].get(`/api/v1/medical-records/${id}/revisions`)).status).toBe(404)
   await uiLogin(page, email('patient-a'))
   await page.goto('/patient/saude')
-  await page.getByRole('tab', { name: 'Registos clínicos' }).click()
   await expect(page.getByText('UAT record').first()).toBeVisible()
   world.recordA1 = id
 })

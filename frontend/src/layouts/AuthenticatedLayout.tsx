@@ -35,11 +35,11 @@ export function AuthenticatedLayout({ navigation }: { navigation: Navigation }) 
   // Screen readers get the page name in the title; keyboard users land on the
   // new page's content after an in-app navigation instead of back at the top.
   useEffect(() => {
-    const titled = [...items, { to: account.profile, label: 'Perfil' }, { to: account.security, label: 'Segurança' }]
+    const titled: Array<{ to: string; label: string; pageTitle?: string }> = [...items, { to: account.profile, label: 'Perfil' }, { to: account.security, label: 'Segurança' }]
     const current = titled
       .filter((item) => (item.to === homePath ? location.pathname === homePath : location.pathname.startsWith(item.to)))
       .sort((a, b) => b.to.length - a.to.length)[0]
-    document.title = current ? `${current.label} · myVita` : 'myVita'
+    document.title = current ? `${current.pageTitle ?? current.label} · myVita` : 'myVita'
     if (previousPath.current !== null && previousPath.current !== location.pathname) mainRef.current?.focus()
     previousPath.current = location.pathname
   }, [location.pathname, items, homePath, account])

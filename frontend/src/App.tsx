@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ProtectedRoute } from './app/ProtectedRoute'
 import { RoleRoute } from './app/RoleRoute'
 import { RootRedirect } from './app/RootRedirect'
@@ -19,8 +19,19 @@ import { AccountsPage } from './pages/admin/AccountsPage'
 import { AccountSecurityPage } from './pages/AccountSecurityPage'
 import { AccountProfilePage } from './pages/AccountProfilePage'
 import { PatientDashboard } from './pages/patient/PatientDashboard'
+import { HealthSummaryPage } from './pages/patient/HealthSummaryPage'
+import { PatientConsentsPage } from './pages/patient/PatientConsentsPage'
+import { PatientDocumentsPage } from './pages/patient/PatientDocumentsPage'
+import { PatientMedicationPage } from './pages/patient/PatientMedicationPage'
+import { PatientResultsPage } from './pages/patient/PatientResultsPage'
 import { MessagesInboxPage } from './pages/messages/MessagesInboxPage'
 import { ConversationPage } from './pages/messages/ConversationPage'
+
+/** Old links to /patient/registos (e.g. earlier notifications) open the health summary, keeping ?record=. */
+function LegacyRecordsRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={{ pathname: '/patient/saude', search }} replace />
+}
 
 export default function App() {
   return (
@@ -95,13 +106,13 @@ export default function App() {
         <Route index element={<PatientDashboard />} />
         <Route path="consultas" element={<AppointmentsPage />} />
         <Route path="perfil" element={<PatientProfilePage />} />
-        <Route path="consentimentos" element={<PatientDetailPage own section="consents" />} />
+        <Route path="consentimentos" element={<PatientConsentsPage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
-        <Route path="saude" element={<PatientDetailPage own />} />
-        <Route path="documentos" element={<PatientDetailPage own section="documents" />} />
-        <Route path="resultados" element={<PatientDetailPage own section="results" />} />
-        <Route path="medicacao" element={<PatientDetailPage own section="medications" />} />
-        <Route path="registos" element={<PatientDetailPage own section="records" />} />
+        <Route path="saude" element={<HealthSummaryPage />} />
+        <Route path="documentos" element={<PatientDocumentsPage />} />
+        <Route path="resultados" element={<PatientResultsPage />} />
+        <Route path="medicacao" element={<PatientMedicationPage />} />
+        <Route path="registos" element={<LegacyRecordsRedirect />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
         <Route path="mensagens" element={<MessagesInboxPage />} />
         <Route path="mensagens/:conversationId" element={<ConversationPage />} />

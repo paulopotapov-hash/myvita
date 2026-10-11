@@ -38,7 +38,7 @@ describe('notificationLink', () => {
 
   it('opens a shared medical record in the patient area only', () => {
     const target = notification({ title: 'Nova informação clínica partilhada', target_type: 'medical_record', record_target_id: 'rec-1' })
-    expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/registos?record=rec-1', label: 'Abrir registo clínico' })
+    expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/saude?record=rec-1', label: 'Abrir registo clínico' })
     expect(notificationLink(target, { role: 'staff' }).to).toBe('/app/consultas')
     expect(notificationLink(notification({ target_type: 'medical_record', record_target_id: null }), { role: 'patient' }).to).toBe('/patient/consultas')
   })

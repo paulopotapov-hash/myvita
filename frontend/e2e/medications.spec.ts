@@ -92,9 +92,9 @@ test.describe.serial('medications', () => {
     test.use({ storageState: authState('patient') })
 
     test('sees their medication without any way to change it', async ({ page }) => {
-      // Merged UI: the patient's health data is /patient/saude, split into tabs.
-      await page.goto('/patient/saude')
-      await page.getByRole('tab', { name: 'Medicamentos' }).click()
+      // The patient's medication has its own page (one page per section).
+      await page.goto('/patient/medicacao')
+      await expect(page.getByRole('heading', { level: 1, name: 'A minha medicação' })).toBeVisible()
       const section = page.getByRole('region', { name: 'Medicação' })
       await expect(section.getByRole('listitem').filter({ hasText: 'Amoxicilina E2E' })).toBeVisible()
       await expect(section.getByLabel('Medicamento')).toHaveCount(0)

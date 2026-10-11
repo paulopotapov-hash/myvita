@@ -10,16 +10,7 @@ import { useSession } from '../../hooks/useSession'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDateTime, formatLongDate, formatTime } from '../../lib/formatDate'
 import { firstNameOf } from '../../lib/initials'
-import type { AppointmentView } from '../../types/api'
-
-const UPCOMING_STATUSES = new Set(['scheduled', 'confirmed'])
-
-function nextAppointment(appointments: AppointmentView[], now: Date): AppointmentView | undefined {
-  return appointments
-    .filter((appointment) => UPCOMING_STATUSES.has(appointment.status) && new Date(appointment.scheduled_at) >= now)
-    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0]
-}
-
+import { nextAppointment } from '../../lib/appointments'
 /** Patient home (mobile first, MyChart style): greeting, shortcut grid, highlight cards. */
 export function PatientDashboard() {
   const { user } = useSession()

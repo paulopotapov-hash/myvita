@@ -86,9 +86,10 @@ test.describe.serial('medical records', () => {
     test.use({ storageState: authState('patient') })
 
     test('can read the shared record but not write it, and never sees internal notes', async ({ page }) => {
+      // Shared records are part of the patient's "Resumo de saúde" page.
       await page.goto('/patient/saude')
-      await page.getByRole('tab', { name: 'Registos clínicos' }).click()
-      const section = recordsPanel(page)
+      await expect(page.getByRole('heading', { level: 1, name: 'Resumo de saúde' })).toBeVisible()
+      const section = page.getByRole('region', { name: 'Registos clínicos' })
       await expect(section.getByRole('listitem').filter({ hasText: 'Avaliação inicial E2E' })).toBeVisible()
       await expect(section.getByText('Nota interna E2E')).toHaveCount(0)
       await expect(section.getByText('Observação só para a equipa.')).toHaveCount(0)

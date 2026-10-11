@@ -81,6 +81,6 @@ describe('PatientLayout navigation', () => {
     await user.click(screen.getAllByRole('link', { name: 'Consultas' })[0])
     expect(await screen.findByText('As minhas consultas')).toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveFocus()
-    expect(document.title).toBe('Consultas · myVita')
+    expect(document.title).toBe('As minhas consultas · myVita')
   })
 })

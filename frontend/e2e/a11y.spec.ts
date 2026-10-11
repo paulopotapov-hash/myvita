@@ -180,6 +180,8 @@ test.describe('authenticated pages as the patient', () => {
     ['/patient/documentos', 'documents'],
     ['/patient/mensagens', 'messages'],
     ['/patient/consentimentos', 'consents'],
+    ['/patient/resultados', 'results'],
+    ['/patient/medicacao', 'medication'],
   ] as const) {
     test(`${name} has no violations`, async ({ page }) => {
       await page.goto(path)

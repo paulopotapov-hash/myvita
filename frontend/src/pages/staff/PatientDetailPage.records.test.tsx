@@ -4,11 +4,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../lib/apiClient'
 import type { MedicalRecordPatientView, MedicalRecordPublic, MedicalRecordRevisionPublic } from '../../types/api'
+import { MedicalRecordsSection } from '../../components/MedicalRecordsSection'
 import { PatientDetailPage } from './PatientDetailPage'
 
-// Coverage for the live (inline) medical-records section of PatientDetailPage.
-// Replaces Parent A's tests of its standalone MedicalRecordsSection, which no
-// route rendered after the merge (see _integration/replaced-tests.md).
+// Coverage for the medical-records section: inside the staff patient file
+// (Registos clínicos tab) and, read-only, on the patient's "Resumo de saúde"
+// page (/patient/saude), which renders the same MedicalRecordsSection.
 
 const h = vi.hoisted(() => ({
   session: { role: 'staff' as 'staff' | 'patient', staff_role: 'doctor' as 'doctor' | null, patient_id: null as string | null },
@@ -104,6 +105,11 @@ const patientRecord: MedicalRecordPatientView = {
 type Options = { onSuccess?: () => void; onError?: (error: unknown) => void }
 
 async function openRecords(user: ReturnType<typeof userEvent.setup>) {
+  if (h.session.role === 'patient') {
+    // The patient reads shared records on their own health summary page, never in the staff file.
+    render(<MemoryRouter initialEntries={['/patient/saude']}><MedicalRecordsSection patientId="patient-1" canWrite={false} /></MemoryRouter>)
+    return screen.getByRole('heading', { name: 'Registos clínicos' }).closest('section') as HTMLElement
+  }
   render(
     <MemoryRouter initialEntries={['/app/pacientes/patient-1']}>
       <Routes><Route path="/app/pacientes/:id" element={<PatientDetailPage />} /></Routes>
@@ -113,7 +119,7 @@ async function openRecords(user: ReturnType<typeof userEvent.setup>) {
   return screen.getByRole('tabpanel')
 }
 
-describe('PatientDetailPage medical records (inline section)', () => {
+describe('Medical records section (staff file and patient health summary)', () => {
   beforeEach(() => {
     h.session = { role: 'staff', staff_role: 'doctor', patient_id: null }
     h.list = { data: [], isLoading: false, isError: false, error: null, refetch: vi.fn() }
@@ -277,8 +283,8 @@ describe('PatientDetailPage medical records (inline section)', () => {
     h.session = { role: 'patient', staff_role: null, patient_id: 'patient-1' }
     h.list.data = [patientRecord]
     render(
-      <MemoryRouter initialEntries={['/patient/registos?record=rec-1']}>
-        <Routes><Route path="/patient/registos" element={<PatientDetailPage own section="records" />} /></Routes>
+      <MemoryRouter initialEntries={['/patient/saude?record=rec-1']}>
+        <Routes><Route path="/patient/saude" element={<MedicalRecordsSection patientId="patient-1" canWrite={false} />} /></Routes>
       </MemoryRouter>,
     )
     const row = screen.getByText('Evolução clínica').closest('li') as HTMLElement
@@ -292,8 +298,8 @@ describe('PatientDetailPage medical records (inline section)', () => {
     h.list.data = []
     h.single = { data: undefined, isLoading: false, isError: true, error: new ApiError(404, 'x') }
     render(
-      <MemoryRouter initialEntries={['/patient/registos?record=rec-9']}>
-        <Routes><Route path="/patient/registos" element={<PatientDetailPage own section="records" />} /></Routes>
+      <MemoryRouter initialEntries={['/patient/saude?record=rec-9']}>
+        <Routes><Route path="/patient/saude" element={<MedicalRecordsSection patientId="patient-1" canWrite={false} />} /></Routes>
       </MemoryRouter>,
     )
     expect(h.singleRequested).toContain('rec-9')

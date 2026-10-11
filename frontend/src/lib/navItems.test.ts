@@ -13,6 +13,9 @@ describe('navigationFor', () => {
     ])
     expect(navigation.items.every((item) => item.to.startsWith('/patient'))).toBe(true)
     expect(navigation.account).toEqual({ profile: '/patient/perfil', security: '/patient/seguranca' })
+    expect(navigation.items.map((item) => item.pageTitle ?? item.label)).toEqual([
+      'Início', 'As minhas consultas', 'Mensagens', 'Os meus resultados', 'A minha medicação', 'Os meus documentos', 'Resumo de saúde', 'Os meus consentimentos', 'Notificações',
+    ])
   })
 
   it('offers messages only to roles that may message (doctor, nurse)', () => {
