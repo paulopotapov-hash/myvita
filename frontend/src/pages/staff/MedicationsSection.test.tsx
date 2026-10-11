@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   create: { mutate: vi.fn(), isPending: false },
   update: { mutate: vi.fn(), isPending: false, variables: undefined as unknown },
   deactivate: { mutate: vi.fn(), isPending: false, variables: undefined as unknown },
+  action: { mutate: vi.fn(), isPending: false },
 }))
 
 vi.mock('../../hooks/useClinicalData', () => ({
@@ -17,6 +18,7 @@ vi.mock('../../hooks/useClinicalData', () => ({
   useCreateMedication: () => h.create,
   useUpdateMedication: () => h.update,
   useDeactivateMedication: () => h.deactivate,
+  useMedicationAction: () => h.action,
 }))
 
 const active: MedicationPublic = {
@@ -25,6 +27,13 @@ const active: MedicationPublic = {
   clinic_id: 'clinic-1',
   patient_id: 'patient-1',
   prescribed_by_staff_id: 'staff-1',
+  origin: 'professional',
+  confirmed: true,
+  confirmed_at: '2026-09-24T10:00:00Z',
+  confirmed_by_staff_id: 'staff-1',
+  hidden: false,
+  hidden_at: null,
+  hidden_reason: null,
   name: 'Amoxicilina',
   dosage: '500 mg',
   route: 'oral',
@@ -339,5 +348,68 @@ describe('MedicationsSection', () => {
     for (const name of ['Editar', 'Concluir', 'Descontinuar']) {
       expect(screen.getByRole('button', { name })).toHaveAccessibleDescription('Amoxicilina · 500 mg')
     }
+  })
+})
+
+describe('MedicationsSection — declarations, confirmation and hiding (commit 3)', () => {
+  const declared: MedicationPublic = {
+    ...active, id: 'med-9', name: 'Vitamina D', dosage: null, origin: 'patient_declared', confirmed: false,
+    confirmed_at: null, confirmed_by_staff_id: null, prescribed_by_staff_id: null,
+  }
+  const hidden: MedicationPublic = { ...completed, hidden: true, hidden_at: '2026-10-01T10:00:00Z', hidden_reason: 'Motivo sintético' }
+  type Callbacks = { onSuccess?: () => void; onError?: (error: unknown) => void }
+
+  beforeEach(() => {
+    h.action = { mutate: vi.fn(), isPending: false }
+  })
+
+  it('groups current and past medication and labels origin and hiding', () => {
+    h.list = { data: { items: [declared, hidden], total: 2 }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+    render(<MedicationsSection patientId="patient-1" canWrite />)
+    const current = screen.getByRole('list', { name: 'Medicação atual' })
+    expect(current).toHaveTextContent('Vitamina D')
+    expect(current).toHaveTextContent('Declarado pelo paciente')
+    const past = screen.getByRole('list', { name: 'Histórico de medicação' })
+    expect(past).toHaveTextContent('Oculto ao paciente')
+    expect(past).toHaveTextContent('Motivo para ocultar: Motivo sintético')
+    expect(within(past).getByRole('button', { name: 'Mostrar ao paciente' })).toBeInTheDocument()
+  })
+
+  it('confirms a declaration and may complete the dose', async () => {
+    h.list = { data: { items: [declared], total: 1 }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+    const user = userEvent.setup()
+    render(<MedicationsSection patientId="patient-1" canWrite />)
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Confirmar medicação' })
+    await user.type(within(dialog).getByLabelText('Dosagem (opcional)'), '1000 UI')
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar' }))
+    const [variables, callbacks] = h.action.mutate.mock.calls[0] as [unknown, Callbacks]
+    expect(variables).toEqual({ kind: 'confirm', id: 'med-9', dosage: '1000 UI' })
+    act(() => callbacks.onSuccess?.())
+    expect(screen.getByRole('status')).toHaveTextContent('Medicação confirmada.')
+  })
+
+  it('hides and deletes only with a reason, and shows again directly', async () => {
+    h.list = { data: { items: [active, hidden], total: 2 }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+    const user = userEvent.setup()
+    render(<MedicationsSection patientId="patient-1" canWrite />)
+    const current = screen.getByRole('list', { name: 'Medicação atual' })
+    await user.click(within(current).getByRole('button', { name: 'Ocultar ao paciente' }))
+    let dialog = screen.getByRole('alertdialog', { name: 'Ocultar ao paciente' })
+    await user.click(within(dialog).getByRole('button', { name: 'Ocultar' }))
+    expect(within(dialog).getByText('Indica o motivo.')).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('Motivo'), 'Motivo sintético')
+    await user.click(within(dialog).getByRole('button', { name: 'Ocultar' }))
+    expect(h.action.mutate.mock.calls[0][0]).toEqual({ kind: 'hide', id: 'med-1', reason: 'Motivo sintético' })
+    act(() => (h.action.mutate.mock.calls[0][1] as Callbacks).onSuccess?.())
+
+    await user.click(within(screen.getByRole('list', { name: 'Histórico de medicação' })).getByRole('button', { name: 'Mostrar ao paciente' }))
+    expect(h.action.mutate.mock.calls[1][0]).toEqual({ kind: 'show', id: 'med-2' })
+
+    await user.click(within(current).getByRole('button', { name: 'Apagar' }))
+    dialog = screen.getByRole('alertdialog', { name: 'Apagar medicação' })
+    await user.type(within(dialog).getByLabelText('Motivo'), 'Registo duplicado')
+    await user.click(within(dialog).getByRole('button', { name: 'Apagar' }))
+    expect(h.action.mutate.mock.calls[2][0]).toEqual({ kind: 'remove', id: 'med-1', reason: 'Registo duplicado' })
   })
 })

@@ -9,6 +9,16 @@ from app.models.appointment_request import AppointmentRequest, AppointmentReques
 from app.models.audit_log import AuditAction, AuditLog, AuditResult  # noqa: F401
 from app.models.clinic import Clinic  # noqa: F401
 from app.models.clinical_care_assignment import ClinicalCareAssignment  # noqa: F401
+from app.models.clinical_history import (  # noqa: F401
+    AllergySeverity,
+    ClinicalHistoryEntry,
+    ClinicalHistoryRevision,
+    ConditionStatus,
+    DatePrecision,
+    HistoryCategory,
+    HistoryChangeKind,
+    HistoryOrigin,
+)
 from app.models.clinical_result import (  # noqa: F401
     ClinicalResult,
     ClinicalResultCategory,

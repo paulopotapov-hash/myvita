@@ -5,13 +5,16 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.schemas import RequestModel
+from app.models.clinical_history import HistoryOrigin
 from app.models.medication import MedicationStatus
 
 
 class MedicationCreateRequest(RequestModel):
+    """A professional's prescription (dose required) or a patient's declaration (dose optional, D6)."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     name: str = Field(min_length=1, max_length=200)
-    dosage: str = Field(min_length=1, max_length=200)
+    dosage: str | None = Field(default=None, min_length=1, max_length=200)
     route: str | None = Field(default=None, min_length=1, max_length=100)
     frequency: str | None = Field(default=None, min_length=1, max_length=100)
     instructions: str | None = Field(default=None, min_length=1, max_length=2000)
@@ -20,7 +23,9 @@ class MedicationCreateRequest(RequestModel):
 
     @field_validator("name", "dosage")
     @classmethod
-    def non_blank(cls, value: str) -> str:
+    def non_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         value = value.strip()
         if not value:
             raise ValueError("must not be blank")
@@ -65,6 +70,25 @@ class MedicationUpdateRequest(RequestModel):
         return self
 
 
+class MedicationConfirmRequest(RequestModel):
+    """Confirming a patient's declaration; the professional may complete the dose (D6)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    dosage: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class MedicationHideRequest(RequestModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class MedicationDeleteRequest(RequestModel):
+    """Soft delete. Required reason for a professional; optional for a patient's own declaration."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class MedicationDeactivateRequest(RequestModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -78,18 +102,25 @@ class MedicationPublic(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID
     patient_id: uuid.UUID
-    prescribed_by_staff_id: uuid.UUID
+    prescribed_by_staff_id: uuid.UUID | None
     name: str
-    dosage: str
+    dosage: str | None
     route: str | None
     frequency: str | None
     instructions: str | None
     status: MedicationStatus
     start_date: date
     end_date: date | None
+    # Clinical history (commit 3): origin, confirmation and hiding from the patient (D4).
+    origin: HistoryOrigin
+    confirmed: bool
+    confirmed_at: datetime | None
+    confirmed_by_staff_id: uuid.UUID | None
+    hidden: bool
+    hidden_at: datetime | None
+    hidden_reason: str | None
     created_at: datetime
     updated_at: datetime
-    model_config = {"from_attributes": True}
 
 
 class MedicationPatientView(BaseModel):
@@ -102,13 +133,17 @@ class MedicationPatientView(BaseModel):
     view: Literal["patient"] = "patient"
     id: uuid.UUID
     name: str
-    dosage: str
+    dosage: str | None
     route: str | None
     frequency: str | None
     instructions: str | None
     status: MedicationStatus
     start_date: date
     end_date: date | None
+    origin: HistoryOrigin
+    confirmed: bool
+    # The patient's own declaration, not yet confirmed (D3).
+    can_edit: bool
     created_at: datetime
     updated_at: datetime
 

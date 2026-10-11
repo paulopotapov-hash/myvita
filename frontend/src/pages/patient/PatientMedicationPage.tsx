@@ -3,8 +3,8 @@ import { PatientSectionPage } from './PatientSectionPage'
 
 export function PatientMedicationPage() {
   return (
-    <PatientSectionPage title="A minha medicação" intro="Medicação registada pela tua equipa clínica.">
-      {(patientId) => <MedicationsSection patientId={patientId} canWrite={false} />}
+    <PatientSectionPage title="A minha medicação" intro="A medicação registada pela tua equipa clínica e a que declaraste.">
+      {(patientId) => <MedicationsSection patientId={patientId} canWrite={false} canDeclare />}
     </PatientSectionPage>
   )
 }

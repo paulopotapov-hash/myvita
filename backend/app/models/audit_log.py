@@ -119,6 +119,20 @@ class AuditAction(str, enum.Enum):
     # Personal identifiers (NIF, NISS, Nº de utente): who revealed or changed them, never the values.
     PATIENT_IDENTIFIERS_VIEWED = "patient_identifiers_viewed"  # "dados identificativos consultados"
     PATIENT_IDENTIFIERS_UPDATED = "patient_identifiers_updated"
+    # Clinical history (commit 3): identifiers, category and changed field names only.
+    CLINICAL_HISTORY_VIEWED = "clinical_history_viewed"
+    CLINICAL_HISTORY_CREATED = "clinical_history_created"
+    CLINICAL_HISTORY_DECLARED = "clinical_history_declared"
+    CLINICAL_HISTORY_UPDATED = "clinical_history_updated"
+    CLINICAL_HISTORY_CONFIRMED = "clinical_history_confirmed"
+    CLINICAL_HISTORY_HIDDEN = "clinical_history_hidden"
+    CLINICAL_HISTORY_SHOWN = "clinical_history_shown"
+    CLINICAL_HISTORY_DELETED = "clinical_history_deleted"
+    MEDICATION_DECLARED = "medication_declared"
+    MEDICATION_CONFIRMED = "medication_confirmed"
+    MEDICATION_HIDDEN = "medication_hidden"
+    MEDICATION_SHOWN = "medication_shown"
+    MEDICATION_DELETED = "medication_deleted"
 
 
 class AuditResult(str, enum.Enum):

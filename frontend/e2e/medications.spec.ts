@@ -74,7 +74,10 @@ test.describe.serial('medications', () => {
       await expect(section.getByRole('status').filter({ hasText: 'Medicação concluída.' })).toBeVisible()
       await expect(row).toContainText('Concluída')
       await expect(row).toContainText('Fim')
-      await expect(row.getByRole('button')).toHaveCount(0)
+      // A finished medication can no longer be edited or finished again (only hidden or deleted, commit 3).
+      for (const name of ['Editar', 'Concluir', 'Descontinuar']) {
+        await expect(row.getByRole('button', { name })).toHaveCount(0)
+      }
     })
 
     test('discontinues a medication', async ({ page }) => {
@@ -91,14 +94,19 @@ test.describe.serial('medications', () => {
   test.describe('as the patient', () => {
     test.use({ storageState: authState('patient') })
 
-    test('sees their medication without any way to change it', async ({ page }) => {
+    test("sees their medication and cannot change a professional's prescription", async ({ page }) => {
       // The patient's medication has its own page (one page per section).
       await page.goto('/patient/medicacao')
       await expect(page.getByRole('heading', { level: 1, name: 'A minha medicação' })).toBeVisible()
       const section = page.getByRole('region', { name: 'Medicação' })
-      await expect(section.getByRole('listitem').filter({ hasText: 'Amoxicilina E2E' })).toBeVisible()
-      await expect(section.getByLabel('Medicamento')).toHaveCount(0)
-      await expect(section.getByRole('button')).toHaveCount(0)
+      const prescribed = section.getByRole('listitem').filter({ hasText: 'Amoxicilina E2E' })
+      await expect(prescribed).toBeVisible()
+      await expect(prescribed).toContainText('Confirmado pelo profissional')
+      // Since commit 3 the patient may declare medication, but a prescription has no actions for them.
+      await expect(prescribed.getByRole('button')).toHaveCount(0)
+      for (const name of ['Concluir', 'Descontinuar', 'Confirmar', 'Ocultar ao paciente']) {
+        await expect(section.getByRole('button', { name })).toHaveCount(0)
+      }
     })
   })
 })

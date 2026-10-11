@@ -38,7 +38,7 @@ from sqlalchemy import String, create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
-APPEND_ONLY_TABLES = ("audit_logs", "documents", "medical_record_revisions")
+APPEND_ONLY_TABLES = ("audit_logs", "documents", "medical_record_revisions", "clinical_history_revisions")
 READ_ONLY_TABLES = ("alembic_version",)
 # Tables the app inserts into and updates only specific columns of (column-level UPDATE,
 # no DELETE). Each column list is exactly what the services write, including onupdate columns.
@@ -63,6 +63,52 @@ COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
         "visibility_changed_at",
         "visibility_changed_by_staff_id",
         "updated_at",
+    ),
+    # Clinical history (commit 3): soft delete only, so no DELETE; ids, patient, clinic,
+    # category, origin and author never change after creation.
+    "clinical_history_entries": (
+        "name",
+        "condition_status",
+        "onset_date",
+        "onset_precision",
+        "resolved_date",
+        "resolved_precision",
+        "occurred_on",
+        "occurred_precision",
+        "location",
+        "reaction",
+        "severity",
+        "note_text",
+        "confirmed_by_staff_id",
+        "confirmed_at",
+        "hidden_by_staff_id",
+        "hidden_at",
+        "hidden_reason",
+        "version",
+        "updated_at",
+        "deleted_at",
+        "deleted_by_user_id",
+        "deletion_reason",
+    ),
+    # D8: medication is soft-deleted, never deleted; patient, clinic, origin and authors are fixed.
+    "medications": (
+        "name",
+        "dosage",
+        "route",
+        "frequency",
+        "instructions",
+        "status",
+        "start_date",
+        "end_date",
+        "confirmed_by_staff_id",
+        "confirmed_at",
+        "hidden_by_staff_id",
+        "hidden_at",
+        "hidden_reason",
+        "updated_at",
+        "deleted_at",
+        "deleted_by_user_id",
+        "deletion_reason",
     ),
     "clinical_results": (
         "category",

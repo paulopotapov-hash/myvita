@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +10,10 @@ const { grantMutate, revokeMutate, sessionState, usePatient, usePatientIdentific
   sessionState: { role: 'clinic_admin', staff_role: null as 'doctor' | 'nurse' | 'admin' | null, patient_id: null as string | null },
   usePatient: vi.fn(),
   usePatientIdentification: vi.fn(),
+}))
+
+vi.mock('../../components/clinicalHistory/ClinicalHistorySection', () => ({
+  ClinicalHistorySection: ({ patientId, mode }: { patientId: string; mode: string }) => <p>Histórico clínico {mode} {patientId}</p>,
 }))
 
 vi.mock('../../components/PatientIdentifiersCard', () => ({
@@ -54,6 +58,7 @@ vi.mock('../../hooks/useClinicalData', () => ({
   useCreateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useDeactivateMedication: () => ({ mutate: vi.fn(), isPending: false }),
+  useMedicationAction: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('../../hooks/useDocuments', () => ({
@@ -127,6 +132,17 @@ describe('PatientDetailPage consent workflow', () => {
     expect(screen.getByLabelText('Código postal')).toHaveValue('1000-001')
     // Identifiers are edited in their own card, never in this form.
     expect(screen.queryByLabelText('Número de utente')).not.toBeInTheDocument()
+  })
+
+  it('gives doctors and nurses a "Histórico" tab with the staff view of the clinical history', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Histórico' }))
+    const panel = screen.getByRole('tabpanel')
+    expect(panel).toHaveTextContent('Histórico clínico staff patient-1')
+    // The medication, declared or prescribed, is managed in its own tab.
+    await user.click(within(panel).getByRole('button', { name: 'Medicamentos' }))
+    expect(screen.getByRole('tab', { name: 'Medicamentos', selected: true })).toBeInTheDocument()
   })
 })
 

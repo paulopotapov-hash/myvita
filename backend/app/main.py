@@ -39,6 +39,7 @@ from app.models import AuditAction, AuditResult
 from app.modules.appointment_requests.router import router as appointment_requests_router
 from app.modules.appointments.router import router as appointments_router
 from app.modules.auth.router import router as auth_router
+from app.modules.clinical_history.router import router as clinical_history_router
 from app.modules.clinical_results.router import router as clinical_results_router
 from app.modules.clinics.router import router as clinics_router
 from app.modules.consents.router import router as consents_router
@@ -314,6 +315,7 @@ app.include_router(appointment_requests_router, prefix="/api/v1/appointment-requ
 app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
+app.include_router(clinical_history_router, prefix="/api/v1", tags=["clinical-history"])
 app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
 app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])

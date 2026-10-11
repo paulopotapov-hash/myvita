@@ -18,6 +18,17 @@ const h = vi.hoisted(() => ({
   appointments: [] as unknown[],
   medications: [] as unknown[],
   results: [] as unknown[],
+  history: [] as unknown[],
+  historyMutate: vi.fn(),
+  medicationCreate: vi.fn(),
+}))
+
+vi.mock('../../hooks/useClinicalHistory', () => ({
+  useClinicalHistory: (patientId: string) => {
+    h.requested.push(`history:${patientId}`)
+    return { data: h.history, isLoading: false, isError: false, refetch: vi.fn() }
+  },
+  useClinicalHistoryAction: () => ({ mutate: h.historyMutate, isPending: false }),
 }))
 
 vi.mock('../../hooks/useSession', () => ({
@@ -33,9 +44,10 @@ vi.mock('../../hooks/useClinicalData', () => ({
     h.requested.push(`medications:${patientId}`)
     return { data: { items: h.medications, total: h.medications.length }, isLoading: false, isError: false, refetch: vi.fn() }
   },
-  useCreateMedication: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateMedication: () => ({ mutate: h.medicationCreate, isPending: false }),
   useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useDeactivateMedication: () => ({ mutate: vi.fn(), isPending: false }),
+  useMedicationAction: () => ({ mutate: vi.fn(), isPending: false }),
   useMedicalRecords: (patientId: string) => {
     h.requested.push(`records:${patientId}`)
     return { data: [], isLoading: false, isError: false, refetch: vi.fn() }
@@ -81,8 +93,9 @@ function renderAt(element: React.ReactElement, path = '/patient') {
   return render(<MemoryRouter initialEntries={[path]}>{element}</MemoryRouter>)
 }
 
-const medication = (id: string, name: string, status: 'active' | 'completed') => ({
+const medication = (id: string, name: string, status: 'active' | 'completed', canEdit = false) => ({
   view: 'patient', id, name, dosage: '500 mg', route: null, frequency: '8/8h', instructions: null, status,
+  origin: canEdit ? 'patient_declared' : 'professional', confirmed: !canEdit, can_edit: canEdit,
   start_date: '2026-09-01', end_date: status === 'active' ? null : '2026-09-10', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z',
 })
 
@@ -94,6 +107,9 @@ beforeEach(() => {
   h.appointments = []
   h.medications = []
   h.results = []
+  h.history = []
+  h.historyMutate.mockReset()
+  h.medicationCreate.mockReset()
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
@@ -136,18 +152,33 @@ describe('Os meus documentos', () => {
 })
 
 describe('A minha medicação', () => {
-  it('is read-only for the patient', () => {
-    h.medications = [medication('m1', 'Paracetamol', 'active')]
+  it("lets the patient declare medication, change only their unconfirmed declarations and never a professional's", async () => {
+    h.medications = [medication('m1', 'Paracetamol', 'active'), medication('m2', 'Ibuprofeno', 'active', true)]
+    const user = userEvent.setup()
     renderAt(<PatientMedicationPage />, '/patient/medicacao')
     expect(screen.getByRole('heading', { level: 1, name: 'A minha medicação' })).toBeInTheDocument()
-    expect(screen.getByText(/Paracetamol/)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Medicamento')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument()
+
+    const prescribed = screen.getByText(/Paracetamol/).closest('li') as HTMLElement
+    expect(prescribed).toHaveTextContent('Confirmado pelo profissional')
+    expect(within(prescribed).queryByRole('button')).not.toBeInTheDocument()
+    const declared = screen.getByText(/Ibuprofeno/).closest('li') as HTMLElement
+    expect(declared).toHaveTextContent('Declarado pelo paciente')
+    expect(within(declared).getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+    expect(within(declared).getByRole('button', { name: 'Apagar' })).toBeInTheDocument()
+
+    // The dose is optional in a declaration; professional-only controls never appear.
+    await user.type(screen.getByLabelText('Medicamento'), 'Vitamina D')
+    await user.type(screen.getByLabelText('Data de início'), '2026-01-01')
+    await user.click(screen.getByRole('button', { name: 'Declarar medicação' }))
+    expect(h.medicationCreate).toHaveBeenCalledWith({ name: 'Vitamina D', start_date: '2026-01-01' }, expect.any(Object))
+    for (const name of ['Confirmar', 'Concluir', 'Descontinuar', 'Ocultar ao paciente']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
   })
 })
 
 describe('Resumo de saúde', () => {
-  it('summarises current medication, the next appointment and the latest results, then the shared records', () => {
+  it('summarises medication, allergies, the next appointment and results, then the history by category and the shared records', () => {
     h.medications = [medication('m1', 'Paracetamol', 'active'), medication('m2', 'Amoxicilina', 'completed')]
     h.appointments = [
       { view: 'patient', id: 'a-past', staff_name: 'Dra. Rita Sousa', scheduled_at: '2020-01-01T10:00:00Z', duration_minutes: 30, status: 'scheduled', reason: null },
@@ -158,6 +189,10 @@ describe('Resumo de saúde', () => {
       result_date: '2026-09-20', document_id: null, author_name: 'Dra. Rita Sousa', released_at: '2026-09-21T10:00:00Z',
       corrects_result_id: null, superseded_by_result_id: null,
     }]
+    h.history = [
+      { view: 'patient', id: 'a1', category: 'allergy', name: 'Penicilina', severity: 'severe', confirmed: true, can_edit: false, version: 1 },
+      { view: 'patient', id: 'c1', category: 'condition', name: 'Asma', condition_status: 'active', onset: '2010-03', confirmed: false, can_edit: true, version: 1 },
+    ]
     renderAt(<HealthSummaryPage />, '/patient/saude')
 
     expect(screen.getByRole('heading', { level: 1, name: 'Resumo de saúde' })).toBeInTheDocument()
@@ -170,6 +205,25 @@ describe('Resumo de saúde', () => {
 
     const resultsCard = screen.getByRole('region', { name: 'Últimos resultados' })
     expect(within(resultsCard).getByRole('link', { name: 'Hemograma' })).toHaveAttribute('href', '/patient/resultados?result=r1')
+
+    const allergyCard = screen.getByRole('region', { name: 'Alergias conhecidas' })
+    expect(allergyCard).toHaveTextContent('Penicilina · Grave')
+
+    // Below: every category, in order, with the medication between procedures and allergies.
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
+    expect(headings.slice(headings.indexOf('Doenças e problemas de saúde'))).toEqual([
+      'Doenças e problemas de saúde', 'Cirurgias e procedimentos', 'Medicação', 'Alergias', 'Vacinas', 'Outras notas', 'Registos clínicos',
+    ])
+    const conditions = screen.getByRole('region', { name: 'Doenças e problemas de saúde' })
+    expect(conditions).toHaveTextContent('Asma')
+    expect(conditions).toHaveTextContent('Início março 2010')
+    expect(conditions).toHaveTextContent('Declarado pelo paciente')
+    expect(within(conditions).getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+    const allergies = screen.getByRole('region', { name: 'Alergias' })
+    expect(within(allergies).getByText('Confirmado pelo profissional')).toBeInTheDocument()
+    expect(within(allergies).queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ocultar ao paciente' })).not.toBeInTheDocument()
 
     expect(screen.getByRole('heading', { name: 'Registos clínicos' })).toBeInTheDocument()
     expect(h.requested).toContain('records:patient-1')

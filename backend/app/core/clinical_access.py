@@ -39,6 +39,11 @@ class ClinicalAction(str, enum.Enum):
     # Personal identifiers (NIF, NISS, Nº de utente): masked view and audited reveal / change.
     VIEW_PATIENT_IDENTIFIERS = "patient.identifiers.view"
     MANAGE_PATIENT_IDENTIFIERS = "patient.identifiers.manage"
+    # Clinical history (commit 3). Declaring is the patient's own action; the care team
+    # creates, edits, confirms, hides and deletes. Applies to declared medication too.
+    VIEW_CLINICAL_HISTORY = "clinical_history.view"
+    EDIT_CLINICAL_HISTORY = "clinical_history.edit"
+    DECLARE_CLINICAL_HISTORY = "clinical_history.declare"
 
 
 # Explicit policy, not a role hierarchy. Doctor and nurse permissions reflect
@@ -65,6 +70,8 @@ _CURRENT_CLINICIAN_ACTIONS = frozenset(
         ClinicalAction.EDIT_RESULTS,
         ClinicalAction.VIEW_PATIENT_IDENTIFIERS,
         ClinicalAction.MANAGE_PATIENT_IDENTIFIERS,
+        ClinicalAction.VIEW_CLINICAL_HISTORY,
+        ClinicalAction.EDIT_CLINICAL_HISTORY,
     }
 )
 
@@ -114,6 +121,10 @@ PATIENT_OWN_ACTIONS = frozenset(
         ClinicalAction.VIEW_RESULTS,
         # Own identifiers, masked, and the audited reveal. Changing them is staff-only.
         ClinicalAction.VIEW_PATIENT_IDENTIFIERS,
+        # Own clinical history: entries not hidden by the care team (enforced by the service),
+        # and declarations of their own, editable only until a professional confirms them.
+        ClinicalAction.VIEW_CLINICAL_HISTORY,
+        ClinicalAction.DECLARE_CLINICAL_HISTORY,
     }
 )
 

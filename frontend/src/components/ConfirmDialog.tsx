@@ -14,8 +14,13 @@ interface Props {
 export function ConfirmDialog({ title, description, confirmLabel, isPending = false, onConfirm, onCancel, children }: Props) {
   const cancelRef = useRef<HTMLButtonElement>(null)
 
+  // Focus the safe choice once, when the dialog opens. (Re-focusing on every render
+  // would pull focus out of any field inside the dialog while the user types.)
   useEffect(() => {
     cancelRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape' && !isPending) onCancel()
     }

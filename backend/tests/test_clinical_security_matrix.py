@@ -217,6 +217,8 @@ def test_patient_cannot_perform_clinical_or_scheduling_writes(client: TestClient
             continue
         if label.startswith("consent") or label.startswith("notification"):
             continue  # patient-owned actions, covered by the consent / inbox workflows
+        if label == "medication create":
+            continue  # the patient's own declaration (commit 3), covered by test_clinical_history.py
         response = _send(client, method, url, body, headers)
         expected = {403} if label.startswith("appointment") else DENIED
         assert response.status_code in expected, f"{label} -> {response.status_code}"

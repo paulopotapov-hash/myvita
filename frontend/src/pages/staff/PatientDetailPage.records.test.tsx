@@ -50,6 +50,7 @@ vi.mock('../../hooks/useClinicalData', () => ({
   useCreateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateMedication: () => ({ mutate: vi.fn(), isPending: false }),
   useDeactivateMedication: () => ({ mutate: vi.fn(), isPending: false }),
+  useMedicationAction: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('../../hooks/useDocuments', () => ({

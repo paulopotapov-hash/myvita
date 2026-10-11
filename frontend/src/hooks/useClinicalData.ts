@@ -55,6 +55,24 @@ export function useUpdateMedication(patientId: string) {
   const client = useQueryClient()
   return useMutation({ mutationFn: ({ id, payload }: { id: string; payload: MedicationUpdateRequest }) => medicationsService.update(id, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medications'] }) })
 }
+/** Confirm, hide, show and delete a medication (one hook; the kind of action is in the variables). */
+export type MedicationAction =
+  | { kind: 'confirm'; id: string; dosage?: string }
+  | { kind: 'hide'; id: string; reason: string }
+  | { kind: 'show'; id: string }
+  | { kind: 'remove'; id: string; reason?: string }
+export function useMedicationAction(patientId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (action: MedicationAction) => {
+      if (action.kind === 'confirm') return medicationsService.confirm(action.id, action.dosage)
+      if (action.kind === 'hide') return medicationsService.hide(action.id, action.reason)
+      if (action.kind === 'show') return medicationsService.show(action.id)
+      return medicationsService.remove(action.id, action.reason)
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medications'] }),
+  })
+}
 export function useNotifications(page: number, pageSize: number, enabled = true) {
   return useQuery({ queryKey: ['notifications', page, pageSize], queryFn: ({ signal }) => notificationsService.list(page, pageSize, signal), enabled })
 }

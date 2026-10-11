@@ -14,7 +14,7 @@ export const EMPTY_MEDICATION_FORM: MedicationFormValues = {
 export function medicationToForm(medication: MedicationFields): MedicationFormValues {
   return {
     name: medication.name,
-    dosage: medication.dosage,
+    dosage: medication.dosage ?? '',
     route: medication.route ?? '',
     frequency: medication.frequency ?? '',
     instructions: medication.instructions ?? '',
@@ -27,8 +27,9 @@ export function medicationToForm(medication: MedicationFields): MedicationFormVa
 export function toCreatePayload(values: MedicationFormValues): MedicationCreateRequest {
   return {
     name: values.name,
-    dosage: values.dosage,
     start_date: values.start_date,
+    // A patient's declaration may leave the dose empty; the backend requires it from professionals.
+    ...(values.dosage ? { dosage: values.dosage } : {}),
     ...(values.route ? { route: values.route } : {}),
     ...(values.frequency ? { frequency: values.frequency } : {}),
     ...(values.instructions ? { instructions: values.instructions } : {}),
@@ -41,7 +42,7 @@ export function toUpdatePayload(values: MedicationFormValues, original: Medicati
   const before = medicationToForm(original)
   const payload: MedicationUpdateRequest = {}
   if (values.name !== before.name) payload.name = values.name
-  if (values.dosage !== before.dosage) payload.dosage = values.dosage
+  if (values.dosage !== before.dosage && values.dosage) payload.dosage = values.dosage
   if (values.start_date !== before.start_date) payload.start_date = values.start_date
   if (values.route !== before.route) payload.route = values.route || null
   if (values.frequency !== before.frequency) payload.frequency = values.frequency || null

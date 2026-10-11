@@ -148,6 +148,26 @@ _NEW_TABLE_GRANTS = {
     ),
     # P2.5: the edit and sharing history of a record is append-only.
     "medical_record_revisions": ((True, True, False, False, False, False, False), set()),
+    # Commit 3: clinical history revisions are append-only; entries and medication are
+    # soft-deleted (no DELETE) and only their mutable columns can be updated.
+    "clinical_history_revisions": ((True, True, False, False, False, False, False), set()),
+    "clinical_history_entries": (
+        (True, True, False, False, False, False, False),
+        {
+            "name", "condition_status", "onset_date", "onset_precision", "resolved_date", "resolved_precision",
+            "occurred_on", "occurred_precision", "location", "reaction", "severity", "note_text",
+            "confirmed_by_staff_id", "confirmed_at", "hidden_by_staff_id", "hidden_at", "hidden_reason",
+            "version", "updated_at", "deleted_at", "deleted_by_user_id", "deletion_reason",
+        },
+    ),
+    "medications": (
+        (True, True, False, False, False, False, False),
+        {
+            "name", "dosage", "route", "frequency", "instructions", "status", "start_date", "end_date",
+            "confirmed_by_staff_id", "confirmed_at", "hidden_by_staff_id", "hidden_at", "hidden_reason",
+            "updated_at", "deleted_at", "deleted_by_user_id", "deletion_reason",
+        },
+    ),
     "medical_records": (
         (True, True, False, False, False, False, False),
         {
@@ -252,6 +272,22 @@ def test_runtime_role_can_run_the_clinical_workflow_updates_and_nothing_more(run
         _expect_denied(runtime, f"UPDATE medical_records SET {column} = {column} WHERE false")
     _expect_denied(runtime, "UPDATE medical_record_revisions SET content = content WHERE false")
     _expect_denied(runtime, "DELETE FROM medical_record_revisions")
+    # Commit 3 (D8): history entries and medication are never deleted nor moved to another
+    # patient, clinic, origin or author; revisions are never rewritten.
+    connection_free_checks = (
+        "DELETE FROM clinical_history_entries",
+        "DELETE FROM medications",
+        "UPDATE clinical_history_entries SET patient_id = patient_id WHERE false",
+        "UPDATE clinical_history_entries SET origin = origin WHERE false",
+        "UPDATE clinical_history_entries SET created_by_user_id = created_by_user_id WHERE false",
+        "UPDATE medications SET patient_id = patient_id WHERE false",
+        "UPDATE medications SET origin = origin WHERE false",
+        "UPDATE medications SET prescribed_by_staff_id = prescribed_by_staff_id WHERE false",
+        "UPDATE clinical_history_revisions SET snapshot = snapshot WHERE false",
+        "DELETE FROM clinical_history_revisions",
+    )
+    for statement in connection_free_checks:
+        _expect_denied(runtime, statement)
     # Only the owner can switch off the released-result guard (migration 8d9e0f1a2b3c).
     _expect_denied(runtime, "ALTER TABLE clinical_results DISABLE TRIGGER clinical_results_released_immutable")
 

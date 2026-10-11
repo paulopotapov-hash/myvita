@@ -18,6 +18,7 @@ import { formatDate, formatDateTime } from '../../lib/formatDate'
 import { addressSchema, zodErrorsToRecord } from '../../lib/validation'
 import type { PatientPublic } from '../../types/api'
 import { ConsentSection } from '../../components/ConsentSection'
+import { ClinicalHistorySection } from '../../components/clinicalHistory/ClinicalHistorySection'
 import { MedicalRecordsSection } from '../../components/MedicalRecordsSection'
 import { MedicationsSection } from './MedicationsSection'
 
@@ -75,7 +76,7 @@ function PatientUpdateForm({ patient }: { patient: PatientPublic }) {
   )
 }
 
-type PatientSection = 'personal' | 'appointments' | 'records' | 'results' | 'medications' | 'documents' | 'consents'
+type PatientSection = 'personal' | 'appointments' | 'records' | 'history' | 'results' | 'medications' | 'documents' | 'consents'
 
 /**
  * Staff patient page. Doctors and nurses get the tabbed clinical file; administrative
@@ -154,7 +155,7 @@ function ClinicalPatientFile() {
       <nav role="tablist" aria-label="Secções da ficha" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
         {([
           ['personal', 'Dados pessoais'], ['appointments', 'Consultas'],
-          ...(canReadClinical ? [['records', 'Registos clínicos'], ['results', 'Resultados'], ['medications', 'Medicamentos'], ['documents', 'Documentos']] : []),
+          ...(canReadClinical ? [['records', 'Registos clínicos'], ['history', 'Histórico'], ['results', 'Resultados'], ['medications', 'Medicamentos'], ['documents', 'Documentos']] : []),
           ['consents', 'Consentimentos'],
         ] as Array<[typeof activeSection, string]>).map(([key, label]) => (
           <button key={key} id={`patient-tab-${key}`} type="button" role="tab" aria-controls={`patient-panel-${key}`} aria-selected={activeSection === key} onClick={() => setActiveSection(key)} className={`rounded-md px-3 py-2 text-sm font-medium focus-visible:outline-2 ${activeSection === key ? 'bg-teal-50 text-teal-800' : 'text-slate-600 hover:bg-slate-100'}`}>
@@ -199,6 +200,16 @@ function ClinicalPatientFile() {
       </section>}
 
       {canReadClinical && activeSection === 'records' && <div id="patient-panel-records" role="tabpanel" aria-labelledby="patient-tab-records"><MedicalRecordsSection patientId={patient.id} canWrite={canWriteClinical} /></div>}
+      {canReadClinical && activeSection === 'history' && (
+        <div id="patient-panel-history" role="tabpanel" aria-labelledby="patient-tab-history" className="flex flex-col gap-4">
+          <p className="text-sm text-slate-600">
+            Histórico clínico do paciente. As declarações do paciente ficam por confirmar até as confirmares.{' '}
+            A medicação, incluindo a declarada, está no separador{' '}
+            <button type="button" className="font-medium text-teal-700 underline" onClick={() => setActiveSection('medications')}>Medicamentos</button>.
+          </p>
+          <ClinicalHistorySection patientId={patient.id} mode="staff" />
+        </div>
+      )}
       {canReadClinical && activeSection === 'results' && <div id="patient-panel-results" role="tabpanel" aria-labelledby="patient-tab-results"><ClinicalResultsSection patientId={patient.id} canManage={canWriteClinical} /></div>}
       {canReadClinical && activeSection === 'medications' && <div id="patient-panel-medications" role="tabpanel" aria-labelledby="patient-tab-medications"><MedicationsSection patientId={patient.id} canWrite={canWriteClinical} /></div>}
       {canReadClinical && activeSection === 'documents' && <div id="patient-panel-documents" role="tabpanel" aria-labelledby="patient-tab-documents"><DocumentsSection patientId={patient.id} canManage={canWriteClinical} patientName={patient.full_name} /></div>}

@@ -68,11 +68,16 @@ def test_patient_and_admin_are_read_only_for_medications(client):
     patient_headers = _use(client, tenant["patient"])
     assert client.get(f"/api/v1/patients/{tenant['patient_id']}/medications").status_code == 200
     assert client.get(f"/api/v1/medications/{medication_id}").status_code == 200
-    assert client.post(
+    # Since commit 3 the patient may declare medication: it is recorded as a declaration,
+    # never as a prescription, and stays unconfirmed until a professional confirms it.
+    declared = client.post(
         f"/api/v1/patients/{tenant['patient_id']}/medications",
         headers=patient_headers,
         json=_payload(),
-    ).status_code in {403, 404}
+    )
+    assert declared.status_code == 201
+    assert (declared.json()["origin"], declared.json()["confirmed"]) == ("patient_declared", False)
+    # A professional's prescription stays read-only for the patient.
     assert client.patch(
         f"/api/v1/medications/{medication_id}",
         headers=patient_headers,

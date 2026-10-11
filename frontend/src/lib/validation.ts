@@ -118,21 +118,28 @@ export const medicalRecordSchema = z.object({
 
 const optionalText = (max: number, message: string) => z.string().trim().max(max, message)
 
-/** Mirrors backend/app/modules/medications/schemas.py limits and the end >= start constraint. */
-export const medicationFormSchema = z
-  .object({
-    name: z.string().trim().min(1, 'Indica o nome do medicamento.').max(200, 'O nome pode ter no máximo 200 caracteres.'),
-    dosage: z.string().trim().min(1, 'Indica a dosagem.').max(200, 'A dosagem pode ter no máximo 200 caracteres.'),
-    route: optionalText(100, 'A via de administração pode ter no máximo 100 caracteres.'),
-    frequency: optionalText(100, 'A frequência pode ter no máximo 100 caracteres.'),
-    instructions: optionalText(2000, 'As instruções podem ter no máximo 2000 caracteres.'),
-    start_date: z.string().min(1, 'Indica a data de início.'),
-    end_date: z.string(),
-  })
-  .refine((value) => !value.end_date || value.end_date >= value.start_date, {
-    path: ['end_date'],
-    message: 'A data de fim não pode ser anterior à data de início.',
-  })
+/** Mirrors backend/app/modules/medications/schemas.py limits and the end >= start constraint.
+ * The dose is required from professionals and optional in a patient's declaration. */
+function medicationSchema(dosageRequired: boolean) {
+  return z
+    .object({
+      name: z.string().trim().min(1, 'Indica o nome do medicamento.').max(200, 'O nome pode ter no máximo 200 caracteres.'),
+      dosage: dosageRequired
+        ? z.string().trim().min(1, 'Indica a dosagem.').max(200, 'A dosagem pode ter no máximo 200 caracteres.')
+        : z.string().trim().max(200, 'A dosagem pode ter no máximo 200 caracteres.'),
+      route: optionalText(100, 'A via de administração pode ter no máximo 100 caracteres.'),
+      frequency: optionalText(100, 'A frequência pode ter no máximo 100 caracteres.'),
+      instructions: optionalText(2000, 'As instruções podem ter no máximo 2000 caracteres.'),
+      start_date: z.string().min(1, 'Indica a data de início.'),
+      end_date: z.string(),
+    })
+    .refine((value) => !value.end_date || value.end_date >= value.start_date, {
+      path: ['end_date'],
+      message: 'A data de fim não pode ser anterior à data de início.',
+    })
+}
+export const medicationFormSchema = medicationSchema(true)
+export const declaredMedicationFormSchema = medicationSchema(false)
 export type MedicationFormValues = z.infer<typeof medicationFormSchema>
 
 export const patientUpdateSchema = z.object({

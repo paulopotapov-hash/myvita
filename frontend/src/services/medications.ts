@@ -14,8 +14,15 @@ export const medicationsService = {
   list: (patientId: string, signal?: AbortSignal) =>
     api.getPage<MedicationView>(`/api/v1/patients/${patientId}/medications?page_size=${MEDICATIONS_PAGE_SIZE}`, signal),
   detail: (medicationId: string, signal?: AbortSignal) => api.get<MedicationView>(`/api/v1/medications/${medicationId}`, signal),
-  create: (patientId: string, payload: MedicationCreateRequest) => api.post<MedicationPublic>(`/api/v1/patients/${patientId}/medications`, payload),
-  update: (medicationId: string, payload: MedicationUpdateRequest) => api.patch<MedicationPublic>(`/api/v1/medications/${medicationId}`, payload),
+  /** A professional's prescription, or the patient's own declaration (the backend decides by role). */
+  create: (patientId: string, payload: MedicationCreateRequest) => api.post<MedicationView>(`/api/v1/patients/${patientId}/medications`, payload),
+  update: (medicationId: string, payload: MedicationUpdateRequest) => api.patch<MedicationView>(`/api/v1/medications/${medicationId}`, payload),
   deactivate: (medicationId: string, payload?: MedicationDeactivateRequest) =>
     api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/deactivate`, payload),
+  confirm: (medicationId: string, dosage?: string) =>
+    api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/confirm`, dosage ? { dosage } : {}),
+  hide: (medicationId: string, reason: string) => api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/hide`, { reason }),
+  show: (medicationId: string) => api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/show`),
+  remove: (medicationId: string, reason?: string) =>
+    api.post<MedicationView>(`/api/v1/medications/${medicationId}/delete`, reason ? { reason } : {}),
 }

@@ -526,7 +526,8 @@ def _rows(world: World):
             "POST",
             f"/api/v1/patients/{pid}/medications",
             {"name": "M", "dosage": "1 mg", "start_date": "2031-01-01"},
-            (403, 201, 201, 403, 404, 404, 401),
+            # The patient's own request is a declaration since commit 3 (origin patient_declared).
+            (403, 201, 201, 403, 201, 404, 401),
         ),
         (
             "medication detail",
@@ -540,7 +541,8 @@ def _rows(world: World):
             "PATCH",
             f"/api/v1/medications/{res['medication']}",
             {"instructions": "after food"},
-            (403, 200, 200, 403, 404, 404, 401),
+            # The patient sees a professional's prescription but may not change it (403).
+            (403, 200, 200, 403, 403, 404, 401),
         ),
         (
             "medication deactivate",

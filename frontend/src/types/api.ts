@@ -365,13 +365,16 @@ export interface ClinicalResultUpdateRequest {
 export interface MedicationFields {
   id: string
   name: string
-  dosage: string
+  /** Optional only in a patient's declaration (the professional may complete it on confirmation). */
+  dosage: string | null
   route: string | null
   frequency: string | null
   instructions: string | null
   status: MedicationStatus
   start_date: string
   end_date: string | null
+  origin: HistoryOrigin
+  confirmed: boolean
   created_at: string
   updated_at: string
 }
@@ -381,12 +384,20 @@ export interface MedicationPublic extends MedicationFields {
   view: 'staff'
   clinic_id: string
   patient_id: string
-  prescribed_by_staff_id: string
+  prescribed_by_staff_id: string | null
+  confirmed_at: string | null
+  confirmed_by_staff_id: string | null
+  /** Hidden from the patient by the care team, with a reason. */
+  hidden: boolean
+  hidden_at: string | null
+  hidden_reason: string | null
 }
 
-/** Patient view: no internal clinic or staff identifiers. */
+/** Patient view: no internal clinic or staff identifiers, nothing about hiding. */
 export interface MedicationPatientView extends MedicationFields {
   view: 'patient'
+  /** The patient's own declaration, not yet confirmed. */
+  can_edit: boolean
 }
 
 export type MedicationView = MedicationPublic | MedicationPatientView
@@ -531,7 +542,8 @@ export interface MedicalRecordCreateRequest { title: string; content: string; sh
 export interface MedicalRecordUpdateRequest { title: string; content: string; expected_version: number }
 export interface MedicationCreateRequest {
   name: string
-  dosage: string
+  /** Required for a professional's prescription; optional in a patient's declaration. */
+  dosage?: string
   route?: string
   frequency?: string
   instructions?: string
@@ -552,6 +564,60 @@ export interface MedicationUpdateRequest {
 export interface MedicationDeactivateRequest {
   end_date?: string
 }
+
+// --- Clinical history (backend/app/modules/clinical_history/schemas.py) ---
+
+export type HistoryCategory = 'condition' | 'procedure' | 'allergy' | 'immunization' | 'note'
+/** Who created the entry; with `confirmed` it gives "Confirmado pelo profissional" / "Declarado pelo paciente". */
+export type HistoryOrigin = 'professional' | 'patient_declared'
+export type ConditionStatus = 'active' | 'resolved'
+export type AllergySeverity = 'mild' | 'moderate' | 'severe' | 'unknown'
+
+/** Content fields. Dates are partial: "2010", "2010-03" or "2010-03-12". */
+export interface ClinicalHistoryFields {
+  name: string | null
+  condition_status: ConditionStatus | null
+  onset: string | null
+  resolved: string | null
+  occurred: string | null
+  location: string | null
+  reaction: string | null
+  severity: AllergySeverity | null
+  note_text: string | null
+}
+
+interface ClinicalHistoryCommon extends ClinicalHistoryFields {
+  id: string
+  category: HistoryCategory
+  origin: HistoryOrigin
+  confirmed: boolean
+  confirmed_at: string | null
+  confirmed_by_name: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ClinicalHistoryStaffView extends ClinicalHistoryCommon {
+  view: 'staff'
+  created_by_name: string
+  hidden: boolean
+  hidden_at: string | null
+  hidden_reason: string | null
+  hidden_by_name: string | null
+}
+
+/** Patient view: hidden entries are never sent, and nothing about hiding is. */
+export interface ClinicalHistoryPatientView extends ClinicalHistoryCommon {
+  view: 'patient'
+  /** The patient's own declaration, not yet confirmed. */
+  can_edit: boolean
+}
+
+export type ClinicalHistoryEntry = ClinicalHistoryStaffView | ClinicalHistoryPatientView
+
+export type ClinicalHistoryCreateRequest = { category: HistoryCategory } & Partial<ClinicalHistoryFields>
+export type ClinicalHistoryUpdateRequest = Partial<ClinicalHistoryFields> & { expected_version: number }
 
 // --- Messages (backend/app/modules/messages/schemas.py) ---
 

@@ -94,6 +94,7 @@ ALLOWED_METADATA_KEYS: frozenset[str] = frozenset(
         "visibility",  # medical record visibility code: internal / shared / legacy_shared (P2.5)
         "corrects_result_id",  # UUID of the released clinical result a correction replaces (P2.4)
         "fields",  # names of the patient fields that changed (e.g. ["nif"]), never their values
+        "category",  # clinical history category code (condition, allergy, ...), never the entry's content
     }
 )
 # Defence in depth on top of the allowlist: a key that merely *mentions* one of

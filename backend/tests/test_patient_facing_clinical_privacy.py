@@ -22,6 +22,9 @@ PATIENT_MEDICATION_KEYS = {
     "status",
     "start_date",
     "end_date",
+    "origin",
+    "confirmed",
+    "can_edit",
     "created_at",
     "updated_at",
 }
