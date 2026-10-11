@@ -19,3 +19,16 @@ Recovery codes must be random, one-time, hashed at rest, rate-limited and revoca
 
 Required external inputs: verified email/identity provider, sender/domain configuration, secret storage, delivery monitoring, identity-verification/support policy, abuse thresholds, privacy-approved retention and named owner. Until then, recovery is a controlled support escalation; operators must not set or transmit plaintext passwords.
 
+
+## MFA dev/demo bypass (development and staging only)
+
+`MFA_DEV_BYPASS_EMAILS` lists test accounts (comma-separated) that may pass the second factor with `MFA_DEV_BYPASS_CODE` instead of a TOTP code, so demo accounts need no authenticator app. Rules, each covered by `backend/tests/test_mfa_dev_bypass.py`:
+
+- **Off by default.** The list is empty unless the environment variable sets it.
+- **Never in production.** With `ENVIRONMENT=production` and a non-empty list, the settings refuse to load and the app does not start. The service also ignores the list in production.
+- **Allowed in staging** when the variable is set, by decision.
+- **Only listed accounts, only with the configured code.** Wrong codes count as failures and are audited; a login through the bypass is audited with `method=dev_bypass`. Step-up actions (regenerating recovery codes, disabling MFA) never accept it.
+- **Lockout still applies.** An account locked after repeated failures cannot enter, not even with the bypass code.
+- **Startup warning.** While the bypass is on, the app logs a WARNING (`myvita.security`) with the environment and the number of listed accounts, never the code or the emails.
+
+**Before any online deployment** (staging included, or any host reachable from the internet), either clear `MFA_DEV_BYPASS_EMAILS` or replace `MFA_DEV_BYPASS_CODE`: its default, `123456`, is public. Check the startup log for the warning above to confirm which state is running.

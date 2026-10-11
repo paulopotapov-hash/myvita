@@ -58,6 +58,8 @@ from app.modules.users.router import router as users_router
 # machine-readable shape.
 configure_logging(debug=settings.DEBUG, json_output=settings.ENVIRONMENT != "development")
 logger = logging.getLogger("myvita.request")
+# Production refuses to load with the bypass on (app/core/config.py); anywhere else, say so loudly.
+settings.warn_if_mfa_dev_bypass_active(logging.getLogger("myvita.security"))
 
 app = FastAPI(
     title=settings.APP_NAME,

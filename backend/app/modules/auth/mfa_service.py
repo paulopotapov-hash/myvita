@@ -100,9 +100,9 @@ def enable(db: Session, user: User, code: str) -> list[str]:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Inicie primeiro a configuração.")
     if row.enabled_at is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A autenticação de dois fatores já está ativa.")
+    # A locked second factor stays locked, also for the dev/demo bypass.
+    _ensure_not_locked(row)
     bypass = _dev_bypass_applies(user, code)
-    if not bypass:
-        _ensure_not_locked(row)
     step = row.last_used_step if bypass else _check_totp(row, user, code)
     if step is None and not bypass:
         _register_failure(db, row)
@@ -124,12 +124,13 @@ def verify(db: Session, user: User, code: str, *, allow_recovery_code: bool = Tr
     row = _mfa_row(db, user, lock=True)
     if row is None or row.enabled_at is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Autenticação de dois fatores não configurada.")
+    # Checked first: a locked second factor stays locked, also for the dev/demo bypass.
+    _ensure_not_locked(row)
     if allow_recovery_code and _dev_bypass_applies(user, code):
         row.failed_attempts = 0
         row.locked_until = None
         db.commit()
         return VerificationResult(method="dev_bypass")
-    _ensure_not_locked(row)
 
     if allow_recovery_code and mfa.looks_like_recovery_code(code):
         recovery = (

@@ -9,6 +9,7 @@ Proves the three rules the bypass must follow:
 Synthetic accounts and codes only.
 """
 
+import logging
 import os
 import subprocess
 import sys
@@ -17,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from app.core import mfa
 from app.core.config import Settings, settings
 from app.modules.auth import mfa_service
 from tests.account_support import audit_rows, create_staff, enrol_mfa, login, onboard_clinic, post
@@ -136,3 +138,82 @@ def test_bypass_code_is_not_accepted_for_sensitive_step_up_actions(client, totp_
     _enrolled(client, totp_clock, LISTED)
     response = post(client, "/api/v1/auth/mfa/recovery-codes", {"code": BYPASS_CODE})
     assert response.status_code == 401
+
+
+# --- lockout and startup warning ---------------------------------------------------------------
+
+
+def test_a_locked_account_cannot_enter_even_with_the_bypass_code(client, totp_clock, monkeypatch):
+    monkeypatch.setattr(settings, "MFA_DEV_BYPASS_EMAILS", LISTED)
+    monkeypatch.setattr(settings, "MFA_DEV_BYPASS_CODE", BYPASS_CODE)
+    onboard_clinic(client)
+    _enrolled(client, totp_clock, LISTED)
+
+    login(client, LISTED)
+    for _ in range(mfa.MAX_FAILED_ATTEMPTS):
+        assert client.post("/api/v1/auth/mfa/verify", json={"code": "135791"}).status_code == 401
+    locked = client.post("/api/v1/auth/mfa/verify", json={"code": BYPASS_CODE})
+    assert locked.status_code == 429
+    assert "myvita_session" not in locked.cookies
+    assert client.get("/api/v1/auth/me").status_code == 401
+    assert not [row for row in audit_rows(client, "login_success") if row.event_metadata.get("method") == "dev_bypass"]
+
+
+def test_a_locked_enrolment_cannot_be_completed_with_the_bypass_code(client, totp_clock, monkeypatch):
+    monkeypatch.setattr(settings, "MFA_DEV_BYPASS_EMAILS", LISTED)
+    monkeypatch.setattr(settings, "MFA_DEV_BYPASS_CODE", BYPASS_CODE)
+    onboard_clinic(client)
+    login(client, "admin@clinica.pt")
+    create_staff(client, LISTED)
+    login(client, LISTED)
+    assert post(client, "/api/v1/auth/mfa/setup").status_code == 200
+    for _ in range(mfa.MAX_FAILED_ATTEMPTS):
+        assert post(client, "/api/v1/auth/mfa/enable", {"code": "135791"}).status_code == 401
+    assert post(client, "/api/v1/auth/mfa/enable", {"code": BYPASS_CODE}).status_code == 429
+
+
+def test_startup_warning_names_environment_and_count_never_code_or_emails(caplog):
+    active = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        JWT_SECRET_KEY="development-key-material-0123456789!",
+        MFA_DEV_BYPASS_EMAILS=f"{LISTED},{UNLISTED}",
+        MFA_DEV_BYPASS_CODE=BYPASS_CODE,
+    )
+    log = logging.getLogger("myvita.security.test")
+    with caplog.at_level(logging.WARNING, logger="myvita.security.test"):
+        assert active.warn_if_mfa_dev_bypass_active(log) is True
+    (record,) = caplog.records
+    assert record.levelno == logging.WARNING
+    message = record.getMessage()
+    assert "environment=development" in message and "listed_accounts=2" in message
+    for secret in (BYPASS_CODE, LISTED, UNLISTED):
+        assert secret not in message
+
+    caplog.clear()
+    inactive = Settings(_env_file=None, JWT_SECRET_KEY="development-key-material-0123456789!")  # type: ignore[call-arg]
+    with caplog.at_level(logging.WARNING, logger="myvita.security.test"):
+        assert inactive.warn_if_mfa_dev_bypass_active(log) is False
+    assert caplog.records == []
+
+
+def test_the_app_logs_the_warning_when_it_starts_with_the_bypass_on():
+    environment = {
+        **os.environ,
+        "ENVIRONMENT": "staging",
+        "MFA_DEV_BYPASS_EMAILS": f"{LISTED},{UNLISTED}",
+        "MFA_DEV_BYPASS_CODE": BYPASS_CODE,
+    }
+    started = subprocess.run(
+        [sys.executable, "-c", "import app.main"],
+        cwd=os.path.dirname(os.path.dirname(__file__)),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    output = started.stdout + started.stderr
+    assert started.returncode == 0, output
+    assert "MFA dev bypass is ACTIVE" in output
+    assert "environment=staging" in output and "listed_accounts=2" in output
+    for secret in (BYPASS_CODE, LISTED, UNLISTED):
+        assert secret not in output

@@ -7,6 +7,7 @@ Nothing sensitive is hardcoded here.
 
 import base64
 import binascii
+import logging
 from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlsplit
@@ -288,6 +289,19 @@ class Settings(BaseSettings):
                 "PRIVACY_FINGERPRINT_KEY must differ from JWT_SECRET_KEY and MFA_ENCRYPTION_KEY."
             )
         return self
+
+    def warn_if_mfa_dev_bypass_active(self, log: logging.Logger) -> bool:
+        """Log a WARNING at startup while the dev/demo MFA bypass is on (never the code or the emails)."""
+        listed = len(self.mfa_dev_bypass_emails)
+        if not listed:
+            return False
+        log.warning(
+            "MFA dev bypass is ACTIVE: environment=%s listed_accounts=%d. "
+            "Disable it or change MFA_DEV_BYPASS_CODE before any online deployment.",
+            self.ENVIRONMENT,
+            listed,
+        )
+        return True
 
     @property
     def mfa_dev_bypass_emails(self) -> frozenset[str]:
