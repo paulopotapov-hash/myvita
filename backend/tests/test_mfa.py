@@ -350,6 +350,8 @@ def _production(**overrides) -> Settings:
         "MFA_REQUIRED_FOR_STAFF": True,
         "MFA_ENCRYPTION_KEY": base64.urlsafe_b64encode(b"k" * 32).decode(),
         "PRIVACY_FINGERPRINT_KEY": "privacy-fingerprint-key-0123456789abcdef",
+        # Explicit, so a developer's local .env (which may enable the dev bypass) never leaks in.
+        "MFA_DEV_BYPASS_EMAILS": "",
     }
     values.update(overrides)
     return Settings(**values)

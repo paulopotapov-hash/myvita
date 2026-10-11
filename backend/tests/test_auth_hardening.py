@@ -223,6 +223,8 @@ def test_production_with_cookie_secure_is_accepted():
         MFA_REQUIRED_FOR_STAFF=True,
         MFA_ENCRYPTION_KEY=TEST_MFA_KEY,
         PRIVACY_FINGERPRINT_KEY=TEST_FINGERPRINT_KEY,
+        # Explicit, so a developer's local .env (which may enable the dev bypass) never leaks in.
+        MFA_DEV_BYPASS_EMAILS="",
     )
     assert settings.is_production
 
@@ -283,6 +285,7 @@ def test_production_disables_interactive_and_openapi_documentation():
         "MFA_REQUIRED_FOR_STAFF": "true",
         "MFA_ENCRYPTION_KEY": TEST_MFA_KEY,
         "PRIVACY_FINGERPRINT_KEY": TEST_FINGERPRINT_KEY,
+        "MFA_DEV_BYPASS_EMAILS": "",
     }
     result = subprocess.run(
         [
