@@ -100,6 +100,7 @@ export default function App() {
         <Route path="saude" element={<PatientDetailPage own />} />
         <Route path="documentos" element={<PatientDetailPage own section="documents" />} />
         <Route path="resultados" element={<PatientDetailPage own section="results" />} />
+        <Route path="medicacao" element={<PatientDetailPage own section="medications" />} />
         <Route path="registos" element={<PatientDetailPage own section="records" />} />
         <Route path="notificacoes" element={<NotificationsPage />} />
         <Route path="mensagens" element={<MessagesInboxPage />} />

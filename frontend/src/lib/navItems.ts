@@ -39,6 +39,7 @@ export function navigationFor(user: Pick<UserPublic, 'role' | 'staff_role'>): Na
         { to: '/patient/consultas', label: 'Consultas', icon: 'calendar' },
         { to: '/patient/mensagens', label: 'Mensagens', icon: 'chat', badge: 'messages' },
         { to: '/patient/resultados', label: 'Resultados', icon: 'results' },
+        { to: '/patient/medicacao', label: 'Medicação', icon: 'pill' },
         { to: '/patient/documentos', label: 'Documentos', icon: 'document' },
         { to: '/patient/saude', label: 'Dados clínicos', icon: 'clipboard' },
         { to: '/patient/consentimentos', label: 'Consentimentos', icon: 'check' },

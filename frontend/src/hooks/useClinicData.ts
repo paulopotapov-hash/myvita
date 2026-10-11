@@ -121,6 +121,16 @@ export function useAppointments() {
   })
 }
 
+/** One appointment, e.g. opened from a link (access re-checked by the backend). */
+export function useAppointment(appointmentId: string | null) {
+  return useQuery({
+    queryKey: ['appointments', 'detail', appointmentId],
+    queryFn: ({ signal }) => appointmentsService.detail(appointmentId ?? '', signal),
+    enabled: Boolean(appointmentId),
+    retry: false,
+  })
+}
+
 export function useAppointmentsPage(page: number, pageSize: number) {
   return useQuery({
     queryKey: ['appointments', 'page', page, pageSize],

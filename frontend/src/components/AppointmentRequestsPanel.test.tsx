@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppointmentRequestsPanel } from './AppointmentRequestsPanel'
+import { MemoryRouter } from 'react-router-dom'
 
 const session = vi.hoisted(() => ({ user: null as unknown }))
 vi.mock('../hooks/useSession', () => ({ useSession: () => ({ user: session.user }) }))
@@ -26,7 +27,7 @@ const request = {
   created_at: '2031-05-01T10:00:00Z',
 }
 
-function setup(handler: (method: string, path: string, body: unknown) => Response | undefined) {
+function setup(handler: (method: string, path: string, body: unknown) => Response | undefined, url = '/patient/consultas') {
   const calls: Call[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -38,13 +39,26 @@ function setup(handler: (method: string, path: string, body: unknown) => Respons
     return response
   }))
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={client}><AppointmentRequestsPanel /></QueryClientProvider>)
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[url]}><AppointmentRequestsPanel /></MemoryRouter></QueryClientProvider>)
   return calls
 }
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('AppointmentRequestsPanel — patient', () => {
+  it('focuses the request form when opened from "Marcar consulta" (#pedir-consulta)', async () => {
+    session.user = { id: 'u1', role: 'patient', staff_role: null }
+    setup(() => json([], 200, { 'X-Total-Count': '0' }), '/patient/consultas#pedir-consulta')
+    expect(screen.getByLabelText('Data e hora pretendidas')).toHaveFocus()
+  })
+
+  it('does not steal focus on a plain visit to the page', async () => {
+    session.user = { id: 'u1', role: 'patient', staff_role: null }
+    setup(() => json([], 200, { 'X-Total-Count': '0' }))
+    await screen.findByText('Ainda não fez pedidos de consulta.')
+    expect(screen.getByLabelText('Data e hora pretendidas')).not.toHaveFocus()
+  })
+
   it('submits only time and reason, then shows the pending request', async () => {
     session.user = { id: 'u1', role: 'patient', staff_role: null }
     let listed: unknown[] = []

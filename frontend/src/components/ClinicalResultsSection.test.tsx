@@ -18,6 +18,15 @@ const h = vi.hoisted(() => ({
   update: { mutate: vi.fn(), isPending: false },
   release: { mutate: vi.fn(), isPending: false },
   correct: { mutate: vi.fn(), isPending: false },
+  markResultOpened: vi.fn(),
+  markEnabled: [] as boolean[],
+}))
+
+vi.mock('../hooks/useResultNotifications', () => ({
+  useMarkResultOpened: (enabled: boolean) => {
+    h.markEnabled.push(enabled)
+    return h.markResultOpened
+  },
 }))
 
 vi.mock('../hooks/useClinicalResults', () => ({
@@ -96,6 +105,8 @@ describe('ClinicalResultsSection', () => {
     h.update = { mutate: vi.fn(), isPending: false }
     h.release = { mutate: vi.fn(), isPending: false }
     h.correct = { mutate: vi.fn(), isPending: false }
+    h.markResultOpened = vi.fn()
+    h.markEnabled = []
   })
 
   it('shows the loading state', () => {
@@ -333,6 +344,31 @@ describe('ClinicalResultsSection', () => {
       expect(within(correctedRow).getByRole('link', { name: 'Ver a versão corrigida' })).toHaveAttribute('href', '/patient/resultados?result=res-7')
       // What the patient was originally shown is still displayed.
       expect(within(correctedRow).getByText(/13\.5 g\/dL/)).toBeInTheDocument()
+    })
+  })
+
+  describe('results "por abrir"', () => {
+    it('marks a result as opened when the patient opens its detail', async () => {
+      const user = userEvent.setup()
+      renderSection(<ClinicalResultsSection patientId="patient-1" canManage={false} patientArea />)
+      expect(h.markResultOpened).not.toHaveBeenCalled()
+      await user.click(screen.getByRole('button', { name: 'Ver detalhe' }))
+      expect(h.markResultOpened).toHaveBeenCalledWith('res-1')
+    })
+
+    it('marks a deep-linked result only once it is actually shown', () => {
+      h.single = { data: undefined, isLoading: false, isError: true, error: new ApiError(404, 'x'), refetch: vi.fn() }
+      renderSection(<ClinicalResultsSection patientId="patient-1" canManage={false} patientArea />, '/patient/resultados?result=res-9')
+      expect(h.markResultOpened).not.toHaveBeenCalled()
+    })
+
+    it('never marks anything from the staff view', async () => {
+      const user = userEvent.setup()
+      h.list = page([draft])
+      renderSection(<ClinicalResultsSection patientId="patient-1" canManage />, '/app/pacientes/patient-1')
+      await user.click(screen.getByRole('button', { name: 'Ver detalhe' }))
+      expect(h.markEnabled.every((enabled) => enabled === false)).toBe(true)
+      expect(h.markResultOpened).not.toHaveBeenCalled()
     })
   })
 })

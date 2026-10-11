@@ -19,6 +19,8 @@ const PATHS = {
   user: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0',
   shield: 'M12 3l7 3v5.5c0 4.3-3 7.8-7 9-4-1.2-7-4.7-7-9V6l7-3z',
   logout: 'M15 4h3a1 1 0 011 1v14a1 1 0 01-1 1h-3M10 16l-4-4 4-4M6 12h10',
+  pill: 'M10.5 20.5a5 5 0 01-7-7l7-7a5 5 0 017 7l-7 7zM7 10l7 7',
+  calendarPlus: 'M7 3v3M17 3v3M4 8.5h16M5 5.5h14a1 1 0 011 1V19a1 1 0 01-1 1H5a1 1 0 01-1-1V6.5a1 1 0 011-1zM12 11.5v6M9 14.5h6',
 } as const
 
 export type IconName = keyof typeof PATHS

@@ -1,5 +1,6 @@
 import { AppointmentRequestsPanel } from '../../components/AppointmentRequestsPanel'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Button } from '../../components/Button'
@@ -9,7 +10,7 @@ import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { Modal } from '../../components/Modal'
 import { TextField } from '../../components/TextField'
 import { useFocusFirstInvalid } from '../../hooks/useFocusFirstInvalid'
-import { useAppointmentsPage, useCancelAppointment, useCreateAppointment, usePatientSearch, usePatients, useStaff, useUpdateAppointment } from '../../hooks/useClinicData'
+import { useAppointment, useAppointmentsPage, useCancelAppointment, useCreateAppointment, usePatientSearch, usePatients, useStaff, useUpdateAppointment } from '../../hooks/useClinicData'
 import { useSession } from '../../hooks/useSession'
 import { ApiError } from '../../lib/apiClient'
 import { toUserMessage } from '../../lib/errorMessages'
@@ -31,6 +32,18 @@ export function AppointmentsPage() {
   const staff = useStaff(user?.role !== 'patient')
   const patients = usePatients(canCreate)
   const [selected, setSelected] = useState<AppointmentView | null>(null)
+  // `?consulta=<id>` (e.g. "Ver detalhes" on the patient home) opens that appointment's detail once.
+  const [searchParams] = useSearchParams()
+  const linkedId = searchParams.get('consulta')
+  const linkedOnPage = linkedId ? appointmentRows?.find((appointment) => appointment.id === linkedId) : undefined
+  const linkedAppointment = useAppointment(linkedId && appointmentRows && !linkedOnPage ? linkedId : null)
+  const openedLink = useRef<string | null>(null)
+  useEffect(() => {
+    const target = linkedOnPage ?? linkedAppointment.data
+    if (!linkedId || !target || openedLink.current === linkedId) return
+    openedLink.current = linkedId
+    setSelected(target)
+  }, [linkedId, linkedOnPage, linkedAppointment.data])
   const [feedback, setFeedback] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentView['status']>('all')
 

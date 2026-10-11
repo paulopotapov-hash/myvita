@@ -255,7 +255,7 @@ function RecordItem({ record, canWrite, linked, selected, onEdit, onVisibility, 
 
 type PatientSection = 'personal' | 'appointments' | 'records' | 'results' | 'medications' | 'documents' | 'consents'
 
-export function PatientDetailPage({ own = false, section: initialSection = 'overview' }: { own?: boolean; section?: 'overview' | 'consents' | 'documents' | 'results' | 'records' }) {
+export function PatientDetailPage({ own = false, section: initialSection = 'overview' }: { own?: boolean; section?: 'overview' | 'consents' | 'documents' | 'results' | 'records' | 'medications' }) {
   const { id: routeId = '' } = useParams()
   const location = useLocation()
   const { user } = useSession()

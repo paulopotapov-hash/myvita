@@ -6,3 +6,8 @@ export function initialsOf(name: string): string {
   const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : ''
   return (first + last).toUpperCase()
 }
+
+/** "Ana Maria Silva" -> "Ana" (the greeting uses the first name only). */
+export function firstNameOf(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? ''
+}

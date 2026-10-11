@@ -17,6 +17,7 @@ import {
   useReleaseClinicalResult,
   useUpdateClinicalResult,
 } from '../hooks/useClinicalResults'
+import { useMarkResultOpened } from '../hooks/useResultNotifications'
 import { ApiError } from '../lib/apiClient'
 import { toUserMessage } from '../lib/errorMessages'
 import { formatDate, formatDateTime } from '../lib/formatDate'
@@ -104,6 +105,14 @@ export function ClinicalResultsSection({ patientId, canManage, patientArea = fal
   const [releasing, setReleasing] = useState<ClinicalResultStaffView | null>(null)
   const [actionMessage, setActionMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const release = useReleaseClinicalResult(patientId)
+  // Patient area: opening a result clears its "new result" notification (results "por abrir").
+  const markResultOpened = useMarkResultOpened(patientArea)
+  // Only a result actually shown counts as opened (never a stale or inaccessible deep link).
+  const openOnPage = openId && results.data?.items.some((item) => item.id === openId) ? openId : null
+  const openedResultId = openOnPage ?? (linkedId && linkedResult.data ? linkedId : null)
+  useEffect(() => {
+    if (patientArea && openedResultId) markResultOpened(openedResultId)
+  }, [patientArea, openedResultId, markResultOpened])
 
   useEffect(() => {
     if (!linkedOnPage || !linkedRow.current) return

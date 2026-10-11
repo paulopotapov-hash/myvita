@@ -85,7 +85,8 @@ test.describe('sessions', () => {
     const context = await browser.newContext({ storageState: state })
     const page = await context.newPage()
     await page.goto('/app')
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Paciente Revogado E2E')
+    // The patient home greets by first name only.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Olá, Paciente!')
 
     const logout = await api.post('/api/v1/auth/logout', { headers: { 'X-CSRF-Token': csrf } })
     expect(logout.status()).toBe(204)

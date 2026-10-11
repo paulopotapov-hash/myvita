@@ -55,8 +55,8 @@ export function useUpdateMedication(patientId: string) {
   const client = useQueryClient()
   return useMutation({ mutationFn: ({ id, payload }: { id: string; payload: MedicationUpdateRequest }) => medicationsService.update(id, payload), onSuccess: () => client.invalidateQueries({ queryKey: ['patients', patientId, 'medications'] }) })
 }
-export function useNotifications(page: number, pageSize: number) {
-  return useQuery({ queryKey: ['notifications', page, pageSize], queryFn: ({ signal }) => notificationsService.list(page, pageSize, signal) })
+export function useNotifications(page: number, pageSize: number, enabled = true) {
+  return useQuery({ queryKey: ['notifications', page, pageSize], queryFn: ({ signal }) => notificationsService.list(page, pageSize, signal), enabled })
 }
 export function useUnreadNotificationCount() {
   return useQuery({ queryKey: ['notifications', 'unread-count'], queryFn: ({ signal }) => notificationsService.unreadCount(signal) })

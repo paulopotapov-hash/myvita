@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useStaff } from '../hooks/useClinicData'
 import { useSession } from '../hooks/useSession'
 import { toUserMessage } from '../lib/errorMessages'
@@ -58,8 +59,18 @@ export function AppointmentRequestsPanel() {
   return user.role === 'patient' ? <PatientRequests /> : <StaffRequests />
 }
 
+/** Target of the patient home's "Marcar consulta": `/patient/consultas#pedir-consulta`. */
+export const REQUEST_FORM_ANCHOR = 'pedir-consulta'
+
 function PatientRequests() {
   const invalidate = useInvalidateRequests()
+  const location = useLocation()
+  const dateInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (location.hash !== `#${REQUEST_FORM_ANCHOR}`) return
+    dateInputRef.current?.scrollIntoView?.({ block: 'center' })
+    dateInputRef.current?.focus()
+  }, [location.hash])
   const [preferredStart, setPreferredStart] = useState('')
   const [reason, setReason] = useState('')
   const [formError, setFormError] = useState('')
@@ -91,7 +102,7 @@ function PatientRequests() {
   }
 
   return (
-    <section aria-labelledby="request-heading" className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+    <section id={REQUEST_FORM_ANCHOR} aria-labelledby="request-heading" className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
       <div>
         <h2 id="request-heading" className="text-lg font-semibold text-slate-900">Pedir consulta</h2>
         <p className="mt-1 text-sm text-slate-600">A clínica escolhe o profissional e confirma a hora. Será notificado da resposta.</p>
@@ -99,7 +110,7 @@ function PatientRequests() {
       <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-[auto_1fr_auto] sm:items-end">
         <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
           Data e hora pretendidas
-          <input type="datetime-local" value={preferredStart} onChange={(e) => setPreferredStart(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-600" />
+          <input ref={dateInputRef} type="datetime-local" value={preferredStart} onChange={(e) => setPreferredStart(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-600" />
         </label>
         <label className="flex min-w-0 flex-col gap-1 text-sm font-medium text-slate-700">
           Motivo (opcional)

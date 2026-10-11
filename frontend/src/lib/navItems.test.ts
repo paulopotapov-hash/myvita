@@ -9,7 +9,7 @@ describe('navigationFor', () => {
   it('gives the patient their own sections and account links', () => {
     const navigation = navigationFor({ role: 'patient', staff_role: null })
     expect(navigation.items.map((item) => item.label)).toEqual([
-      'Início', 'Consultas', 'Mensagens', 'Resultados', 'Documentos', 'Dados clínicos', 'Consentimentos', 'Notificações',
+      'Início', 'Consultas', 'Mensagens', 'Resultados', 'Medicação', 'Documentos', 'Dados clínicos', 'Consentimentos', 'Notificações',
     ])
     expect(navigation.items.every((item) => item.to.startsWith('/patient'))).toBe(true)
     expect(navigation.account).toEqual({ profile: '/patient/perfil', security: '/patient/seguranca' })

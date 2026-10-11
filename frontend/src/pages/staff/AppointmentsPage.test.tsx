@@ -5,10 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../lib/apiClient'
 import { AppointmentsPage } from './AppointmentsPage'
 
-const { appointmentState, cancelMutate, createMutate, updateMutate, patientSearchQuery, sessionState, staffQueryEnabled } = vi.hoisted(() => ({
+const { appointmentState, cancelMutate, createMutate, updateMutate, patientSearchQuery, sessionState, staffQueryEnabled, linkedDetail } = vi.hoisted(() => ({
   appointmentState: { rows: [] as Array<Record<string, unknown>> },
   sessionState: { patient: false },
   staffQueryEnabled: [] as Array<boolean | undefined>,
+  linkedDetail: { requested: [] as Array<string | null>, data: undefined as unknown },
   cancelMutate: vi.fn(),
   createMutate: vi.fn(),
   updateMutate: vi.fn(),
@@ -33,13 +34,17 @@ vi.mock('../../hooks/useClinicData', () => ({
     staffQueryEnabled.push(enabled)
     return { data: enabled === false ? undefined : [{ id: 'staff-1', full_name: 'Dr. Rui' }], isLoading: false, isError: false }
   },
+  useAppointment: (id: string | null) => {
+    linkedDetail.requested.push(id)
+    return { data: id ? linkedDetail.data : undefined, isLoading: false, isError: false }
+  },
   useCreateAppointment: () => ({ mutate: createMutate, isPending: false }),
   useUpdateAppointment: () => ({ mutate: updateMutate, isPending: false }),
   useCancelAppointment: () => ({ mutate: cancelMutate, isPending: false }),
 }))
 
-function renderPage() {
-  return render(<MemoryRouter><AppointmentsPage /></MemoryRouter>)
+function renderPage(url = '/') {
+  return render(<MemoryRouter initialEntries={[url]}><AppointmentsPage /></MemoryRouter>)
 }
 
 async function fillAndSubmit() {
@@ -217,6 +222,42 @@ describe('AppointmentsPage clinical workflow', () => {
       expect(staffQueryEnabled).toContain(false)
       await user.click(screen.getByRole('button', { name: 'Detalhes' }))
       expect(screen.getByRole('dialog')).toHaveTextContent('Dra. Rita Sousa')
+    })
+  })
+
+  describe('linked appointment (?consulta=)', () => {
+    beforeEach(() => {
+      sessionState.patient = true
+      linkedDetail.requested.length = 0
+      linkedDetail.data = undefined
+    })
+    afterEach(() => {
+      sessionState.patient = false
+    })
+
+    it('opens the detail of an appointment on the current page without another request', () => {
+      appointmentState.rows = [{
+        view: 'patient', id: 'appointment-9', staff_name: 'Dra. Rita Sousa',
+        scheduled_at: '2026-10-20T10:30:00Z', duration_minutes: 30, status: 'scheduled', reason: null,
+      }]
+      renderPage('/?consulta=appointment-9')
+      expect(screen.getByRole('dialog')).toHaveTextContent('Dra. Rita Sousa')
+      expect(linkedDetail.requested.every((id) => id === null)).toBe(true)
+    })
+
+    it('loads a linked appointment that is not on the page, and does nothing when it is not available', () => {
+      appointmentState.rows = []
+      linkedDetail.data = {
+        view: 'patient', id: 'appointment-7', staff_name: 'Enf. Rui Lima',
+        scheduled_at: '2026-11-02T09:00:00Z', duration_minutes: 30, status: 'confirmed', reason: null,
+      }
+      const { unmount } = renderPage('/?consulta=appointment-7')
+      expect(linkedDetail.requested).toContain('appointment-7')
+      expect(screen.getByRole('dialog')).toHaveTextContent('Enf. Rui Lima')
+      unmount()
+      linkedDetail.data = undefined
+      renderPage('/?consulta=appointment-unknown')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 })
