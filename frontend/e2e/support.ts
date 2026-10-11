@@ -174,3 +174,9 @@ export async function expectViewportOverflowDetectorWorks(page: Page): Promise<v
   await page.setContent('<div style="width:3000px">wide</div>')
   expect((await findOverflowingElements(page)).length).toBeGreaterThan(0)
 }
+
+/** Sign out through the account (avatar) menu in the header. */
+export async function signOut(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Menu da conta' }).click()
+  await page.getByRole('button', { name: 'Sair' }).click()
+}

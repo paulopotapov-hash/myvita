@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -30,11 +30,16 @@ describe('PatientLayout navigation', () => {
       </QueryClientProvider>,
     )
 
-    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
-    expect(screen.getByText('Área do paciente')).toBeInTheDocument()
-    for (const name of ['Início', 'Consultas', 'Dados clínicos', 'Resultados', 'Perfil', 'Notificações']) {
+    const user = userEvent.setup()
+    const accountButton = await screen.findByRole('button', { name: 'Menu da conta' })
+    for (const name of ['Início', 'Consultas', 'Mensagens', 'Resultados', 'Documentos', 'Dados clínicos', 'Notificações']) {
       expect(screen.getAllByRole('link', { name }).length).toBeGreaterThan(0)
     }
+    // Identity, profile and security live in the avatar menu.
+    await user.click(accountButton)
+    expect(screen.getByText('Área do paciente')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Perfil' })).toHaveAttribute('href', '/patient/perfil')
+    expect(screen.getByRole('link', { name: 'Segurança' })).toHaveAttribute('href', '/patient/seguranca')
     expect(screen.queryByRole('link', { name: 'Pacientes' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Equipa' })).not.toBeInTheDocument()
   })
@@ -59,7 +64,7 @@ describe('PatientLayout navigation', () => {
       </QueryClientProvider>,
     )
 
-    await screen.findByText('Ana')
+    await screen.findByRole('button', { name: 'Menu da conta' })
     expect(document.title).toBe('Início · myVita')
     await user.tab()
     expect(screen.getByRole('link', { name: 'Saltar para o conteúdo' })).toHaveFocus()

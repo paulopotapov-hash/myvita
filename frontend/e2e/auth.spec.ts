@@ -1,5 +1,5 @@
 import { expect, request, test } from '@playwright/test'
-import { loadSeed, loginThroughUi, PASSWORD } from './support'
+import { loadSeed, loginThroughUi, PASSWORD, signOut } from './support'
 
 const seed = loadSeed()
 
@@ -49,7 +49,7 @@ test.describe('logout', () => {
     await page.goto('/app')
     await expect(page.getByRole('banner').getByText(name)).toBeVisible()
 
-    await page.getByRole('button', { name: 'Sair' }).click()
+    await signOut(page)
     await expect(page).toHaveURL(/\/login$/)
 
     await page.goto('/app/notificacoes')

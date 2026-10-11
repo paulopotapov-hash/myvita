@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -43,7 +43,9 @@ describe('AppLayout navigation', () => {
   it('starts the server-backed logout flow from the staff shell', async () => {
     const user = userEvent.setup()
     renderLayoutAsRole('staff')
-    await user.click(await screen.findByRole('button', { name: 'Sair' }))
+    // Sair lives in the account (avatar) menu.
+    await user.click(await screen.findByRole('button', { name: 'Menu da conta' }))
+    await user.click(screen.getByRole('button', { name: 'Sair' }))
     expect(logoutMutate).toHaveBeenCalledOnce()
   })
 
@@ -54,6 +56,7 @@ describe('AppLayout navigation', () => {
     renderLayoutAsRole('staff')
     expect(await screen.findByRole('alert')).toHaveTextContent('Sem ligação ao servidor')
     expect(screen.getByRole('alert')).toHaveTextContent('A sessão continua ativa')
+    await user.click(screen.getByRole('button', { name: 'Menu da conta' }))
     await user.click(screen.getByRole('button', { name: 'Tentar sair novamente' }))
     expect(logoutMutate).toHaveBeenCalledOnce()
     logoutState.isError = false
@@ -62,13 +65,13 @@ describe('AppLayout navigation', () => {
 
   it('shows admin-only "Equipa" link only for clinic_admin', async () => {
     renderLayoutAsRole('clinic_admin')
-    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    await screen.findByRole('button', { name: 'Menu da conta' })
     expect(screen.getAllByRole('link', { name: 'Equipa' }).length).toBeGreaterThan(0)
   })
 
   it('does not show the admin "Equipa" link for staff', async () => {
     renderLayoutAsRole('staff')
-    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    await screen.findByRole('button', { name: 'Menu da conta' })
     expect(screen.queryAllByRole('link', { name: 'Equipa' })).toHaveLength(0)
     expect(screen.getAllByRole('link', { name: 'Pacientes' }).length).toBeGreaterThan(0)
   })
@@ -76,7 +79,7 @@ describe('AppLayout navigation', () => {
   it('offers a skip link that moves focus to the main content', async () => {
     const user = userEvent.setup()
     renderLayoutAsRole('staff')
-    await screen.findByText('Ana')
+    await screen.findByRole('button', { name: 'Menu da conta' })
     await user.tab()
     const skip = screen.getByRole('link', { name: 'Saltar para o conteúdo' })
     expect(skip).toHaveFocus()
@@ -86,14 +89,14 @@ describe('AppLayout navigation', () => {
 
   it('names the page in the document title', async () => {
     renderLayoutAsRole('staff')
-    await screen.findByText('Ana')
+    await screen.findByRole('button', { name: 'Menu da conta' })
     expect(document.title).toBe('Início · myVita')
   })
 
   it('moves focus to the main content and retitles the page after an in-app navigation, but not on first load', async () => {
     const user = userEvent.setup()
     renderLayoutAsRole('staff')
-    await screen.findByText('Ana')
+    await screen.findByRole('button', { name: 'Menu da conta' })
     expect(screen.getByRole('main')).not.toHaveFocus()
     await user.click(screen.getAllByRole('link', { name: 'Consultas' })[0])
     expect(await screen.findByText('Lista de consultas')).toBeInTheDocument()
@@ -104,7 +107,7 @@ describe('AppLayout navigation', () => {
   it('exposes the mobile menu state and closes it with Escape, returning focus to the toggle', async () => {
     const user = userEvent.setup()
     renderLayoutAsRole('staff')
-    await screen.findByText('Ana')
+    await screen.findByRole('button', { name: 'Menu da conta' })
     const toggle = screen.getByRole('button', { name: 'Menu de navegação' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     await user.click(toggle)

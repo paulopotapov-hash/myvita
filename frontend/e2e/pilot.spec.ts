@@ -1,5 +1,6 @@
 import { expect, request, test, type APIRequestContext, type Page } from '@playwright/test'
 import { nextTotp, throttleLogin, totp } from './mfa'
+import { signOut } from './support'
 
 const password = 'E2e-Senha-Forte-123!'
 // Production settings close every public entry point (onboarding, self-registration, direct staff
@@ -182,7 +183,7 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   }
   await seed.dispose()
 
-  await page.getByRole('button', { name: 'Sair' }).click()
+  await signOut(page)
   let doctorMfa: { secret: string; recovery: string[] } | null = null
   let doctorPassword = password
   if (!production) {
@@ -214,12 +215,12 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
     // browser) to make the care assignment, then the doctor signs in with a TOTP.
     const staffList = await (await page.request.get('/api/v1/staff')).json() as { id: string; full_name: string }[]
     doctorStaffId = staffList.find((entry) => entry.full_name === 'Doctor E2E')!.id
-    await page.getByRole('button', { name: 'Sair' }).click()
+    await signOut(page)
     await signIn(page, adminEmail, SEED_PASSWORD)
     await answerSecondFactor(page, () => nextTotp(adminMfa.secret))
     await expect(page).toHaveURL(/\/app/)
     await assignToCareTeam(page, patient.id, doctorStaffId)
-    await page.getByRole('button', { name: 'Sair' }).click()
+    await signOut(page)
     await signIn(page, staffEmail, doctorPassword)
     await answerSecondFactor(page, () => nextTotp(doctorMfa!.secret))
     await expect(page).toHaveURL(/\/app/)
@@ -258,7 +259,7 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
     data: { phone: '910000000' },
   })).status()).toBe(403)
 
-  await page.getByRole('button', { name: 'Sair' }).click()
+  await signOut(page)
   await signIn(page, patientEmail, password)
   await expect(page).toHaveURL(/\/patient/)
   await page.goto('/patient/consultas')
@@ -282,7 +283,7 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Revogar' }).click()
   await expect(page.getByText('Consentimento revogado. O histórico foi preservado.')).toBeVisible()
-  await page.getByRole('button', { name: 'Sair' }).click()
+  await signOut(page)
   await expect(page).toHaveURL(/\/login/)
 
   await signIn(page, patientEmail, password)
@@ -309,7 +310,7 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
     await answerSecondFactor(page, recovery)
     await expect(page).toHaveURL(/\/app/)
     expect((await (await page.request.get('/api/v1/auth/me')).json() as { email: string }).email).toBe(staffEmail)
-    await page.getByRole('button', { name: 'Sair' }).click()
+    await signOut(page)
 
     await signIn(page, staffEmail, doctorPassword)
     await answerSecondFactor(page, recovery)

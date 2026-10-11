@@ -202,3 +202,25 @@ test.describe('authenticated pages as the clinic administrator', () => {
     })
   }
 })
+
+test.describe('mobile header, drawer and account menu (patient, 375px)', () => {
+  test.use({ storageState: authState('patient'), viewport: { width: 375, height: 667 } })
+
+  test('open drawer and open account menu have no violations and meet the 44px touch target', async ({ page }) => {
+    await page.goto('/patient')
+    const toggle = page.getByRole('button', { name: 'Menu de navegação' })
+    await toggle.click()
+    const drawer = page.getByRole('dialog', { name: 'Menu' })
+    await expect(drawer.getByRole('button', { name: 'Fechar menu' })).toBeFocused()
+    for (const link of await drawer.getByRole('link').all()) {
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    }
+    await expectNoViolations(page, 'patient drawer (open)')
+    await page.keyboard.press('Escape')
+    await expect(toggle).toBeFocused()
+
+    await page.getByRole('button', { name: 'Menu da conta' }).click()
+    await expect(page.getByRole('link', { name: 'Perfil', exact: true })).toBeVisible()
+    await expectNoViolations(page, 'patient account menu (open)')
+  })
+})

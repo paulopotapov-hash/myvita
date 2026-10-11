@@ -99,3 +99,16 @@ export function usePatientContactSearch(search: string) {
     enabled: search.trim().length > 0,
   })
 }
+
+/** Page size used to count conversations with unread messages (the backend's maximum page). */
+export const UNREAD_CONVERSATIONS_SCAN = 100
+
+/**
+ * Number of CONVERSATIONS with unread messages (not the number of messages), for
+ * menu badges. The API has no aggregate count, so this counts within the
+ * UNREAD_CONVERSATIONS_SCAN most recently active conversations.
+ */
+export function useUnreadConversationsCount(enabled: boolean) {
+  const query = useConversations(1, UNREAD_CONVERSATIONS_SCAN, enabled)
+  return query.data?.items.filter((conversation) => conversation.unread_count > 0).length ?? 0
+}

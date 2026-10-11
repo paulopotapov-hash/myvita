@@ -1,18 +1,9 @@
-import { AuthenticatedLayout, type NavItem } from './AuthenticatedLayout'
-
-const PATIENT_NAV: NavItem[] = [
-  { to: '/patient', label: 'Início' },
-  { to: '/patient/consultas', label: 'Consultas' },
-  { to: '/patient/perfil', label: 'Perfil' },
-  { to: '/patient/saude', label: 'Dados clínicos' },
-  { to: '/patient/resultados', label: 'Resultados' },
-  { to: '/patient/documentos', label: 'Documentos' },
-  { to: '/patient/consentimentos', label: 'Consentimentos' },
-  { to: '/patient/notificacoes', label: 'Notificações' },
-  { to: '/patient/mensagens', label: 'Mensagens' },
-  { to: '/patient/seguranca', label: 'Segurança' },
-]
+import { useSession } from '../hooks/useSession'
+import { navigationFor } from '../lib/navItems'
+import { AuthenticatedLayout } from './AuthenticatedLayout'
 
 export function PatientLayout() {
-  return <AuthenticatedLayout areaLabel="Área do paciente" homePath="/patient" navItems={PATIENT_NAV} />
+  const { user } = useSession()
+  if (!user || user.role !== 'patient') return null
+  return <AuthenticatedLayout navigation={navigationFor(user)} />
 }

@@ -4,6 +4,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, request, test, type APIRequestContext, type Page } from '@playwright/test'
 import { nextTotp, throttleLogin } from './mfa'
+import { signOut } from './support'
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:18083'
 const PW = process.env.SEED_PASSWORD ?? ''
@@ -208,7 +209,7 @@ test('UAT-01 Patient login, navigation, refresh and logout (browser)', async ({ 
   await expect(page.getByRole('heading', { name: 'Segurança da conta' })).toBeVisible()
   const storage = await page.evaluate(() => ({ local: Object.keys(localStorage).length, session: Object.keys(sessionStorage).length }))
   expect(storage).toEqual({ local: 0, session: 0 })
-  await page.getByRole('button', { name: 'Sair' }).click()
+  await signOut(page)
   await expect(page).toHaveURL(/\/login/)
   await page.goBack()
   await expect(page.getByRole('heading', { name: /Olá, Patient A/ })).toHaveCount(0)
@@ -671,7 +672,7 @@ test('UAT-22 Accessibility: no serious or critical axe violations and keyboard l
     await page.waitForLoadState('networkidle')
     await scan(path)
   }
-  await page.getByRole('button', { name: 'Sair' }).click()
+  await signOut(page)
   await uiLogin(page, email('patient-a'))
   for (const path of ['/patient', '/patient/consultas', '/patient/saude', '/patient/consentimentos', '/patient/notificacoes', '/patient/perfil', '/patient/seguranca']) {
     await page.goto(path)

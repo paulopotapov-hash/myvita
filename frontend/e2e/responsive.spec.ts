@@ -141,12 +141,20 @@ test.describe('mobile navigation', () => {
 
   test('primary actions are large enough to tap', async ({ page }) => {
     await page.goto('/app/consultas')
-    for (const name of ['Marcar consulta', 'Menu de navegação', 'Sair']) {
-      const box = await page.getByRole('button', { name }).first().boundingBox()
-      expect(box, name).not.toBeNull()
-      expect(box!.height, `${name} height`).toBeGreaterThanOrEqual(32)
-      expect(box!.width, `${name} width`).toBeGreaterThanOrEqual(32)
+    const box = await page.getByRole('button', { name: 'Marcar consulta' }).first().boundingBox()
+    expect(box, 'Marcar consulta').not.toBeNull()
+    expect(box!.height, 'Marcar consulta height').toBeGreaterThanOrEqual(32)
+    expect(box!.width, 'Marcar consulta width').toBeGreaterThanOrEqual(32)
+    // Header controls follow the mobile-first 44px touch target.
+    for (const name of ['Menu de navegação', 'Menu da conta']) {
+      const target = await page.getByRole('button', { name }).boundingBox()
+      expect(target, name).not.toBeNull()
+      expect(target!.height, `${name} height`).toBeGreaterThanOrEqual(44)
+      expect(target!.width, `${name} width`).toBeGreaterThanOrEqual(44)
     }
+    await page.getByRole('button', { name: 'Menu da conta' }).click()
+    const signOut = await page.getByRole('button', { name: 'Sair' }).boundingBox()
+    expect(signOut!.height, 'Sair height').toBeGreaterThanOrEqual(44)
   })
 })
 
