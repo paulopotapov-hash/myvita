@@ -36,6 +36,9 @@ class ClinicalAction(str, enum.Enum):
     MANAGE_CONVERSATIONS = "conversations.manage"
     VIEW_RESULTS = "results.view"
     EDIT_RESULTS = "results.edit"
+    # Personal identifiers (NIF, NISS, Nº de utente): masked view and audited reveal / change.
+    VIEW_PATIENT_IDENTIFIERS = "patient.identifiers.view"
+    MANAGE_PATIENT_IDENTIFIERS = "patient.identifiers.manage"
 
 
 # Explicit policy, not a role hierarchy. Doctor and nurse permissions reflect
@@ -60,7 +63,19 @@ _CURRENT_CLINICIAN_ACTIONS = frozenset(
         ClinicalAction.REPLY_CONVERSATIONS,
         ClinicalAction.VIEW_RESULTS,
         ClinicalAction.EDIT_RESULTS,
+        ClinicalAction.VIEW_PATIENT_IDENTIFIERS,
+        ClinicalAction.MANAGE_PATIENT_IDENTIFIERS,
     }
+)
+
+# Administrative identification of patients (NIF, NISS, Nº de utente) is clinic-wide
+# for administrative staff and the clinic administrator: no care assignment needed,
+# and it grants nothing clinical (no records, results, demographics or address).
+ADMINISTRATIVE_IDENTIFIER_ACTIONS = frozenset(
+    {ClinicalAction.VIEW_PATIENT_IDENTIFIERS, ClinicalAction.MANAGE_PATIENT_IDENTIFIERS}
+)
+_ADMIN_CLINIC_WIDE_ACTIONS = frozenset(
+    {ClinicalAction.VIEW_APPOINTMENTS, ClinicalAction.EDIT_APPOINTMENTS} | ADMINISTRATIVE_IDENTIFIER_ACTIONS
 )
 
 ROLE_ACTIONS: dict[StaffRole, frozenset[ClinicalAction]] = {
@@ -70,8 +85,13 @@ ROLE_ACTIONS: dict[StaffRole, frozenset[ClinicalAction]] = {
     StaffRole.PHYSIOTHERAPIST: frozenset(),
     # Existing pilot matrix permits administrative staff to handle appointment
     # logistics. This does not grant access to clinical notes or demographics.
-    StaffRole.ADMIN: frozenset({ClinicalAction.VIEW_APPOINTMENTS, ClinicalAction.EDIT_APPOINTMENTS}),
+    StaffRole.ADMIN: frozenset({ClinicalAction.VIEW_APPOINTMENTS, ClinicalAction.EDIT_APPOINTMENTS})
+    | ADMINISTRATIVE_IDENTIFIER_ACTIONS,
 }
+
+# The clinic administrator account (UserRole.CLINIC_ADMIN) has no staff profile and
+# no clinical access; these are the only patient actions it may perform, clinic-wide.
+CLINIC_ADMIN_ACTIONS = ADMINISTRATIVE_IDENTIFIER_ACTIONS
 
 # Exposed for message-recipient filtering.  Keep it aligned with roles that
 # are allowed any clinical action above.
@@ -92,6 +112,8 @@ PATIENT_OWN_ACTIONS = frozenset(
         # per-row patient visibility is enforced by the results and medical
         # records services (P2.4/P2.5), not by this action alone.
         ClinicalAction.VIEW_RESULTS,
+        # Own identifiers, masked, and the audited reveal. Changing them is staff-only.
+        ClinicalAction.VIEW_PATIENT_IDENTIFIERS,
     }
 )
 
@@ -122,14 +144,16 @@ def clinical_access(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
         return patient
 
+    if user.role == UserRole.CLINIC_ADMIN:
+        if action not in CLINIC_ADMIN_ACTIONS:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sem permissões clínicas.")
+        return patient
+
     staff = staff_profile(db, user)
     if staff is None or not has_role_action(staff.staff_role, action):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sem permissões clínicas.")
 
-    if staff.staff_role == StaffRole.ADMIN and action in {
-        ClinicalAction.VIEW_APPOINTMENTS,
-        ClinicalAction.EDIT_APPOINTMENTS,
-    }:
+    if staff.staff_role == StaffRole.ADMIN and action in _ADMIN_CLINIC_WIDE_ACTIONS:
         return patient
 
     assigned = (

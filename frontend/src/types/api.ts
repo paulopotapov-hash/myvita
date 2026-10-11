@@ -94,9 +94,34 @@ export interface PatientPublic {
   full_name: string
   birth_date: string | null // ISO date (YYYY-MM-DD), as sent by the backend
   phone: string | null
-  national_health_number: string | null
+  address: PatientAddress
+  /** Masked by the server: only the last three digits (full values need the audited reveal). */
+  identifiers: PatientIdentifiers
   is_active: boolean
 }
+
+export interface PatientAddress {
+  street: string | null
+  postal_code: string | null
+  locality: string | null
+}
+
+/** NIF, NISS and Nº de utente do SNS. Masked ("••••••789") unless returned by the reveal endpoint. */
+export interface PatientIdentifiers {
+  nif: string | null
+  niss: string | null
+  national_health_number: string | null
+}
+
+/** Name and masked identifiers; also served to administrative staff and the clinic administrator. */
+export interface PatientIdentification {
+  id: string
+  full_name: string
+  identifiers: PatientIdentifiers
+  can_edit: boolean
+}
+
+export type PatientIdentifiersUpdateRequest = Partial<{ [K in keyof PatientIdentifiers]: string | null }>
 
 export interface PatientSummary {
   id: string
@@ -482,10 +507,13 @@ export interface ConsentCreateRequest {
   policy_text?: string
 }
 
+/** Contact data. The patient may change phone and address only (identifiers have their own endpoint). */
 export interface PatientUpdateRequest {
   birth_date?: string | null
   phone?: string | null
-  national_health_number?: string | null
+  address_street?: string | null
+  address_postal_code?: string | null
+  address_locality?: string | null
 }
 
 export interface AppointmentUpdateRequest {

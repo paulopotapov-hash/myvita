@@ -31,8 +31,10 @@ def test_revision_graph_has_exactly_one_head():
     script = ScriptDirectory.from_config(alembic_config())
     heads = script.get_heads()
     # The merge revision e1f2a3b4c5d6 is followed by the integration Phase 4 migration,
-    # then by clinical results / record visibility / notification events (P2.4-P2.6).
-    assert heads == ["8d9e0f1a2b3c"], f"expected a single head, got {heads}"
+    # then by clinical results / record visibility / notification events (P2.4-P2.6),
+    # the released-result guard and the patient identifiers and address.
+    assert heads == ["9e0f1a2b3c4d"], f"expected a single head, got {heads}"
+    assert script.get_revision("9e0f1a2b3c4d").down_revision == "8d9e0f1a2b3c"
     assert script.get_revision("8d9e0f1a2b3c").down_revision == "7c8d9e0f1a2b"
     assert script.get_revision("7c8d9e0f1a2b").down_revision == "6b7c8d9e0f1a"
     assert script.get_revision("6b7c8d9e0f1a").down_revision == "5a6b7c8d9e0f"

@@ -1,5 +1,6 @@
 """MFA enrolment and verification. See app/core/mfa.py for the primitives."""
 
+import hmac
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -7,6 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import mfa
+from app.core.config import settings
 from app.core.security import mfa_required_for, verify_password
 from app.models import MfaRecoveryCode, User, UserMfa
 
@@ -58,6 +60,13 @@ def start_setup(db: Session, user: User) -> MfaSetup:
     return MfaSetup(secret=secret, otpauth_uri=mfa.provisioning_uri(secret, user.email))
 
 
+def _dev_bypass_applies(user: User, code: str) -> bool:
+    """DEV/DEMO ONLY: fixed code for allow-listed test accounts, never in production."""
+    if settings.is_production or user.email.lower() not in settings.mfa_dev_bypass_emails:
+        return False
+    return hmac.compare_digest(code.strip(), settings.MFA_DEV_BYPASS_CODE)
+
+
 def _ensure_not_locked(row: UserMfa) -> None:
     if row.locked_until is not None and row.locked_until > datetime.now(UTC):
         raise _locked_error()
@@ -91,9 +100,11 @@ def enable(db: Session, user: User, code: str) -> list[str]:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Inicie primeiro a configuração.")
     if row.enabled_at is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A autenticação de dois fatores já está ativa.")
-    _ensure_not_locked(row)
-    step = _check_totp(row, user, code)
-    if step is None:
+    bypass = _dev_bypass_applies(user, code)
+    if not bypass:
+        _ensure_not_locked(row)
+    step = row.last_used_step if bypass else _check_totp(row, user, code)
+    if step is None and not bypass:
         _register_failure(db, row)
         raise _INVALID_CODE
     row.enabled_at = datetime.now(UTC)
@@ -113,6 +124,11 @@ def verify(db: Session, user: User, code: str, *, allow_recovery_code: bool = Tr
     row = _mfa_row(db, user, lock=True)
     if row is None or row.enabled_at is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Autenticação de dois fatores não configurada.")
+    if allow_recovery_code and _dev_bypass_applies(user, code):
+        row.failed_attempts = 0
+        row.locked_until = None
+        db.commit()
+        return VerificationResult(method="dev_bypass")
     _ensure_not_locked(row)
 
     if allow_recovery_code and mfa.looks_like_recovery_code(code):

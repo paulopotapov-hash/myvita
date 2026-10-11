@@ -116,6 +116,9 @@ class AuditAction(str, enum.Enum):
     CLINICAL_RESULT_VIEWED = "clinical_result_viewed"
     MEDICAL_RECORD_SHARED = "medical_record_shared"
     MEDICAL_RECORD_UNSHARED = "medical_record_unshared"
+    # Personal identifiers (NIF, NISS, Nº de utente): who revealed or changed them, never the values.
+    PATIENT_IDENTIFIERS_VIEWED = "patient_identifiers_viewed"  # "dados identificativos consultados"
+    PATIENT_IDENTIFIERS_UPDATED = "patient_identifiers_updated"
 
 
 class AuditResult(str, enum.Enum):

@@ -141,7 +141,7 @@ def test_patient_demographic_summary_full_record_and_mass_assignment(client: Tes
     for role in ("doctor", "nurse"):
         headers = _use(client, tenant["identities"][role])
         assert client.get(patient_url).status_code == 200
-        changed = client.patch(patient_url, headers=headers, json={"national_health_number": role})
+        changed = client.patch(patient_url, headers=headers, json={"birth_date": "1990-01-03"})
         assert changed.status_code == 200
 
     patient_headers = _use(client, tenant["identities"]["patient"])

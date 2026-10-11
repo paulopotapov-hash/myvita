@@ -110,10 +110,11 @@ def test_patient_pagination_detail_update_and_cross_tenant_isolation(client: Tes
     updated = client.patch(
         f"/api/v1/patients/{first['patient_id']}",
         headers=headers,
-        json={"phone": "912345678", "national_health_number": "123456789"},
+        json={"phone": "912345678", "birth_date": "1990-01-03"},
     )
     assert updated.status_code == 200
-    assert updated.json()["national_health_number"] == "123456789"
+    assert updated.json()["phone"] == "912345678"
+    assert updated.json()["birth_date"] == "1990-01-03"
     assert (
         client.patch(f"/api/v1/patients/{first['patient_id']}", headers=headers, json={}).status_code == 422
     )

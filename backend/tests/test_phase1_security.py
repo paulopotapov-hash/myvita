@@ -468,7 +468,7 @@ def _rows(world: World):
             "patient demographics by patient",
             "PATCH",
             f"/api/v1/patients/{pid}",
-            {"national_health_number": "1"},
+            {"birth_date": "1990-01-01"},
             (403, 200, 200, 403, 403, 404, 401),
         ),
         (
@@ -702,7 +702,8 @@ def test_patient_never_sees_staff_only_or_administrative_data(world: World):
         "full_name",
         "birth_date",
         "phone",
-        "national_health_number",
+        "address",
+        "identifiers",
         "is_active",
     }
     for path in ("/api/v1/patients", "/api/v1/invitations/staff"):

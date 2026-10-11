@@ -6,6 +6,9 @@ alembic==1.14.0
 psycopg[binary]==3.2.3
 pydantic==2.10.3
 pydantic[email]==2.10.3
+# Imported directly for validation errors without the submitted value (PydanticCustomError);
+# the exact version pydantic 2.10.3 requires.
+pydantic-core==2.27.1
 pydantic-settings==2.7.0
 argon2-cffi==25.1.0
 pyjwt==2.15.1

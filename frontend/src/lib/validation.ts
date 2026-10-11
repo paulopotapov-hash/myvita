@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { digitsOnly, isValidNif, isValidNiss, isValidPostalCode, isValidSnsNumber } from './ptIdentifiers'
 
 /** Flattens a ZodError into `{ field: message }` for direct use as form
  * field errors — merges naturally with ApiError.fieldErrors from the
@@ -136,7 +137,26 @@ export type MedicationFormValues = z.infer<typeof medicationFormSchema>
 
 export const patientUpdateSchema = z.object({
   phone: optionalText(30, 'O telefone pode ter no máximo 30 caracteres.'),
-  national_health_number: optionalText(30, 'O número de utente pode ter no máximo 30 caracteres.'),
+})
+
+/** Mirrors backend PatientUpdateRequest: address fields and the 0000-000 postal code. */
+export const addressSchema = z.object({
+  street: optionalText(200, 'A rua pode ter no máximo 200 caracteres.'),
+  postal_code: z
+    .string()
+    .trim()
+    .refine((value) => value === '' || isValidPostalCode(value), 'O código postal deve ter o formato 0000-000.'),
+  locality: optionalText(100, 'A localidade pode ter no máximo 100 caracteres.'),
+})
+
+/** Mirrors backend PatientIdentifiersUpdateRequest (check digits); empty clears the field. */
+export const identifiersSchema = z.object({
+  nif: z.string().transform(digitsOnly).refine((value) => value === '' || isValidNif(value), 'NIF inválido: confirma os 9 dígitos.'),
+  niss: z.string().transform(digitsOnly).refine((value) => value === '' || isValidNiss(value), 'NISS inválido: confirma os 11 dígitos.'),
+  national_health_number: z
+    .string()
+    .transform(digitsOnly)
+    .refine((value) => value === '' || isValidSnsNumber(value), 'O número de utente deve ter 9 dígitos.'),
 })
 
 /** Authenticator-app code shown during MFA enrolment. */

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   appointmentCreateSchema,
+  addressSchema,
   appointmentUpdateSchema,
   consentCreateSchema,
+  identifiersSchema,
   medicalRecordSchema,
   medicationFormSchema,
   mfaCodeSchema,
@@ -115,12 +117,27 @@ describe('other clinical schemas', () => {
     )
   })
 
-  it('caps patient contact fields at the backend limit of 30', () => {
-    expect(patientUpdateSchema.safeParse({ phone: '912345678', national_health_number: '' }).success).toBe(true)
-    expect(Object.keys(errorsOf(patientUpdateSchema.safeParse({ phone: '9'.repeat(31), national_health_number: '1'.repeat(31) })))).toEqual([
-      'phone',
-      'national_health_number',
-    ])
+  it('caps the phone at the backend limit of 30', () => {
+    expect(patientUpdateSchema.safeParse({ phone: '912345678' }).success).toBe(true)
+    expect(Object.keys(errorsOf(patientUpdateSchema.safeParse({ phone: '9'.repeat(31) })))).toEqual(['phone'])
+  })
+
+  it('validates the address postal code as 0000-000 (empty allowed)', () => {
+    expect(addressSchema.safeParse({ street: 'Rua Sintética, 1', postal_code: '1000-001', locality: 'Lisboa' }).success).toBe(true)
+    expect(addressSchema.safeParse({ street: '', postal_code: '', locality: '' }).success).toBe(true)
+    expect(errorsOf(addressSchema.safeParse({ street: '', postal_code: '1000001', locality: '' })).postal_code).toBe(
+      'O código postal deve ter o formato 0000-000.',
+    )
+  })
+
+  it('validates identifiers by check digit and normalises spaces', () => {
+    const parsed = identifiersSchema.safeParse({ nif: '123 456 789', niss: '', national_health_number: '987654321' })
+    expect(parsed.success && parsed.data).toEqual({ nif: '123456789', niss: '', national_health_number: '987654321' })
+    expect(errorsOf(identifiersSchema.safeParse({ nif: '123456788', niss: '12345678900', national_health_number: '1' }))).toEqual({
+      nif: 'NIF inválido: confirma os 9 dígitos.',
+      niss: 'NISS inválido: confirma os 11 dígitos.',
+      national_health_number: 'O número de utente deve ter 9 dígitos.',
+    })
   })
 
   it('validates MFA codes: strict 6 digits for enrolment, code-or-recovery for login', () => {

@@ -9,7 +9,10 @@ Backend authorization is authoritative; frontend visibility is UX only. Cross-te
 | Own session/password/MFA | read/change/logout/enrol | same | same | same | same | same |
 | Patient directory (incl. name search) | forbidden | assigned patients only | assigned patients only | empty | basic same-clinic identity | basic same-clinic identity |
 | Full demographics | own read | assigned read | assigned read | forbidden | forbidden | forbidden |
-| Demographic update | own phone only | assigned, supported fields | same as doctor | forbidden | forbidden | forbidden |
+| Demographic update (birth date, phone, address) | own phone and address only; email never changes here | assigned: birth date, phone, address | same as doctor | forbidden | forbidden | forbidden |
+| Identifiers: NIF, NISS, Nº de utente (masked to the last 3 digits) | own read | assigned read | assigned read | forbidden | same-clinic read (name and masked identifiers only) | same-clinic read (name and masked identifiers only) |
+| Identifiers: "Mostrar" (full values, audited as `patient_identifiers_viewed`) | own | assigned | assigned | forbidden | same-clinic | same-clinic |
+| Identifiers: change (audited as `patient_identifiers_updated`, field names only; NIF unique per clinic) | forbidden | assigned | assigned | forbidden | same-clinic | same-clinic |
 | Care-team assignment | forbidden | forbidden | forbidden | forbidden | forbidden | create/end same-clinic |
 | Patient deactivate | forbidden | forbidden | forbidden | forbidden | forbidden | same clinic |
 | Appointments operational data | own read | assigned read/create/update/cancel | same as doctor | forbidden | same-clinic read/create/update/cancel | same-clinic read/create/update/cancel |

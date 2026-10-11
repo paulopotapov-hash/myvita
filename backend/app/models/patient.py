@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,8 @@ class Patient(Base):
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_patients_user_id"),
         UniqueConstraint("id", "clinic_id", name="uq_patients_id_clinic"),
+        # One patient per NIF within a clinic, only when the NIF is filled in (it is optional).
+        Index("uq_patients_clinic_nif", "clinic_id", "nif", unique=True, postgresql_where=text("nif IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -35,7 +37,15 @@ class Patient(Base):
 
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    national_health_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Personal identifiers (sensitive; see app/core/pt_identifiers.py): returned masked,
+    # revealed only through an audited endpoint, never logged.
+    national_health_number: Mapped[str | None] = mapped_column(String(30), nullable=True)  # Nº de utente SNS
+    nif: Mapped[str | None] = mapped_column(String(9), nullable=True)
+    niss: Mapped[str | None] = mapped_column(String(11), nullable=True)
+
+    address_street: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    address_postal_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    address_locality: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

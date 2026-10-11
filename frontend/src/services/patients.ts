@@ -1,5 +1,12 @@
 import { api } from '../lib/apiClient'
-import type { PatientPublic, PatientSummary, PatientUpdateRequest } from '../types/api'
+import type {
+  PatientIdentification,
+  PatientIdentifiers,
+  PatientIdentifiersUpdateRequest,
+  PatientPublic,
+  PatientSummary,
+  PatientUpdateRequest,
+} from '../types/api'
 
 export const patientsService = {
   /** Staff/clinic_admin only — the backend enforces this with a 403 for
@@ -16,4 +23,12 @@ export const patientsService = {
     api.get<PatientPublic>(`/api/v1/patients/${patientId}`, signal),
   update: (patientId: string, payload: PatientUpdateRequest) =>
     api.patch<PatientPublic>(`/api/v1/patients/${patientId}`, payload),
+  /** Name and masked identifiers (last three digits). */
+  identification: (patientId: string, signal?: AbortSignal) =>
+    api.get<PatientIdentification>(`/api/v1/patients/${encodeURIComponent(patientId)}/identification`, signal),
+  /** Full identifiers. Every call is audited by the backend ("dados identificativos consultados"). */
+  revealIdentifiers: (patientId: string) =>
+    api.post<PatientIdentifiers>(`/api/v1/patients/${encodeURIComponent(patientId)}/identification/reveal`),
+  updateIdentifiers: (patientId: string, payload: PatientIdentifiersUpdateRequest) =>
+    api.patch<PatientIdentification>(`/api/v1/patients/${encodeURIComponent(patientId)}/identification`, payload),
 }

@@ -3,6 +3,7 @@ import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -99,6 +100,19 @@ async def _database_error_handler(request: Request, exc: Exception) -> Response:
     return JSONResponse(status_code=503, content={"detail": "Serviço temporariamente indisponível."})
 
 
+async def _validation_error_handler(request: Request, exc: Exception) -> Response:
+    # FastAPI's default 422 body echoes every submitted value ("input") and
+    # validator context. That would send NIF, NISS, passwords and the like
+    # back in responses (and into any proxy or client log that keeps them).
+    # Keep only the field location, the message and the error type.
+    assert isinstance(exc, RequestValidationError)
+    errors = [
+        {"type": error.get("type"), "loc": list(error.get("loc", ())), "msg": error.get("msg")}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> Response:
     # Anything reaching here is a bug, not an expected error path (those
     # raise HTTPException, which FastAPI already handles separately and
@@ -118,6 +132,7 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> Resp
     return response
 
 
+app.add_exception_handler(RequestValidationError, _validation_error_handler)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_with_audit)
 app.add_exception_handler(SQLAlchemyError, _database_error_handler)
 app.add_exception_handler(Exception, _unhandled_exception_handler)

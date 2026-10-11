@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.clinical_access import ClinicalAction, clinical_access, has_role_action, staff_profile
 from app.core.security import hash_password
 from app.models import Clinic, ClinicalCareAssignment, Patient, Staff, StaffRole, User, UserRole
-from app.modules.patients.schemas import PatientRegisterRequest, PatientUpdateRequest
+from app.modules.patients.schemas import (
+    PatientIdentifiersUpdateRequest,
+    PatientRegisterRequest,
+    PatientUpdateRequest,
+)
 from app.modules.users import service as users_service
 
 
@@ -99,7 +103,15 @@ def get_patient_for_user(db: Session, patient_id: uuid.UUID, user: User) -> Pati
     return patient
 
 
-def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateRequest, user: User) -> Patient:
+# What the patient may change in their own record: contact data only.
+PATIENT_EDITABLE_FIELDS = frozenset({"phone", "address_street", "address_postal_code", "address_locality"})
+DUPLICATE_NIF_MESSAGE = "Já existe um paciente nesta clínica com este NIF."
+
+
+def update_patient(
+    db: Session, patient_id: uuid.UUID, payload: PatientUpdateRequest, user: User
+) -> tuple[Patient, list[str]]:
+    """Apply contact changes; returns the patient and the names of the fields that changed."""
     changes = payload.model_dump(exclude_unset=True)
     if user.role == UserRole.PATIENT:
         patient = (
@@ -112,18 +124,76 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdateReq
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
         if patient.user_id != user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado.")
-        if set(changes) != {"phone"}:
+        if not set(changes) <= PATIENT_EDITABLE_FIELDS:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="O paciente só pode alterar o próprio telefone."
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="O paciente só pode alterar o próprio telefone e a morada.",
             )
     else:
         patient = clinical_access(db, patient_id, user, ClinicalAction.EDIT_PATIENT)
         patient = db.query(Patient).options(selectinload(Patient.user)).filter(Patient.id == patient.id).one()
-    for field, value in changes.items():
-        setattr(patient, field, value)
+    changed = _apply(patient, changes)
     db.commit()
     db.refresh(patient)
-    return patient
+    return patient, changed
+
+
+def _apply(patient: Patient, changes: dict[str, object]) -> list[str]:
+    changed = []
+    for field, value in changes.items():
+        if getattr(patient, field) != value:
+            setattr(patient, field, value)
+            changed.append(field)
+    return sorted(changed)
+
+
+def _identifier_patient(db: Session, patient_id: uuid.UUID, user: User, action: ClinicalAction) -> Patient:
+    patient = clinical_access(db, patient_id, user, action)
+    return db.query(Patient).options(selectinload(Patient.user)).filter(Patient.id == patient.id).one()
+
+
+def get_identification(db: Session, patient_id: uuid.UUID, user: User) -> tuple[Patient, bool]:
+    """Patient (for the masked identification card) and whether the caller may edit it."""
+    patient = _identifier_patient(db, patient_id, user, ClinicalAction.VIEW_PATIENT_IDENTIFIERS)
+    return patient, can_manage_identifiers(db, patient.id, user)
+
+
+def can_manage_identifiers(db: Session, patient_id: uuid.UUID, user: User) -> bool:
+    try:
+        clinical_access(db, patient_id, user, ClinicalAction.MANAGE_PATIENT_IDENTIFIERS)
+    except HTTPException:
+        return False
+    return True
+
+
+def reveal_identifiers(db: Session, patient_id: uuid.UUID, user: User) -> Patient:
+    """Full identifiers; the router audits every successful reveal."""
+    return _identifier_patient(db, patient_id, user, ClinicalAction.VIEW_PATIENT_IDENTIFIERS)
+
+
+def update_identifiers(
+    db: Session, patient_id: uuid.UUID, payload: PatientIdentifiersUpdateRequest, user: User
+) -> tuple[Patient, list[str]]:
+    """Change NIF / NISS / Nº de utente. NIF is unique per clinic when filled in."""
+    patient = _identifier_patient(db, patient_id, user, ClinicalAction.MANAGE_PATIENT_IDENTIFIERS)
+    changes = payload.model_dump(exclude_unset=True)
+    nif = changes.get("nif")
+    if nif is not None and nif != patient.nif:
+        duplicate = (
+            db.query(Patient.id)
+            .filter(Patient.clinic_id == patient.clinic_id, Patient.nif == nif, Patient.id != patient.id)
+            .first()
+        )
+        if duplicate is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=DUPLICATE_NIF_MESSAGE)
+    changed = _apply(patient, changes)
+    try:
+        db.commit()
+    except IntegrityError as exc:  # concurrent registration of the same NIF
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=DUPLICATE_NIF_MESSAGE) from exc
+    db.refresh(patient)
+    return patient, changed
 
 
 def deactivate_patient(db: Session, patient_id: uuid.UUID, clinic_id: str, actor: User) -> Patient:

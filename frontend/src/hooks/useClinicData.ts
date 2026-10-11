@@ -3,7 +3,7 @@ import { appointmentsService } from '../services/appointments'
 import { clinicsService } from '../services/clinics'
 import { patientsService } from '../services/patients'
 import { staffService } from '../services/staff'
-import type { AppointmentCreateRequest, AppointmentUpdateRequest, PatientUpdateRequest, StaffCreateRequest, StaffRole } from '../types/api'
+import type { AppointmentCreateRequest, AppointmentUpdateRequest, PatientIdentifiersUpdateRequest, PatientUpdateRequest, StaffCreateRequest, StaffRole } from '../types/api'
 
 /** Clinics the caller may see: allowlisted public clinics (only while public
  * registration is on) plus their own. First page only (backend default 50);
@@ -70,6 +70,31 @@ export function useUpdatePatient(patientId: string) {
     onSuccess: (patient) => {
       queryClient.setQueryData(['patients', patientId], patient)
       queryClient.invalidateQueries({ queryKey: ['patients'] })
+    },
+  })
+}
+
+/** Name and masked identifiers of a patient (also for administrative staff and the clinic administrator). */
+export function usePatientIdentification(patientId: string) {
+  return useQuery({
+    queryKey: ['patients', patientId, 'identification'],
+    queryFn: ({ signal }) => patientsService.identification(patientId, signal),
+    enabled: Boolean(patientId),
+  })
+}
+
+/** "Mostrar": fetches the full identifiers on demand. Never cached in the query cache. */
+export function useRevealIdentifiers(patientId: string) {
+  return useMutation({ mutationFn: () => patientsService.revealIdentifiers(patientId) })
+}
+
+export function useUpdateIdentifiers(patientId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: PatientIdentifiersUpdateRequest) => patientsService.updateIdentifiers(patientId, payload),
+    onSuccess: (identification) => {
+      queryClient.setQueryData(['patients', patientId, 'identification'], identification)
+      queryClient.invalidateQueries({ queryKey: ['patients', patientId] })
     },
   })
 }

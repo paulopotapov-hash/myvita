@@ -6,12 +6,18 @@ from sqlalchemy.orm import Session
 from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.pt_identifiers import mask
 from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, REGISTRATION_RATE_LIMIT, limiter
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, Patient, User, UserRole
 from app.modules.patients.schemas import (
     CareAssignmentCreateRequest,
     CareAssignmentPublic,
+    PatientAddress,
+    PatientIdentification,
+    PatientIdentifiersMasked,
+    PatientIdentifiersRevealed,
+    PatientIdentifiersUpdateRequest,
     PatientPublic,
     PatientRegisterRequest,
     PatientSummary,
@@ -21,9 +27,12 @@ from app.modules.patients.service import (
     assign_clinical_staff,
     deactivate_patient,
     end_clinical_assignment,
+    get_identification,
     get_patient_for_user,
     list_patients_for_clinic,
     register_patient,
+    reveal_identifiers,
+    update_identifiers,
     update_patient,
 )
 
@@ -35,15 +44,28 @@ _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
 _admin_only = require_roles(UserRole.CLINIC_ADMIN)
 
 
-def _public(patient: Patient) -> PatientPublic:
+def _masked(patient: Patient) -> PatientIdentifiersMasked:
+    return PatientIdentifiersMasked(
+        nif=mask(patient.nif),
+        niss=mask(patient.niss),
+        national_health_number=mask(patient.national_health_number),
+    )
+
+
+def _public(patient: Patient, full_name: str | None = None, is_active: bool | None = None) -> PatientPublic:
     return PatientPublic(
         id=patient.id,
         clinic_id=patient.clinic_id,
-        full_name=patient.user.full_name,
+        full_name=full_name if full_name is not None else patient.user.full_name,
         birth_date=patient.birth_date,
         phone=patient.phone,
-        national_health_number=patient.national_health_number,
-        is_active=patient.user.is_active,
+        address=PatientAddress(
+            street=patient.address_street,
+            postal_code=patient.address_postal_code,
+            locality=patient.address_locality,
+        ),
+        identifiers=_masked(patient),
+        is_active=is_active if is_active is not None else patient.user.is_active,
     )
 
 
@@ -79,15 +101,7 @@ def register(
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return PatientPublic(
-        id=patient.id,
-        clinic_id=patient.clinic_id,
-        full_name=user.full_name,
-        birth_date=patient.birth_date,
-        phone=patient.phone,
-        national_health_number=patient.national_health_number,
-        is_active=user.is_active,
-    )
+    return _public(patient, full_name=user.full_name, is_active=user.is_active)
 
 
 @router.get("", response_model=list[PatientSummary])
@@ -163,7 +177,7 @@ def update(
     user: User = Depends(get_current_user),
 ) -> PatientPublic:
     with audit_denials(request, user, "patient", patient_id):
-        patient = update_patient(db, patient_id, payload, user)
+        patient, changed = update_patient(db, patient_id, payload, user)
     record_audit_event(
         action=AuditAction.PATIENT_UPDATED,
         result=AuditResult.SUCCESS,
@@ -174,8 +188,82 @@ def update(
         resource_id=patient.id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        # Field names only: never phone numbers or addresses.
+        metadata={"fields": changed},
     )
     return _public(patient)
+
+
+@router.get("/{patient_id}/identification", response_model=PatientIdentification)
+def identification(
+    patient_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PatientIdentification:
+    """Name and masked identifiers (last three digits), for everyone who may handle them."""
+    with audit_denials(request, user, "patient_identifiers", patient_id):
+        patient, can_edit = get_identification(db, patient_id, user)
+    return PatientIdentification(
+        id=patient.id, full_name=patient.user.full_name, identifiers=_masked(patient), can_edit=can_edit
+    )
+
+
+@router.post("/{patient_id}/identification/reveal", response_model=PatientIdentifiersRevealed)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def reveal(
+    patient_id: uuid.UUID,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PatientIdentifiersRevealed:
+    """Full NIF / NISS / Nº de utente. Every reveal is audited ("dados identificativos consultados")."""
+    with audit_denials(request, user, "patient_identifiers", patient_id):
+        patient = reveal_identifiers(db, patient_id, user)
+    record_audit_event(
+        action=AuditAction.PATIENT_IDENTIFIERS_VIEWED,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="patient",
+        resource_id=patient.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return PatientIdentifiersRevealed(
+        nif=patient.nif, niss=patient.niss, national_health_number=patient.national_health_number
+    )
+
+
+@router.patch("/{patient_id}/identification", response_model=PatientIdentification)
+def update_identification(
+    patient_id: uuid.UUID,
+    payload: PatientIdentifiersUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PatientIdentification:
+    """Change identifiers: assigned doctors/nurses, administrative staff, clinic administrator."""
+    with audit_denials(request, user, "patient_identifiers", patient_id):
+        patient, changed = update_identifiers(db, patient_id, payload, user)
+    record_audit_event(
+        action=AuditAction.PATIENT_IDENTIFIERS_UPDATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="patient",
+        resource_id=patient.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"fields": changed},
+    )
+    return PatientIdentification(
+        id=patient.id, full_name=patient.user.full_name, identifiers=_masked(patient), can_edit=True
+    )
 
 
 @router.post("/{patient_id}/care-team", response_model=CareAssignmentPublic, status_code=201)

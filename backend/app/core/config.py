@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     # local development needs no extra secret.
     MFA_ENCRYPTION_KEY: str | None = None
 
+    # DEV/DEMO ONLY. Comma-separated emails that may pass the second factor
+    # with MFA_DEV_BYPASS_CODE instead of a real TOTP code, so test accounts
+    # need no authenticator app. Ignored in production, and the app refuses
+    # to start in production if any email is listed.
+    MFA_DEV_BYPASS_EMAILS: str = ""
+    MFA_DEV_BYPASS_CODE: str = "123456"
+
     # Keys the fingerprints that let repeated attempts against one typed
     # e-mail address be correlated in logs/audit without storing it
     # (app/core/privacy.py). Dedicated so that rotating the session or MFA
@@ -264,6 +271,8 @@ class Settings(BaseSettings):
             raise ValueError("METRICS_TOKEN is obviously unsuitable for production.")
         if self.ALLOW_DIRECT_STAFF_CREATION:
             raise ValueError("Direct staff creation is forbidden in production; use invitations.")
+        if self.MFA_DEV_BYPASS_EMAILS.strip():
+            raise ValueError("MFA_DEV_BYPASS_EMAILS must be empty when ENVIRONMENT=production.")
         if not self.MFA_REQUIRED_FOR_STAFF:
             raise ValueError("MFA_REQUIRED_FOR_STAFF must be true when ENVIRONMENT=production.")
         if not self.MFA_ENCRYPTION_KEY:
@@ -279,6 +288,10 @@ class Settings(BaseSettings):
                 "PRIVACY_FINGERPRINT_KEY must differ from JWT_SECRET_KEY and MFA_ENCRYPTION_KEY."
             )
         return self
+
+    @property
+    def mfa_dev_bypass_emails(self) -> frozenset[str]:
+        return frozenset(e.strip().lower() for e in self.MFA_DEV_BYPASS_EMAILS.split(",") if e.strip())
 
     @property
     def is_production(self) -> bool:
