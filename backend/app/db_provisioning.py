@@ -54,7 +54,19 @@ COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
     ),
     "messages": ("read_at",),
     "invitations": ("status", "accepted_at"),
-    "appointment_requests": ("status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at"),
+    # Step 5: the clinic's proposal is set, and cleared if the slot is taken before the answer.
+    "appointment_requests": (
+        "status",
+        "decided_by_user_id",
+        "decided_at",
+        "appointment_id",
+        "updated_at",
+        "proposed_staff_id",
+        "proposed_start",
+        "proposed_duration_minutes",
+        "proposed_at",
+        "proposed_by_user_id",
+    ),
     "medical_records": (
         "title",
         "content",

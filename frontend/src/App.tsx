@@ -22,6 +22,7 @@ import { PatientDashboard } from './pages/patient/PatientDashboard'
 import { HealthSummaryPage } from './pages/patient/HealthSummaryPage'
 import { BookingFlowPage } from './pages/patient/BookingFlowPage'
 import { PatientAppointmentDetailPage } from './pages/patient/PatientAppointmentDetailPage'
+import { RescheduleFlowPage } from './pages/patient/RescheduleFlowPage'
 import { PatientAppointmentsPage } from './pages/patient/PatientAppointmentsPage'
 import { PatientConsentsPage } from './pages/patient/PatientConsentsPage'
 import { PatientDocumentsPage } from './pages/patient/PatientDocumentsPage'
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="consultas" element={<PatientAppointmentsPage />} />
         <Route path="consultas/marcar" element={<BookingFlowPage />} />
         <Route path="consultas/:appointmentId" element={<PatientAppointmentDetailPage />} />
+        <Route path="consultas/:appointmentId/remarcar" element={<RescheduleFlowPage />} />
         <Route path="perfil" element={<PatientProfilePage />} />
         <Route path="consentimentos" element={<PatientConsentsPage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />

@@ -289,7 +289,7 @@ def cancel(
         actor_staff = staff_profile(db, staff_user) if staff_user.role == UserRole.STAFF else None
         if actor_staff is not None and actor_staff.staff_role != StaffRole.ADMIN:
             clinical_access(db, current.patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
-        appointment, ended = cancel_appointment(db, appointment_id, clinic_id)
+        appointment, ended = cancel_appointment(db, appointment_id, clinic_id, staff_user.id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CANCELLED,
         result=AuditResult.SUCCESS,

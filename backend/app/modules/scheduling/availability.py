@@ -62,7 +62,9 @@ def free_slots(
     day_from: date,
     day_to: date,
     now: datetime | None = None,
+    ignore_appointment_id: uuid.UUID | None = None,
 ) -> list[Slot]:
+    """`ignore_appointment_id`: the appointment being rescheduled, whose time is offered again."""
     if not staff_ids or day_to < day_from:
         return []
     now = now or datetime.now(UTC)
@@ -87,13 +89,16 @@ def free_slots(
         ScheduleAbsence.ends_at > range_start,
     ):
         busy[absence.staff_id].append((absence.starts_at, absence.ends_at))
-    for appointment in db.query(Appointment).filter(
+    appointments = db.query(Appointment).filter(
         Appointment.clinic_id == clinic_id,
         Appointment.staff_id.in_(staff_ids),
         Appointment.status.in_(ACTIVE),
         Appointment.scheduled_at < range_end,
         Appointment.ends_at > range_start,
-    ):
+    )
+    if ignore_appointment_id is not None:
+        appointments = appointments.filter(Appointment.id != ignore_appointment_id)
+    for appointment in appointments:
         busy[appointment.staff_id].append((appointment.scheduled_at, appointment.ends_at))
 
     slots: list[Slot] = []
@@ -116,21 +121,23 @@ def free_slots(
     return sorted(unique.values(), key=lambda slot: (slot.starts_at, str(slot.staff_id)))
 
 
-def patient_busy_intervals(db: Session, patient_id: uuid.UUID, slots: list[Slot]) -> list[tuple[datetime, datetime]]:
+def patient_busy_intervals(
+    db: Session, patient_id: uuid.UUID, slots: list[Slot], ignore_appointment_id: uuid.UUID | None = None
+) -> list[tuple[datetime, datetime]]:
     """The patient's active appointments within the span of `slots`."""
     if not slots:
         return []
     start = min(slot.starts_at for slot in slots)
     end = max(slot.ends_at for slot in slots)
-    return [
-        (scheduled_at, ends_at)
-        for scheduled_at, ends_at in db.query(Appointment.scheduled_at, Appointment.ends_at).filter(
-            Appointment.patient_id == patient_id,
-            Appointment.status.in_(ACTIVE),
-            Appointment.scheduled_at < end,
-            Appointment.ends_at > start,
-        )
-    ]
+    query = db.query(Appointment.scheduled_at, Appointment.ends_at).filter(
+        Appointment.patient_id == patient_id,
+        Appointment.status.in_(ACTIVE),
+        Appointment.scheduled_at < end,
+        Appointment.ends_at > start,
+    )
+    if ignore_appointment_id is not None:
+        query = query.filter(Appointment.id != ignore_appointment_id)
+    return [(scheduled_at, ends_at) for scheduled_at, ends_at in query]
 
 
 def slot_is_free(

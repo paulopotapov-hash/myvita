@@ -2,6 +2,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -13,8 +14,8 @@ from app.core.security import get_current_user
 from app.models import AppointmentType, AuditAction, AuditResult, ScheduleAbsence, User, UserRole
 from app.modules.appointments.schemas import AppointmentPatientView
 from app.modules.appointments.views import patient_views
-from app.modules.scheduling import bookings, service
-from app.modules.scheduling.audit import audit_auto_assignment, audit_scheduling
+from app.modules.scheduling import bookings, changes, service
+from app.modules.scheduling.audit import audit_auto_assignment, audit_released_assignment, audit_scheduling
 from app.modules.scheduling.availability import TZ, free_slots, patient_busy_intervals
 from app.modules.scheduling.eligibility import bookable_professionals, own_patient
 from app.modules.scheduling.schemas import (
@@ -31,6 +32,7 @@ from app.modules.scheduling.schemas import (
     BookingSettingsUpdate,
     ProfessionalOut,
     ProfessionalUpdate,
+    RescheduleIn,
     ScheduleRuleOut,
     SlotOut,
     SpecialtyCreate,
@@ -379,3 +381,76 @@ def book(
     )
     audit_auto_assignment(request, user, assignment, appointment.id)
     return patient_views(db, [appointment])[0]
+
+
+# --- the patient changes their own appointment (step 5) --------------------------------------
+
+
+def _audit_appointment(request: Request, user: User, action: AuditAction, appointment_id: object, **ids: object) -> None:
+    record_audit_event(
+        action=action,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="appointment",
+        resource_id=appointment_id,  # type: ignore[arg-type]
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={key: str(value) for key, value in ids.items()},
+    )
+
+
+@router.post("/bookings/{appointment_id}/cancel", response_model=AppointmentPatientView)
+def cancel_own(
+    appointment_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> AppointmentPatientView:
+    """The patient cancels their own appointment before the clinic's deadline (409 after
+    it, or if it is no longer active). The slot is free at once."""
+    with _denials(request, user, "appointment", appointment_id):
+        appointment, ended = changes.cancel_by_patient(db, user, appointment_id)
+    _audit_appointment(request, user, AuditAction.APPOINTMENT_CANCELLED, appointment.id, patient_id=appointment.patient_id, via="patient")
+    audit_released_assignment(request, user, ended, appointment.id, via="appointment_cancelled")
+    return patient_views(db, [appointment])[0]
+
+
+@router.get("/bookings/{appointment_id}/slots", response_model=list[SlotOut])
+def reschedule_slots(
+    appointment_id: uuid.UUID,
+    request: Request,
+    day_from: date = Query(alias="from"),
+    day_to: date = Query(alias="to"),
+    professional: Literal["same", "any"] = "same",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[SlotOut]:
+    """Free slots to move the patient's appointment to, with the same professional or any."""
+    with _denials(request, user, "appointment", appointment_id):
+        found = changes.reschedule_slots(db, user, appointment_id, day_from, day_to, same_professional=professional == "same")
+    return [
+        SlotOut(starts_at=slot.starts_at, ends_at=slot.ends_at, staff_id=slot.staff_id, staff_name=name) for slot, name in found
+    ]
+
+
+@router.post("/bookings/{appointment_id}/reschedule", response_model=AppointmentPatientView, status_code=201)
+def reschedule_own(
+    appointment_id: uuid.UUID,
+    payload: RescheduleIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AppointmentPatientView:
+    """Move the patient's appointment to a free slot: the old one is cancelled and the new
+    one booked together (409, nothing changed, if the slot was taken meanwhile). Returns the
+    new appointment."""
+    with _denials(request, user, "appointment", appointment_id):
+        new, old, created, ended = changes.reschedule_by_patient(
+            db, user, appointment_id, starts_at=payload.starts_at, staff_id=payload.staff_id
+        )
+    _audit_appointment(request, user, AuditAction.APPOINTMENT_RESCHEDULED, old.id, new_appointment_id=new.id)
+    _audit_appointment(
+        request, user, AuditAction.APPOINTMENT_CREATED, new.id, patient_id=new.patient_id, staff_id=new.staff_id, via="patient"
+    )
+    audit_released_assignment(request, user, ended, old.id, via="appointment_moved")
+    audit_auto_assignment(request, user, created, new.id)
+    return patient_views(db, [new])[0]

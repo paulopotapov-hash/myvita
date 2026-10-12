@@ -20,4 +20,8 @@ export const appointmentRequestsService = {
     api.post<AppointmentRequestPublic>(`${BASE}/${encodeURIComponent(id)}/accept`, payload),
   reject: (id: string) => api.post<AppointmentRequestPublic>(`${BASE}/${encodeURIComponent(id)}/reject`),
   cancel: (id: string) => api.post<AppointmentRequestPublic>(`${BASE}/${encodeURIComponent(id)}/cancel`),
+  propose: (id: string, payload: AppointmentRequestAccept) =>
+    api.post<AppointmentRequestPublic>(`${BASE}/${encodeURIComponent(id)}/propose`, payload),
+  acceptProposal: (id: string) => api.post<AppointmentRequestPublic>(`${BASE}/${encodeURIComponent(id)}/accept-proposal`),
+  declineProposal: (id: string) => api.post<AppointmentRequestPublic>(`${BASE}/${encodeURIComponent(id)}/decline-proposal`),
 }

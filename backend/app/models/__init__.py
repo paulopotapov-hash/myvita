@@ -5,7 +5,12 @@ autogenerate, and so `from app.models import User` etc. works elsewhere.
 
 from app.models.account_security import MfaRecoveryCode, PasswordResetToken, UserMfa  # noqa: F401
 from app.models.appointment import Appointment, AppointmentStatus  # noqa: F401
-from app.models.appointment_request import AppointmentRequest, AppointmentRequestStatus  # noqa: F401
+from app.models.appointment_request import (  # noqa: F401
+    OPEN_REQUEST_STATUSES,
+    AppointmentRequest,
+    AppointmentRequestStatus,
+    RequestPeriod,
+)
 from app.models.audit_log import AuditAction, AuditLog, AuditResult  # noqa: F401
 from app.models.clinic import Clinic  # noqa: F401
 from app.models.clinical_care_assignment import ClinicalCareAssignment  # noqa: F401

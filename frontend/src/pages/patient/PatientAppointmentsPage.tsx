@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { AppointmentRequestsPanel } from '../../components/AppointmentRequestsPanel'
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
+import { FormMessage } from '../../components/FormMessage'
 import { Icon } from '../../components/Icon'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { useAppointments } from '../../hooks/useClinicData'
@@ -17,6 +18,7 @@ type Tab = 'upcoming' | 'past'
 /** "As minhas consultas": upcoming and past appointments, booking, and pending requests. */
 export function PatientAppointmentsPage() {
   const [params] = useSearchParams()
+  const requested = (useLocation().state as { requested?: boolean } | null)?.requested === true
   const appointments = useAppointments()
   const [tab, setTab] = useState<Tab>('upcoming')
   const [showCancelled, setShowCancelled] = useState(false)
@@ -46,6 +48,8 @@ export function PatientAppointmentsPage() {
           Marcar consulta
         </Link>
       </div>
+
+      {requested && <FormMessage kind="success">Pedido enviado. A clínica responde na app: confirma ou propõe um horário.</FormMessage>}
 
       <div role="tablist" aria-label="Consultas" className="flex gap-2 border-b border-slate-200">
         {([['upcoming', `Próximas (${upcoming.length})`], ['past', 'Passadas']] as Array<[Tab, string]>).map(([key, label]) => (

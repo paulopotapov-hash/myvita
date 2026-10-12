@@ -55,6 +55,9 @@ class NotificationEvent(str, enum.Enum):
     APPOINTMENT_REQUEST_RECEIVED = "appointment_request_received"
     APPOINTMENT_REQUEST_ACCEPTED = "appointment_request_accepted"
     APPOINTMENT_REQUEST_REJECTED = "appointment_request_rejected"
+    APPOINTMENT_REQUEST_PROPOSED = "appointment_request_proposed"
+    APPOINTMENT_REQUEST_ANSWERED = "appointment_request_answered"
+    APPOINTMENT_REQUEST_REOPENED = "appointment_request_reopened"
 
 
 # Generic wording only. Existing texts are kept verbatim: the frontend and
@@ -113,6 +116,18 @@ TEMPLATES: dict[NotificationEvent, tuple[str, str]] = {
     NotificationEvent.APPOINTMENT_REQUEST_REJECTED: (
         "Pedido de consulta recusado",
         "O seu pedido de consulta não pôde ser aceite. Contacte a clínica se precisar.",
+    ),
+    NotificationEvent.APPOINTMENT_REQUEST_PROPOSED: (
+        "Proposta de horário",
+        "A clínica propôs um horário para o seu pedido de consulta. Abra as suas consultas para responder.",
+    ),
+    NotificationEvent.APPOINTMENT_REQUEST_ANSWERED: (
+        "Resposta a uma proposta",
+        "Um paciente respondeu a uma proposta de horário. Reveja os pedidos de consulta.",
+    ),
+    NotificationEvent.APPOINTMENT_REQUEST_REOPENED: (
+        "Pedido de consulta reaberto",
+        "O horário proposto a um paciente já não estava livre quando aceitou. Proponha outro horário.",
     ),
 }
 

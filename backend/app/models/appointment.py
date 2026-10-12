@@ -52,6 +52,13 @@ class Appointment(Base):
             name="fk_appointments_type_clinic",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["rescheduled_from_id", "clinic_id"],
+            ["appointments.id", "appointments.clinic_id"],
+            name="fk_appointments_rescheduled_from_clinic",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("rescheduled_from_id", name="uq_appointments_rescheduled_from"),
         # GiST exclusion constraints (no double booking of a professional or a patient)
         # live in migration 7d2e4b9a1c3f; see app/models/scheduling.py for why.
     )
@@ -85,6 +92,13 @@ class Appointment(Base):
     )
     reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Who cancelled and when (NULL for cancellations before step 5).
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT", name="fk_appointments_cancelled_by"), nullable=True
+    )
+    # The appointment this one replaces (a reschedule); at most one successor each.
+    rescheduled_from_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

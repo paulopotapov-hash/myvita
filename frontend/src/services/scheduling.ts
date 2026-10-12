@@ -56,4 +56,13 @@ export const schedulingService = {
 
   slots: (typeId: string, from: string, to: string, staffId?: string, signal?: AbortSignal) =>
     api.get<Slot[]>(`${BASE}/slots?${q({ appointment_type_id: typeId, from, to, staff_id: staffId })}`, signal),
+
+  /** The patient's own appointment: cancel (before the clinic's deadline) or move to a free slot. */
+  cancelBooking: (appointmentId: string) =>
+    api.post<AppointmentPatientView>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/cancel`),
+  rescheduleSlots: (appointmentId: string, from: string, to: string, professional: 'same' | 'any', signal?: AbortSignal) =>
+    api.get<Slot[]>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/slots?${q({ from, to, professional })}`, signal),
+  /** Returns the new appointment; 409 (nothing changed) if the slot was taken meanwhile. */
+  reschedule: (appointmentId: string, payload: { starts_at: string; staff_id?: string }) =>
+    api.post<AppointmentPatientView>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/reschedule`, payload),
 }

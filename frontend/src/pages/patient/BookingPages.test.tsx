@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
@@ -6,6 +7,7 @@ import { ApiError } from '../../lib/apiClient'
 import { BookingFlowPage } from './BookingFlowPage'
 import { PatientAppointmentDetailPage } from './PatientAppointmentDetailPage'
 import { PatientAppointmentsPage } from './PatientAppointmentsPage'
+import { RescheduleFlowPage } from './RescheduleFlowPage'
 
 const DAY = 86_400_000
 const h = vi.hoisted(() => ({
@@ -15,11 +17,18 @@ const h = vi.hoisted(() => ({
   slots: [] as unknown[],
   professionals: [] as unknown[],
   slotArgs: [] as unknown[][],
+  rescheduleSlotArgs: [] as unknown[][],
+  cancel: vi.fn(),
+  reschedule: vi.fn(),
+  ask: vi.fn(),
+}))
+
+vi.mock('../../services/appointmentRequests', () => ({
+  appointmentRequestsService: { create: (payload: unknown) => h.ask(payload) },
 }))
 
 vi.mock('../../components/AppointmentRequestsPanel', () => ({
   AppointmentRequestsPanel: () => <section aria-label="Pedidos de consulta">Pedidos</section>,
-  REQUEST_FORM_ANCHOR: 'pedir-consulta',
 }))
 vi.mock('../../hooks/useClinicData', () => ({
   useAppointments: () => ({ data: h.appointments, isLoading: false, isError: false }),
@@ -43,6 +52,12 @@ vi.mock('../../hooks/useScheduling', () => ({
     return { data: args[0] ? h.slots : undefined, isLoading: false, isError: false, refetch: h.refetchSlots }
   },
   useBook: () => ({ mutate: h.book, isPending: false }),
+  useCancelBooking: () => ({ mutate: h.cancel, isPending: false }),
+  useReschedule: () => ({ mutate: h.reschedule, isPending: false }),
+  useRescheduleSlots: (...args: unknown[]) => {
+    h.rescheduleSlotArgs.push(args)
+    return { data: args[4] ? h.slots : undefined, isLoading: false, isError: false, refetch: h.refetchSlots }
+  },
 }))
 
 function iso(days: number, hour: number) {
@@ -50,10 +65,11 @@ function iso(days: number, hour: number) {
   date.setUTCHours(hour, 0, 0, 0)
   return date.toISOString()
 }
-function appointment(id: string, days: number, status: string, type = 'Consulta de rotina') {
+function appointment(id: string, days: number, status: string, type = 'Consulta de rotina', extra: Record<string, unknown> = {}) {
   return {
     view: 'patient', id, staff_name: 'Dra. Rita', scheduled_at: iso(days, 10), ends_at: iso(days, 11), duration_minutes: 30, status,
     reason: null, appointment_type: type, specialty: 'Medicina Geral', location: 'Rua Sintética, 1',
+    can_change: status === 'confirmed' || status === 'scheduled', change_until: iso(days - 1, 10), booking_mode: 'direct', ...extra,
   }
 }
 
@@ -64,14 +80,17 @@ function LocationProbe() {
 
 function renderAt(path: string) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/patient/consultas" element={<PatientAppointmentsPage />} />
-        <Route path="/patient/consultas/marcar" element={<BookingFlowPage />} />
-        <Route path="/patient/consultas/:appointmentId" element={<PatientAppointmentDetailPage />} />
-      </Routes>
-      <LocationProbe />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/patient/consultas" element={<PatientAppointmentsPage />} />
+          <Route path="/patient/consultas/marcar" element={<BookingFlowPage />} />
+          <Route path="/patient/consultas/:appointmentId" element={<PatientAppointmentDetailPage />} />
+          <Route path="/patient/consultas/:appointmentId/remarcar" element={<RescheduleFlowPage />} />
+        </Routes>
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
@@ -80,6 +99,11 @@ beforeEach(() => {
   h.book.mockReset()
   h.refetchSlots.mockReset()
   h.slotArgs = []
+  h.rescheduleSlotArgs = []
+  h.cancel.mockReset()
+  h.reschedule.mockReset()
+  h.ask.mockReset()
+  h.ask.mockResolvedValue({ id: 'req-1' })
   h.professionals = [
     { id: 'd-known', full_name: 'Dra. Rita', known: true },
     { id: 'd-new', full_name: 'Dr. Rui', known: false },
@@ -158,12 +182,105 @@ describe('Marcar consulta', () => {
     expect(h.refetchSlots).toHaveBeenCalled()
   })
 
-  it('sends "só por pedido" types to the request form instead of slots', async () => {
+  it('turns "só por pedido" types into a request with preferences (step 4) and a summary', async () => {
     const user = userEvent.setup()
     renderAt('/patient/consultas/marcar')
     await user.click(screen.getByRole('button', { name: /Primeira consulta/ }))
     await user.click(screen.getByRole('button', { name: /Medicina Geral/ }))
-    expect(screen.getByRole('link', { name: 'Fazer um pedido de consulta' })).toHaveAttribute('href', '/patient/consultas#pedir-consulta')
+    expect(screen.getByRole('heading', { level: 2, name: 'Profissional' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Dr\. Rui/ }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Preferências' })).toBeInTheDocument()
     expect(h.slotArgs.every((args) => !args[0])).toBe(true)
+    const form = screen.getByRole('form', { name: 'Preferências para a consulta' })
+    await user.click(within(form).getByRole('checkbox', { name: 'Terça' }))
+    await user.click(within(form).getByRole('radio', { name: 'Tarde' }))
+    await user.type(within(form).getByLabelText('Motivo da consulta (opcional)'), 'Primeira vez')
+    await user.click(within(form).getByRole('button', { name: 'Continuar' }))
+    expect(screen.getByText('Passo 5 de 5')).toBeInTheDocument()
+    expect(screen.getByText(/terça · tarde/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Enviar pedido' }))
+    expect(h.ask).toHaveBeenCalledWith(expect.objectContaining({
+      appointment_type_id: 't-req', staff_id: 'd-new', preferred_weekdays: [1], preferred_period: 'afternoon', reason: 'Primeira vez',
+      preferred_from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    }))
+    await screen.findByText('/patient/consultas')
+  })
+})
+
+describe('Detalhe da consulta', () => {
+  it('offers cancel and reschedule until the deadline and cancels after confirmation', async () => {
+    h.appointments = [appointment('up', 5, 'confirmed')]
+    const user = userEvent.setup()
+    renderAt('/patient/consultas/up')
+    const actions = screen.getByRole('region', { name: 'Alterar a consulta' })
+    expect(actions).toHaveTextContent('Podes cancelar ou remarcar na app até')
+    expect(within(actions).getByRole('link', { name: 'Remarcar' })).toHaveAttribute('href', '/patient/consultas/up/remarcar')
+    await user.click(within(actions).getByRole('button', { name: 'Cancelar consulta' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Cancelar a consulta?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar consulta' }))
+    expect(h.cancel).toHaveBeenCalledWith('up', expect.any(Object))
+    const [, callbacks] = h.cancel.mock.calls[0] as [unknown, { onSuccess: () => void }]
+    act(() => callbacks.onSuccess())
+    expect(screen.getByText('Consulta cancelada. O horário ficou livre.')).toBeInTheDocument()
+  })
+
+  it('after the deadline shows the clinic phone instead of the actions', () => {
+    h.appointments = [appointment('soon', 0, 'confirmed', 'Consulta de rotina', { can_change: false })]
+    renderAt('/patient/consultas/soon')
+    const notice = screen.getByRole('region', { name: 'Alterar a consulta' })
+    expect(notice).toHaveTextContent('Já não é possível cancelar ou remarcar esta consulta na app.')
+    expect(within(notice).getByRole('link', { name: '210000000' })).toHaveAttribute('href', 'tel:210000000')
+    expect(screen.queryByRole('button', { name: 'Cancelar consulta' })).not.toBeInTheDocument()
+  })
+
+  it('offers nothing to change on a cancelled appointment', () => {
+    h.appointments = [appointment('gone', 5, 'cancelled')]
+    renderAt('/patient/consultas/gone')
+    expect(screen.queryByRole('region', { name: 'Alterar a consulta' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Remarcar', () => {
+  it('moves a direct appointment to a free slot and opens the new one', async () => {
+    h.appointments = [appointment('up', 5, 'confirmed')]
+    const user = userEvent.setup()
+    renderAt('/patient/consultas/up/remarcar')
+    await user.click(screen.getByRole('button', { name: /Com Dra\. Rita/ }))
+    expect(h.rescheduleSlotArgs.at(-1)?.slice(0, 1)).toEqual(['up'])
+    expect(h.rescheduleSlotArgs.at(-1)?.[3]).toBe('same')
+    await user.click(screen.getAllByRole('button', { name: /,/ })[0])
+    expect(screen.getByText('A consulta atual é cancelada ao confirmar.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Confirmar remarcação' }))
+    expect(h.reschedule).toHaveBeenCalledWith({ appointmentId: 'up', starts_at: (h.slots[0] as { starts_at: string }).starts_at }, expect.any(Object))
+    const [, callbacks] = h.reschedule.mock.calls[0] as [unknown, { onSuccess: (value: { id: string }) => void }]
+    act(() => callbacks.onSuccess({ id: 'moved' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/patient/consultas/moved')
+  })
+
+  it('returns to fresh slots when the new slot was taken meanwhile', async () => {
+    h.appointments = [appointment('up', 5, 'confirmed')]
+    const user = userEvent.setup()
+    renderAt('/patient/consultas/up/remarcar')
+    await user.click(screen.getByRole('button', { name: /Qualquer disponível/ }))
+    await user.click(screen.getAllByRole('button', { name: /Dr\. Rui/ })[0])
+    await user.click(screen.getByRole('button', { name: 'Confirmar remarcação' }))
+    expect(h.reschedule).toHaveBeenCalledWith(expect.objectContaining({ staff_id: 'd-new' }), expect.any(Object))
+    const [, callbacks] = h.reschedule.mock.calls[0] as [unknown, { onError: (error: unknown) => void }]
+    act(() => callbacks.onError(new ApiError(409, 'x', { detail: 'Este horário já não está disponível. Escolhe outro.' })))
+    expect(screen.getByRole('heading', { level: 2, name: 'Horário' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Este horário já não está disponível.')
+    expect(h.refetchSlots).toHaveBeenCalled()
+  })
+
+  it('asks the clinic to move a "só por pedido" appointment', async () => {
+    h.appointments = [appointment('req', 5, 'confirmed', 'Primeira consulta', { booking_mode: 'request' })]
+    const user = userEvent.setup()
+    renderAt('/patient/consultas/req/remarcar')
+    const form = screen.getByRole('form', { name: 'Preferências para a consulta' })
+    expect(within(form).queryByLabelText('Motivo da consulta (opcional)')).not.toBeInTheDocument()
+    await user.click(within(form).getByRole('radio', { name: 'Manhã' }))
+    await user.click(within(form).getByRole('button', { name: 'Enviar pedido de remarcação' }))
+    expect(h.ask).toHaveBeenCalledWith(expect.objectContaining({ reschedule_of_id: 'req', preferred_period: 'morning' }))
+    await screen.findByText('/patient/consultas/req')
   })
 })

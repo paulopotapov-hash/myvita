@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.schemas import RequestModel
 from app.models.appointment import AppointmentStatus
+from app.models.scheduling import BookingMode
 
 
 class AppointmentCreateRequest(RequestModel):
@@ -61,6 +62,12 @@ class AppointmentPatientView(BaseModel):
     appointment_type: str  # "Consulta" for appointments created before appointment types
     specialty: str | None
     location: str | None  # the clinic's address
+    # Step 5: whether the patient may still cancel or reschedule in the app, until when
+    # (the clinic's deadline), and how it is rescheduled: "direct" (free slots) or
+    # "request" (ask the clinic); None for appointments without a type.
+    can_change: bool
+    change_until: datetime | None
+    booking_mode: BookingMode | None
 
 
 AppointmentOut = Annotated[AppointmentPublic | AppointmentPatientView, Field(discriminator="view")]

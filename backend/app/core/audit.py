@@ -95,6 +95,8 @@ ALLOWED_METADATA_KEYS: frozenset[str] = frozenset(
         "corrects_result_id",  # UUID of the released clinical result a correction replaces (P2.4)
         "fields",  # names of the patient fields that changed (e.g. ["nif"]), never their values
         "category",  # clinical history category code (condition, allergy, ...), never the entry's content
+        "new_appointment_id",  # UUID of the appointment a reschedule created (scheduling step 5)
+        "reschedule_of_id",  # UUID of the appointment a request asks to move (scheduling step 5)
     }
 )
 # Defence in depth on top of the allowlist: a key that merely *mentions* one of

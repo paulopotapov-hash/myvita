@@ -167,22 +167,41 @@ export interface AppointmentPatientView {
   specialty: string | null
   /** The clinic's address. */
   location: string | null
+  /** Whether the patient may still cancel or reschedule in the app (server rule). */
+  can_change: boolean
+  /** Until when (the clinic's deadline); null once it is no longer active. */
+  change_until: string | null
+  /** How it is rescheduled: free slots ("direct") or a request to the clinic; null without a type. */
+  booking_mode: 'direct' | 'request' | null
 }
 
 export type AppointmentView = AppointmentPublic | AppointmentPatientView
 
-export type AppointmentRequestStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled'
+export type AppointmentRequestStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'proposed' | 'declined'
+export type RequestPeriod = 'morning' | 'afternoon'
 
-/** Patient-submitted request; patient/clinic come from the session, the professional is chosen by staff. */
+/**
+ * Patient-submitted request; patient/clinic come from the session. Either one preferred
+ * time, or a window (from/to, weekdays 0 = Monday, morning/afternoon). `reschedule_of_id`
+ * asks to move one of the patient's appointments (its type is kept).
+ */
 export interface AppointmentRequestCreate {
-  preferred_start: string // ISO datetime with timezone
+  preferred_start?: string // ISO datetime with timezone
+  preferred_from?: string // YYYY-MM-DD
+  preferred_to?: string
+  preferred_weekdays?: number[]
+  preferred_period?: RequestPeriod
+  appointment_type_id?: string
+  staff_id?: string
+  reschedule_of_id?: string
   reason?: string
 }
 
+/** Staff choose (accept) or propose the professional and slot; duration defaults to the type's. */
 export interface AppointmentRequestAccept {
   staff_id: string
   scheduled_at: string // ISO datetime with timezone
-  duration_minutes: number
+  duration_minutes?: number
 }
 
 export interface AppointmentRequestPublic {
@@ -190,7 +209,22 @@ export interface AppointmentRequestPublic {
   clinic_id: string
   patient_id: string
   patient_name: string
-  preferred_start: string
+  preferred_start: string | null
+  preferred_from: string | null
+  preferred_to: string | null
+  preferred_weekdays: number[] | null
+  preferred_period: RequestPeriod | null
+  appointment_type: string | null
+  specialty: string | null
+  /** Professional ids are given to staff only (null for the patient); names to everyone. */
+  staff_id: string | null
+  staff_name: string | null
+  reschedule_of_id: string | null
+  reschedule_of_start: string | null
+  proposed_staff_id: string | null
+  proposed_staff_name: string | null
+  proposed_start: string | null
+  proposed_duration_minutes: number | null
   /** null when the caller may not read clinical content. */
   reason: string | null
   status: AppointmentRequestStatus

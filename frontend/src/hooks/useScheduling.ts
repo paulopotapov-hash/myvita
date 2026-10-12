@@ -57,6 +57,39 @@ export function useBook() {
   })
 }
 
+export function useRescheduleSlots(appointmentId: string, from: string, to: string, professional: 'same' | 'any', enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, 'reschedule-slots', appointmentId, from, to, professional],
+    queryFn: ({ signal }) => schedulingService.rescheduleSlots(appointmentId, from, to, professional, signal),
+    enabled: enabled && Boolean(appointmentId && from && to),
+  })
+}
+
+function useRefreshAppointments() {
+  const client = useQueryClient()
+  return () => Promise.all([
+    client.invalidateQueries({ queryKey: KEY }),
+    client.invalidateQueries({ queryKey: ['appointments'] }),
+    client.invalidateQueries({ queryKey: ['appointment-requests'] }),
+  ])
+}
+
+/** The patient cancels their own appointment (the server applies the clinic's deadline). */
+export function useCancelBooking() {
+  const refresh = useRefreshAppointments()
+  return useMutation({ mutationFn: (appointmentId: string) => schedulingService.cancelBooking(appointmentId), onSettled: refresh })
+}
+
+/** The patient moves their own appointment to a free slot; resolves to the new appointment. */
+export function useReschedule() {
+  const refresh = useRefreshAppointments()
+  return useMutation({
+    mutationFn: ({ appointmentId, ...payload }: { appointmentId: string; starts_at: string; staff_id?: string }) =>
+      schedulingService.reschedule(appointmentId, payload),
+    onSettled: refresh,
+  })
+}
+
 export type SchedulingChange =
   | { kind: 'createSpecialty'; name: string }
   | { kind: 'updateSpecialty'; id: string; payload: Partial<Pick<Specialty, 'name' | 'active'>> }

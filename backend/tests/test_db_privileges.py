@@ -144,7 +144,10 @@ _NEW_TABLE_GRANTS = {
     "invitations": ((True, True, False, False, False, False, False), {"status", "accepted_at"}),
     "appointment_requests": (
         (True, True, False, False, False, False, False),
-        {"status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at"},
+        {
+            "status", "decided_by_user_id", "decided_at", "appointment_id", "updated_at",
+            "proposed_staff_id", "proposed_start", "proposed_duration_minutes", "proposed_at", "proposed_by_user_id",
+        },
     ),
     # P2.5: the edit and sharing history of a record is append-only.
     "medical_record_revisions": ((True, True, False, False, False, False, False), set()),

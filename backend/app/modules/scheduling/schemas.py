@@ -221,3 +221,18 @@ class BookingIn(RequestModel):
     @classmethod
     def blank_is_none(cls, value: str | None) -> str | None:
         return value or None
+
+
+class RescheduleIn(RequestModel):
+    """A patient moves their own appointment to a free slot (direct types only)."""
+
+    model_config = ConfigDict(extra="forbid")
+    starts_at: datetime
+    staff_id: uuid.UUID | None = None  # None: whoever offers the slot ("Qualquer disponível")
+
+    @field_validator("starts_at")
+    @classmethod
+    def with_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Indica o fuso horário.")
+        return value

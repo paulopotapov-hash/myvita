@@ -4,7 +4,18 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.models import Appointment, AppointmentStatus, Patient, ScheduleRule, ScheduleRuleType, Staff, User
+from app.models import (
+    Appointment,
+    AppointmentStatus,
+    AppointmentType,
+    BookingMode,
+    Patient,
+    ScheduleRule,
+    ScheduleRuleType,
+    Staff,
+    StaffRole,
+    User,
+)
 
 # "Médicos com quem já teve consulta": any appointment that was not cancelled.
 PAST_RELATION = (
@@ -31,13 +42,16 @@ def known_professionals(db: Session, patient: Patient) -> set[uuid.UUID]:
 def bookable_professionals(
     db: Session, *, clinic_id: uuid.UUID | str | None, appointment_type_id: uuid.UUID, patient: Patient | None
 ) -> list[tuple[Staff, str, bool]]:
-    """Professionals with a schedule for this type, as (staff, name, known_to_patient).
+    """Professionals with a schedule for this type, as (staff, name, known_to_patient). For a
+    type booked only by request, also the clinic's clinicians of the type's specialty: the
+    clinic picks the time, so a weekly schedule is not required.
 
     For a patient, professionals who do not accept new patients are left out unless the
     patient already had an appointment with them; known professionals come first.
     """
-    rows = (
-        db.query(Staff, User.full_name)
+    rows: list[tuple[Staff, str]] = [
+        (staff, name)
+        for staff, name in db.query(Staff, User.full_name)
         .join(User, User.id == Staff.user_id)
         .join(ScheduleRule, ScheduleRule.staff_id == Staff.id)
         .join(ScheduleRuleType, ScheduleRuleType.rule_id == ScheduleRule.id)
@@ -47,8 +61,22 @@ def bookable_professionals(
             ScheduleRuleType.appointment_type_id == appointment_type_id,
         )
         .distinct()
-        .all()
-    )
+    ]
+    appointment_type = db.get(AppointmentType, appointment_type_id)
+    if appointment_type is not None and appointment_type.booking_mode == BookingMode.REQUEST:
+        scheduled = {staff.id for staff, _name in rows}
+        rows += [
+            (staff, name)
+            for staff, name in db.query(Staff, User.full_name)
+            .join(User, User.id == Staff.user_id)
+            .filter(
+                Staff.clinic_id == clinic_id,
+                User.is_active.is_(True),
+                Staff.specialty_id == appointment_type.specialty_id,
+                Staff.staff_role.in_((StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.PHYSIOTHERAPIST)),
+            )
+            if staff.id not in scheduled
+        ]
     known = known_professionals(db, patient) if patient is not None else set()
     result = [
         (staff, name, staff.id in known)

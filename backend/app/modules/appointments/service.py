@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timedelta
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import text
@@ -9,6 +10,7 @@ from app.core.clinical_access import ClinicalAction, has_role_action, staff_prof
 from app.models import (
     Appointment,
     AppointmentStatus,
+    BookingSource,
     ClinicalCareAssignment,
     Patient,
     Staff,
@@ -120,12 +122,86 @@ def create_appointment(
     db: Session, clinic_id: str, payload: AppointmentCreateRequest, actor_user_id: uuid.UUID
 ) -> tuple[Appointment, AutoAssignment | None]:
     with booking_guard(db):
-        return _create_appointment(db, clinic_id, payload, actor_user_id)
+        appointment, assignment, _ended = _create_appointment(db, clinic_id, payload, actor_user_id)
+        return appointment, assignment
+
+
+def create_appointment_from_request(
+    db: Session,
+    clinic_id: str,
+    payload: AppointmentCreateRequest,
+    actor_user_id: uuid.UUID,
+    *,
+    appointment_type_id: uuid.UUID | None,
+    replaces: Appointment | None,
+    before_commit: Callable[[Appointment], None],
+) -> tuple[Appointment, AutoAssignment | None, AutoAssignment | None]:
+    """An accepted request: the appointment is typed, booked via "request", and, for a
+    reschedule request, replaces the patient's appointment (cancelled in the same
+    transaction). `before_commit` links the request to the new appointment, so both are
+    committed together. Returns the appointment and the care links created and ended."""
+    with booking_guard(db):
+        return _create_appointment(
+            db,
+            clinic_id,
+            payload,
+            actor_user_id,
+            appointment_type_id=appointment_type_id,
+            booked_via=BookingSource.REQUEST,
+            replaces=replaces,
+            before_commit=before_commit,
+        )
+
+
+def cancel_in_transaction(
+    db: Session,
+    appointment: Appointment,
+    *,
+    actor_user_id: uuid.UUID,
+    notify_patient: bool,
+    notify_staff: bool,
+    release_link: bool = True,
+) -> AutoAssignment | None:
+    """Cancel an active appointment inside the caller's transaction (under the clinic
+    lock): record who and when, notify, free the slot (flushed, so the caller's next
+    availability or overlap check already sees it) and end the care link it created.
+    Returns that link, for the caller to audit after the commit. A reschedule passes
+    `release_link=False` and releases it once the new appointment exists, so a link to
+    the same professional moves to the new appointment instead of ending."""
+    appointment.status = AppointmentStatus.CANCELLED
+    appointment.cancelled_at = datetime.now(UTC)
+    appointment.cancelled_by_user_id = actor_user_id
+    if notify_patient:
+        patient = db.get(Patient, appointment.patient_id)
+        if patient is not None:
+            _add_patient_notification(
+                db, patient, event=NotificationEvent.APPOINTMENT_CANCELLED, dedupe_key=str(appointment.id)
+            )
+    if notify_staff:
+        staff = db.get(Staff, appointment.staff_id)
+        if staff is not None and str(staff.clinic_id) == str(appointment.clinic_id):
+            _add_staff_notification(
+                db, staff, event=NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF, dedupe_key=str(appointment.id)
+            )
+    db.flush()
+    if not release_link:
+        return None
+    return release_care_assignment(
+        db, appointment=appointment, patient_id=appointment.patient_id, staff_id=appointment.staff_id
+    )
 
 
 def _create_appointment(
-    db: Session, clinic_id: str, payload: AppointmentCreateRequest, actor_user_id: uuid.UUID
-) -> tuple[Appointment, AutoAssignment | None]:
+    db: Session,
+    clinic_id: str,
+    payload: AppointmentCreateRequest,
+    actor_user_id: uuid.UUID,
+    *,
+    appointment_type_id: uuid.UUID | None = None,
+    booked_via: BookingSource = BookingSource.STAFF,
+    replaces: Appointment | None = None,
+    before_commit: Callable[[Appointment], None] | None = None,
+) -> tuple[Appointment, AutoAssignment | None, AutoAssignment | None]:
     """
     clinic_id comes from the authenticated staff member's session, never
     from the request body. We still re-verify that both the patient and
@@ -148,6 +224,21 @@ def _create_appointment(
             detail="Profissional não encontrado nesta clínica.",
         )
 
+    if replaces is not None:
+        # Freed first: the new time may overlap the old one (same patient, maybe same professional).
+        db.refresh(replaces)
+        if replaces.status in (AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED):
+            cancel_in_transaction(
+                db,
+                replaces,
+                actor_user_id=actor_user_id,
+                notify_patient=False,
+                notify_staff=replaces.staff_id != staff.id,
+                release_link=False,
+            )
+        else:
+            replaces = None  # cancelled or finished meanwhile: the new appointment simply stands alone
+
     _ensure_no_conflict(
         db,
         clinic_id=clinic_id,
@@ -166,6 +257,9 @@ def _create_appointment(
         scheduled_at=payload.scheduled_at,
         duration_minutes=payload.duration_minutes,
         reason=payload.reason,
+        appointment_type_id=appointment_type_id,
+        booked_via=booked_via,
+        rescheduled_from_id=replaces.id if replaces is not None else None,
     )
     db.add(appointment)
     db.flush()
@@ -173,6 +267,10 @@ def _create_appointment(
         db, patient, event=NotificationEvent.APPOINTMENT_CREATED, dedupe_key=str(appointment.id)
     )
     _add_staff_notification(db, staff, event=NotificationEvent.APPOINTMENT_ASSIGNED, dedupe_key=str(appointment.id))
+    ended = None
+    if replaces is not None:
+        # The old appointment's link: moves to this one (same professional) or ends.
+        ended = release_care_assignment(db, appointment=replaces, patient_id=replaces.patient_id, staff_id=replaces.staff_id)
     assignment = ensure_care_assignment(
         db,
         clinic_id=patient.clinic_id,
@@ -181,9 +279,11 @@ def _create_appointment(
         actor_user_id=actor_user_id,
         appointment_id=appointment.id,
     )
+    if before_commit is not None:
+        before_commit(appointment)
     commit_booking(db)
     db.refresh(appointment)
-    return appointment, assignment
+    return appointment, assignment, ended
 
 
 def get_appointment_for_clinic(db: Session, appointment_id: uuid.UUID, clinic_id: str) -> Appointment:
@@ -307,7 +407,7 @@ def _update_appointment(
 
 
 def cancel_appointment(
-    db: Session, appointment_id: uuid.UUID, clinic_id: str
+    db: Session, appointment_id: uuid.UUID, clinic_id: str, actor_user_id: uuid.UUID
 ) -> tuple[Appointment, AutoAssignment | None]:
     """Returns the cancelled appointment and the care assignment it had created, if that
     link ended with it (for the caller to audit)."""
@@ -317,22 +417,9 @@ def cancel_appointment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Consulta já cancelada.")
     if appointment.status in {AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Consulta já finalizada.")
-    appointment.status = AppointmentStatus.CANCELLED
-    patient = db.get(Patient, appointment.patient_id)
-    if patient is None:
+    if db.get(Patient, appointment.patient_id) is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Paciente da consulta indisponível.")
-    _add_patient_notification(
-        db, patient, event=NotificationEvent.APPOINTMENT_CANCELLED, dedupe_key=str(appointment.id)
-    )
-    staff = db.get(Staff, appointment.staff_id)
-    if staff is not None and str(staff.clinic_id) == str(clinic_id):
-        _add_staff_notification(
-            db, staff, event=NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF, dedupe_key=str(appointment.id)
-        )
-    db.flush()
-    ended = release_care_assignment(
-        db, appointment=appointment, patient_id=appointment.patient_id, staff_id=appointment.staff_id
-    )
+    ended = cancel_in_transaction(db, appointment, actor_user_id=actor_user_id, notify_patient=True, notify_staff=True)
     db.commit()
     db.refresh(appointment)
     return appointment, ended

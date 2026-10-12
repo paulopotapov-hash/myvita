@@ -22,19 +22,25 @@ from app.models import (
 from app.modules.appointment_requests.schemas import (
     AppointmentRequestAccept,
     AppointmentRequestCreate,
+    AppointmentRequestPropose,
     AppointmentRequestPublic,
 )
 from app.modules.appointment_requests.service import (
+    accept_proposal,
     accept_request,
     cancel_own_request,
     create_request,
+    decline_proposal,
+    display_names,
     list_for_clinic,
     list_for_patient,
     patient_name,
+    propose_request,
     reject_request,
     request_patient_id,
 )
-from app.modules.scheduling.audit import audit_auto_assignment
+from app.modules.appointments.views import UNKNOWN_PROFESSIONAL
+from app.modules.scheduling.audit import audit_auto_assignment, audit_released_assignment
 
 router = APIRouter()
 _patient_only = require_roles(UserRole.PATIENT)
@@ -67,19 +73,51 @@ def _require_decision_access(
         clinical_access(db, patient_id, user, ClinicalAction.EDIT_APPOINTMENTS)
 
 
-def _public(request: AppointmentRequest, name: str, *, may_read_reason: bool) -> AppointmentRequestPublic:
-    return AppointmentRequestPublic(
-        id=request.id,
-        clinic_id=request.clinic_id,
-        patient_id=request.patient_id,
-        patient_name=name,
-        preferred_start=request.preferred_start,
-        reason=request.reason if may_read_reason else None,
-        status=request.status,
-        appointment_id=request.appointment_id,
-        decided_at=request.decided_at,
-        created_at=request.created_at,
-    )
+def _public_many(
+    db: Session, rows: list[tuple[AppointmentRequest, str]], *, may_read_reason: bool, for_patient: bool
+) -> list[AppointmentRequestPublic]:
+    """Names for everyone; the professionals' ids only for staff (the patient never gets them)."""
+    names, types, starts = display_names(db, [request for request, _name in rows])
+    result = []
+    for request, name in rows:
+        type_name, specialty = types.get(request.appointment_type_id, (None, None)) if request.appointment_type_id else (None, None)
+        result.append(
+            AppointmentRequestPublic(
+                id=request.id,
+                clinic_id=request.clinic_id,
+                patient_id=request.patient_id,
+                patient_name=name,
+                preferred_start=request.preferred_start,
+                preferred_from=request.preferred_from,
+                preferred_to=request.preferred_to,
+                preferred_weekdays=request.preferred_weekdays,
+                preferred_period=request.preferred_period,
+                appointment_type=type_name,
+                specialty=specialty,
+                staff_id=None if for_patient else request.staff_id,
+                staff_name=names.get(request.staff_id, UNKNOWN_PROFESSIONAL) if request.staff_id else None,
+                reschedule_of_id=request.reschedule_of_id,
+                reschedule_of_start=starts.get(request.reschedule_of_id) if request.reschedule_of_id else None,
+                proposed_staff_id=None if for_patient else request.proposed_staff_id,
+                proposed_staff_name=(
+                    names.get(request.proposed_staff_id, UNKNOWN_PROFESSIONAL) if request.proposed_staff_id else None
+                ),
+                proposed_start=request.proposed_start,
+                proposed_duration_minutes=request.proposed_duration_minutes,
+                reason=request.reason if may_read_reason else None,
+                status=request.status,
+                appointment_id=request.appointment_id,
+                decided_at=request.decided_at,
+                created_at=request.created_at,
+            )
+        )
+    return result
+
+
+def _public(
+    db: Session, request: AppointmentRequest, name: str, *, may_read_reason: bool, for_patient: bool
+) -> AppointmentRequestPublic:
+    return _public_many(db, [(request, name)], may_read_reason=may_read_reason, for_patient=for_patient)[0]
 
 
 def _may_read_reason(user: User, db: Session) -> bool:
@@ -121,8 +159,9 @@ def create(
 ) -> AppointmentRequestPublic:
     """Patient requests an appointment for themselves (identity and clinic from the session)."""
     created = create_request(db, user, payload)
-    _audit(request, user, AuditAction.APPOINTMENT_REQUEST_CREATED, created)
-    return _public(created, user.full_name, may_read_reason=True)
+    extra = {"reschedule_of_id": str(created.reschedule_of_id)} if created.reschedule_of_id else None
+    _audit(request, user, AuditAction.APPOINTMENT_REQUEST_CREATED, created, extra)
+    return _public(db, created, user.full_name, may_read_reason=True, for_patient=True)
 
 
 @router.get("", response_model=list[AppointmentRequestPublic])
@@ -151,8 +190,22 @@ def list_requests(
             assigned_to_staff_id=clinician.id if clinician is not None else None,
         )
     response.headers["X-Total-Count"] = str(total)
-    may_read_reason = _may_read_reason(user, db)
-    return [_public(row, name, may_read_reason=may_read_reason) for row, name in rows]
+    return _public_many(db, rows, may_read_reason=_may_read_reason(user, db), for_patient=user.role == UserRole.PATIENT)
+
+
+def _audit_created_appointment(request: Request, user: User, appointment_id: uuid.UUID, clinic_id: uuid.UUID, via: str) -> None:
+    record_audit_event(
+        action=AuditAction.APPOINTMENT_CREATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="appointment",
+        resource_id=appointment_id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"via": via},
+    )
 
 
 @router.post("/{request_id}/accept", response_model=AppointmentRequestPublic, responses=_NOT_FOUND)
@@ -166,23 +219,58 @@ def accept(
     user: User = Depends(_scheduler_only),
 ) -> AppointmentRequestPublic:
     """Accept a pending request: creates the appointment with the chosen professional
-    and slot (existing overlap and tenant checks apply; 409 on overlap or if already processed)."""
+    and slot (existing overlap and tenant checks apply; 409 on overlap or if already
+    processed). A reschedule request also cancels the appointment it moves."""
     _require_decision_access(request, db, user, request_id, uuid.UUID(str(clinic_id)))
-    accepted, appointment, assignment = accept_request(db, request_id, uuid.UUID(str(clinic_id)), user, payload)
+    accepted, appointment, created, ended = accept_request(db, request_id, uuid.UUID(str(clinic_id)), user, payload)
     _audit(request, user, AuditAction.APPOINTMENT_REQUEST_ACCEPTED, accepted, {"appointment_id": str(appointment.id)})
-    audit_auto_assignment(request, user, assignment, appointment.id)
+    _audit_created_appointment(request, user, appointment.id, appointment.clinic_id, "request")
+    if appointment.rescheduled_from_id is not None:
+        _audit_rescheduled(request, user, appointment.rescheduled_from_id, appointment.id, appointment.clinic_id)
+    audit_released_assignment(request, user, ended, appointment.rescheduled_from_id, via="appointment_moved")
+    audit_auto_assignment(request, user, created, appointment.id)
+    return _public(db, accepted, patient_name(db, accepted), may_read_reason=_may_read_reason(user, db), for_patient=False)
+
+
+def _audit_rescheduled(
+    request: Request, user: User, old_id: uuid.UUID, new_id: uuid.UUID, clinic_id: uuid.UUID
+) -> None:
     record_audit_event(
-        action=AuditAction.APPOINTMENT_CREATED,
+        action=AuditAction.APPOINTMENT_RESCHEDULED,
         result=AuditResult.SUCCESS,
-        clinic_id=appointment.clinic_id,
+        clinic_id=clinic_id,
         actor_user_id=user.id,
         actor_email=user.email,
         resource_type="appointment",
-        resource_id=appointment.id,
+        resource_id=old_id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        metadata={"new_appointment_id": str(new_id)},
     )
-    return _public(accepted, patient_name(db, accepted), may_read_reason=_may_read_reason(user, db))
+
+
+@router.post("/{request_id}/propose", response_model=AppointmentRequestPublic, responses=_NOT_FOUND)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def propose(
+    request_id: uuid.UUID,
+    payload: AppointmentRequestPropose,
+    request: Request,
+    db: Session = Depends(get_db),
+    clinic_id: str = Depends(get_current_clinic_id),
+    user: User = Depends(_scheduler_only),
+) -> AppointmentRequestPublic:
+    """Propose a time and professional for a pending request; the patient accepts or
+    declines. The slot is checked now (409 if taken) but not held."""
+    _require_decision_access(request, db, user, request_id, uuid.UUID(str(clinic_id)))
+    proposed = propose_request(db, request_id, uuid.UUID(str(clinic_id)), user, payload)
+    _audit(
+        request,
+        user,
+        AuditAction.APPOINTMENT_REQUEST_PROPOSED,
+        proposed,
+        {"staff_id": str(proposed.proposed_staff_id)},
+    )
+    return _public(db, proposed, patient_name(db, proposed), may_read_reason=_may_read_reason(user, db), for_patient=False)
 
 
 @router.post("/{request_id}/reject", response_model=AppointmentRequestPublic, responses=_NOT_FOUND)
@@ -194,10 +282,11 @@ def reject(
     clinic_id: str = Depends(get_current_clinic_id),
     user: User = Depends(_scheduler_only),
 ) -> AppointmentRequestPublic:
+    """Refuse a pending request, or withdraw an unanswered proposal."""
     _require_decision_access(request, db, user, request_id, uuid.UUID(str(clinic_id)))
     rejected = reject_request(db, request_id, uuid.UUID(str(clinic_id)), user)
     _audit(request, user, AuditAction.APPOINTMENT_REQUEST_REJECTED, rejected)
-    return _public(rejected, patient_name(db, rejected), may_read_reason=_may_read_reason(user, db))
+    return _public(db, rejected, patient_name(db, rejected), may_read_reason=_may_read_reason(user, db), for_patient=False)
 
 
 @router.post("/{request_id}/cancel", response_model=AppointmentRequestPublic, responses=_NOT_FOUND)
@@ -208,7 +297,40 @@ def cancel(
     db: Session = Depends(get_db),
     user: User = Depends(_patient_only),
 ) -> AppointmentRequestPublic:
-    """Patient withdraws their own pending request."""
+    """Patient withdraws their own open request (pending, or with a proposal)."""
     cancelled = cancel_own_request(db, request_id, user)
     _audit(request, user, AuditAction.APPOINTMENT_REQUEST_CANCELLED, cancelled)
-    return _public(cancelled, user.full_name, may_read_reason=True)
+    return _public(db, cancelled, user.full_name, may_read_reason=True, for_patient=True)
+
+
+@router.post("/{request_id}/accept-proposal", response_model=AppointmentRequestPublic, responses=_NOT_FOUND)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def accept_clinic_proposal(
+    request_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_patient_only),
+) -> AppointmentRequestPublic:
+    """The patient accepts the clinic's proposal: the appointment is booked now. 409 if
+    the slot was taken meanwhile (the request goes back to the clinic)."""
+    accepted, appointment, created, ended = accept_proposal(db, request_id, user)
+    _audit(request, user, AuditAction.APPOINTMENT_REQUEST_PROPOSAL_ACCEPTED, accepted, {"appointment_id": str(appointment.id)})
+    _audit_created_appointment(request, user, appointment.id, appointment.clinic_id, "request")
+    if appointment.rescheduled_from_id is not None:
+        _audit_rescheduled(request, user, appointment.rescheduled_from_id, appointment.id, appointment.clinic_id)
+    audit_released_assignment(request, user, ended, appointment.rescheduled_from_id, via="appointment_moved")
+    audit_auto_assignment(request, user, created, appointment.id)
+    return _public(db, accepted, user.full_name, may_read_reason=True, for_patient=True)
+
+
+@router.post("/{request_id}/decline-proposal", response_model=AppointmentRequestPublic, responses=_NOT_FOUND)
+@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+def decline_clinic_proposal(
+    request_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_patient_only),
+) -> AppointmentRequestPublic:
+    declined = decline_proposal(db, request_id, user)
+    _audit(request, user, AuditAction.APPOINTMENT_REQUEST_PROPOSAL_DECLINED, declined)
+    return _public(db, declined, user.full_name, may_read_reason=True, for_patient=True)

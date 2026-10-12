@@ -149,10 +149,11 @@ def test_no_patient_facing_clinical_api_leaks_internal_identifiers(client: TestC
         assert "hemolisada" not in response.text, path
 
 
-# Scheduling (step 4) adds display fields only: type and specialty names and the clinic address.
+# Scheduling (step 4) adds display fields only: type and specialty names and the clinic address;
+# step 5 adds whether and until when the patient may change it, and how it is rescheduled.
 PATIENT_APPOINTMENT_KEYS = {
     "view", "id", "staff_name", "scheduled_at", "ends_at", "duration_minutes", "status", "reason",
-    "appointment_type", "specialty", "location",
+    "appointment_type", "specialty", "location", "can_change", "change_until", "booking_mode",
 }
 PATIENT_CONSENT_KEYS = {
     "view",
