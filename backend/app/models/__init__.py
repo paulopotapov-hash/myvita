@@ -42,6 +42,7 @@ from app.models.medical_record import (  # noqa: F401
 from app.models.medication import Medication, MedicationStatus  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.patient import Patient  # noqa: F401
+from app.models.patient_photo import PatientPhoto, PatientPhotoStatus, StorageDeletion  # noqa: F401
 from app.models.reminder import ReminderChannel, ReminderDelivery, ReminderStatus  # noqa: F401
 from app.models.scheduling import (  # noqa: F401
     CLINIC_TIME_ZONE,

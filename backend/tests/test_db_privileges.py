@@ -149,6 +149,13 @@ _NEW_TABLE_GRANTS = {
             "proposed_staff_id", "proposed_start", "proposed_duration_minutes", "proposed_at", "proposed_by_user_id",
         },
     ),
+    # Patient photos: deleted at once when no longer in use (the only table with DELETE
+    # among the restricted ones); their files are queued in storage_deletions, never deleted.
+    "patient_photos": (
+        (True, True, False, True, False, False, False),
+        {"status", "storage_key", "decided_by_staff_id", "decided_at", "rejection_reason"},
+    ),
+    "storage_deletions": ((True, True, False, False, False, False, False), {"attempts", "last_attempt_at", "deleted_at"}),
     # Step 7: a reminder sent is a fact: append-only.
     "reminder_deliveries": ((True, True, False, False, False, False, False), set()),
     # Step 6: the waiting list ends by status, never by deletion.

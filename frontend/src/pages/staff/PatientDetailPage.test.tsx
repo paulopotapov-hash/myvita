@@ -43,6 +43,10 @@ vi.mock('../../hooks/useClinicData', () => ({
   useAppointments: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 
+vi.mock('../../hooks/usePatientPhoto', () => ({
+  usePatientPhoto: () => ({ data: { approved: null, pending: null, can_review: false } }),
+  usePhotoDecision: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({
     user: { id: 'user-1', email: 'admin@example.com', full_name: 'Admin', clinic_id: 'clinic-1', ...sessionState },

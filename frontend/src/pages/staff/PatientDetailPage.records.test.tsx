@@ -22,6 +22,10 @@ const h = vi.hoisted(() => ({
   singleRequested: [] as Array<string | null>,
 }))
 
+vi.mock('../../hooks/usePatientPhoto', () => ({
+  usePatientPhoto: () => ({ data: { approved: null, pending: null, can_review: false } }),
+  usePhotoDecision: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({ user: { id: 'user-1', email: 'u@example.com', full_name: 'Utilizador', clinic_id: 'clinic-1', ...h.session } }),
 }))

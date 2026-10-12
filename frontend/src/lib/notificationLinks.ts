@@ -27,6 +27,11 @@ export function notificationLink(
       ? { to: `/patient/consultas/${encodeURIComponent(notification.appointment_target_id)}`, label: 'Abrir consulta' }
       : { to: '/app/consultas', label: 'Abrir consultas' }
   }
+  if (notification.target_type === 'patient' && notification.patient_target_id) {
+    return user?.role === 'patient'
+      ? { to: '/patient/perfil', label: 'Abrir perfil' }
+      : { to: `/app/pacientes/${encodeURIComponent(notification.patient_target_id)}`, label: 'Abrir ficha do paciente' }
+  }
   // Message notifications created before deep links existed.
   if (user && notification.title === NEW_MESSAGE_NOTIFICATION_TITLE) return { to: messagesBasePath(user), label: 'Abrir mensagens' }
   return { to: user?.role === 'patient' ? '/patient/consultas' : '/app/consultas', label: 'Abrir consultas' }

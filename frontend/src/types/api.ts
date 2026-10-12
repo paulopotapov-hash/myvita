@@ -456,12 +456,14 @@ export interface NotificationPublic {
   /** Deep-link target: 'document' uses `target_id`, 'conversation' uses `conversation_target_id`,
    * 'result' uses `result_target_id`, 'medical_record' uses `record_target_id`, 'appointment'
    * (reminders) uses `appointment_target_id`. The target page re-checks access on open. */
-  target_type: 'document' | 'conversation' | 'result' | 'medical_record' | 'appointment' | null
+  target_type: 'document' | 'conversation' | 'result' | 'medical_record' | 'appointment' | 'patient' | null
   target_id: string | null
   conversation_target_id: string | null
   result_target_id?: string | null
   record_target_id?: string | null
   appointment_target_id?: string | null
+  /** 'patient' (profile photo): the patient's file for staff, the profile for the patient. */
+  patient_target_id?: string | null
 }
 
 /** Uploader is exposed by display name only, never by internal user id. */

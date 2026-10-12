@@ -17,3 +17,5 @@ cryptography==50.0.2
 slowapi==0.1.10
 # Imported directly by app/core/rate_limit.py (per-user and per-account limits); slowapi's own dependency.
 limits==5.8.0
+# Patient profile photos: decode, check, strip metadata and resize (app/modules/patient_photos/images.py).
+pillow==12.3.0

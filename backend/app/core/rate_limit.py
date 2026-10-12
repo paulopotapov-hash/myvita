@@ -89,7 +89,7 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 @dataclass(frozen=True)
 class ModuleLimits:
-    """Per-user limits for one module's router. `special` maps (method, route path suffix)
+    """Per-user limits for one module's router. `special` maps (method, request path suffix)
     to a stricter limit for that endpoint (counted in its own bucket, as well as the
     module's write bucket)."""
 
@@ -115,6 +115,8 @@ MODULE_LIMITS: dict[str, ModuleLimits] = {
         # The header badges poll notifications: never in the way of a normal session.
         ModuleLimits("notifications", read="600/minute", write="120/minute"),
         ModuleLimits("patients"),
+        # Profile photo uploads (per user): a few retries, never a stream of images.
+        ModuleLimits("patient_photos", special={("POST", "/patient-photos"): "5/hour;20/day"}),
         ModuleLimits("scheduling"),
         ModuleLimits("staff"),
         ModuleLimits("users"),
@@ -154,11 +156,13 @@ def module_limit(name: str) -> Callable[[Request], None]:
         if not limiter.enabled:
             return
         key = user_or_ip(request)
-        route_path = getattr(request.scope.get("route"), "path", request.url.path)
+        # The request's own path: inside a router dependency the matched route only knows
+        # its path relative to the router's prefix.
+        path = request.url.path
         method = request.method
         buckets: list[tuple[str, list[RateLimitItem]]] = [("read", read) if method in _SAFE_METHODS else ("write", write)]
         for (special_method, suffix), items in special.items():
-            if method == special_method and route_path.endswith(suffix):
+            if method == special_method and path.endswith(suffix):
                 buckets.append((f"{special_method}:{suffix}", items))
         for bucket, items in buckets:
             if not _hit(items, "module", module.name, bucket, key):

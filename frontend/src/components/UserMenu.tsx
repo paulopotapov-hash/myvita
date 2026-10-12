@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useMyPhoto } from '../hooks/usePatientPhoto'
+import { useSession } from '../hooks/useSession'
 import type { AccountLinks } from '../lib/navItems'
+import { photoImageUrl } from '../services/patientPhotos'
 import { Avatar } from './Avatar'
 import { Icon } from './Icon'
 
@@ -17,6 +20,10 @@ export function UserMenu({ name, areaLabel, account, onLogout, logoutLabel, logo
   logoutLabel: string
   logoutPending: boolean
 }) {
+  const { user } = useSession()
+  // A patient's approved photo; staff keep their initials.
+  const photo = useMyPhoto(user?.role === 'patient')
+  const photoUrl = photo.data?.approved ? photoImageUrl(photo.data.approved.id) : null
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -51,13 +58,13 @@ export function UserMenu({ name, areaLabel, account, onLogout, logoutLabel, logo
         onClick={() => setOpen((value) => !value)}
         className="inline-flex h-11 items-center gap-2 rounded-full pr-1 pl-1 hover:bg-slate-100 lg:pr-3"
       >
-        <Avatar name={name} />
+        <Avatar name={name} photoUrl={photoUrl} />
         <span className="hidden text-sm font-medium text-slate-800 lg:inline">{name}</span>
       </button>
       {open && (
         <div id="account-menu" className="absolute right-0 z-40 mt-2 w-64 rounded-xl border border-slate-100 bg-white p-2 shadow-lg">
           <div className="flex items-center gap-3 px-3 py-2">
-            <Avatar name={name} size="sm" />
+            <Avatar name={name} size="sm" photoUrl={photoUrl} />
             <div className="min-w-0">
               <p className="truncate text-base font-medium text-slate-900">{name}</p>
               <p className="text-sm text-slate-600">{areaLabel}</p>

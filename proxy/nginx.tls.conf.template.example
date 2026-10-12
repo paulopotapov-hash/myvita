@@ -69,6 +69,15 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 
+    # Profile photo uploads only: 5 MiB plus multipart overhead, matching the backend's
+    # own body limit for this path (app/modules/patient_photos/images.py MAX_BYTES).
+    location = /api/v1/patient-photos {
+        client_max_body_size 6m;
+        proxy_pass http://backend:8000;
+        include /etc/nginx/proxy_params;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
     location /api/ {
         proxy_pass http://backend:8000;
         include /etc/nginx/proxy_params;

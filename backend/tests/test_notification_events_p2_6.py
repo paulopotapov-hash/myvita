@@ -290,6 +290,7 @@ def test_target_columns_match_their_type():
         "result_target_id": target_id,
         "record_target_id": None,
         "appointment_target_id": None,
+        "patient_target_id": None,
     }
     assert NotificationTarget(TargetType.MEDICAL_RECORD, target_id).columns() == {
         "target_id": None,
@@ -297,6 +298,7 @@ def test_target_columns_match_their_type():
         "result_target_id": None,
         "record_target_id": target_id,
         "appointment_target_id": None,
+        "patient_target_id": None,
     }
     assert NotificationTarget(TargetType.DOCUMENT, target_id).columns()["target_id"] == target_id
     assert NotificationTarget(TargetType.CONVERSATION, target_id).columns()["conversation_target_id"] == target_id

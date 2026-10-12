@@ -41,7 +41,8 @@ Never paste secret values, real credentials or clinical data into this checklist
 - [ ] Confirm the runtime role has only what the app needs. Run `backend/tests/test_db_privileges.py` against a staging copy, or check `has_table_privilege` / `has_column_privilege` for at least these:
   - `medications`, `clinical_history_entries`: no DELETE;
   - `clinical_history_revisions`, `medical_record_revisions`, `audit_logs`, `documents`, `reminder_deliveries`: no UPDATE or DELETE;
-  - `waitlist_entries`, `waitlist_offers`, `appointment_requests`: no DELETE, UPDATE only on their status columns;
+  - `waitlist_entries`, `waitlist_offers`, `appointment_requests`, `storage_deletions`: no DELETE, UPDATE only on their status columns;
+  - `patient_photos`: DELETE allowed (photos no longer in use are deleted at once, `docs/patient-photos.md`), UPDATE only on its status columns — the only restricted table with DELETE;
   - no DDL.
 
 ## 3. After the deploy
@@ -55,6 +56,7 @@ Never paste secret values, real credentials or clinical data into this checklist
 - [ ] The backend log shows no startup error and no `MFA dev bypass is ACTIVE` warning (see above). Alerts and monitoring report the new version as healthy.
 - [ ] The off-site backup job ran after the deploy, or is scheduled for the next window.
 - [ ] The scheduling `jobs` service is running (`docker compose -f docker-compose.prod.yml ps jobs`), and its log shows a `scheduling_jobs reminders=… expired_offers=… closed_entries=…` line every minute (counts only). Without it, no appointment reminder is sent and waiting-list offers never expire. More than one replica is safe: a database lock lets one pass run at a time.
+- [ ] No patient-photo file is waiting to be deleted for long: `SELECT count(*) FROM storage_deletions WHERE deleted_at IS NULL AND requested_at < now() - interval '1 hour'` is 0. If not, the `jobs` log shows why (`patient_photo_file_delete_failed`, error class only) — usually permissions on the document volume.
 - [ ] Reminders go out **in the app only**. E-mail and SMS reminders are prepared in the data model but switched off: there is no sender for them, and turning them on needs its own review (transactional e-mail never carries clinical information, `docs/email-delivery.md`).
 
 ## 4. When to stop, and how to roll back

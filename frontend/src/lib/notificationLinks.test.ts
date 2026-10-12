@@ -30,6 +30,12 @@ describe('notificationLink', () => {
     expect(notificationLink(target, { role: 'staff' })).toEqual({ to: '/app/consultas', label: 'Abrir consultas' })
   })
 
+  it('opens the profile for a photo decision, and the patient file for the doctor', () => {
+    const target = notification({ title: 'Foto de perfil aprovada', target_type: 'patient', patient_target_id: 'pat-1' })
+    expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/perfil', label: 'Abrir perfil' })
+    expect(notificationLink(target, { role: 'staff' })).toEqual({ to: '/app/pacientes/pat-1', label: 'Abrir ficha do paciente' })
+  })
+
   it('opens the patient documents with the document highlighted', () => {
     const target = notification({ title: 'Novo documento', target_type: 'document', target_id: 'doc-1' })
     expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/documentos?document=doc-1', label: 'Abrir documento' })

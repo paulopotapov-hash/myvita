@@ -10,6 +10,7 @@ const { patientState, refetch, updateMutate } = vi.hoisted(() => ({
   updateMutate: vi.fn(),
 }))
 
+vi.mock('../../components/patientPhoto/ProfilePhotoSection', () => ({ ProfilePhotoSection: () => null }))
 vi.mock('../../hooks/useSession', () => ({
   useSession: () => ({ user: { id: 'u1', full_name: 'Ana Silva', email: 'ana@example.pt', role: 'patient', patient_id: 'p1' } }),
 }))

@@ -25,6 +25,7 @@ _TARGET_COLUMNS = {
     "result": "result_target_id",
     "medical_record": "record_target_id",
     "appointment": "appointment_target_id",
+    "patient": "patient_target_id",
 }
 
 
@@ -38,7 +39,7 @@ def _target_type_check(columns: dict[str, str]) -> str:
     return " OR ".join(branches)
 
 
-# Kept in sync with migration c3e5a7b9d1f2 (constraint text is not autogenerate-compared).
+# Kept in sync with migration d5e7f9a1b3c4 (constraint text is not autogenerate-compared).
 TARGET_TYPE_CHECK = _target_type_check(_TARGET_COLUMNS)
 
 
@@ -83,6 +84,13 @@ class Notification(Base):
             ondelete="CASCADE",
             use_alter=True,
         ),
+        ForeignKeyConstraint(
+            ["patient_target_id", "clinic_id"],
+            ["patients.id", "patients.clinic_id"],
+            name="fk_notification_patient_target",
+            ondelete="CASCADE",
+            use_alter=True,
+        ),
         # Exactly one target column per target type (each has its own same-clinic foreign key).
         CheckConstraint(TARGET_TYPE_CHECK, name="ck_notification_target_type"),
         # Idempotency of domain events (app/modules/notifications/events.py): one
@@ -111,6 +119,7 @@ class Notification(Base):
     result_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     record_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     appointment_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    patient_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     # Internal idempotency key, never exposed by the API.
     event_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

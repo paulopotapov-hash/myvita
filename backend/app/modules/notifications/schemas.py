@@ -17,4 +17,5 @@ class NotificationPublic(BaseModel):
     result_target_id: uuid.UUID | None = None
     record_target_id: uuid.UUID | None = None
     appointment_target_id: uuid.UUID | None = None
+    patient_target_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}

@@ -1,4 +1,5 @@
-"""Background jobs for scheduling (step 7): `python -m app.jobs` (see __main__.py)."""
+"""Background jobs (`python -m app.jobs`, see __main__.py): scheduling (step 7), and the
+retry of patient-photo file deletions that failed."""
 
 import logging
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models import Appointment, AppointmentStatus, WaitlistEntry, WaitlistStatus
+from app.modules.patient_photos.service import retry_file_deletions
 from app.modules.scheduling import clock, reminders, waitlist
 
 logger = logging.getLogger("myvita.jobs")
@@ -21,6 +23,7 @@ class TickResult:
     reminders: int = 0
     expired_offers: int = 0
     closed_entries: int = 0
+    deleted_files: int = 0
 
 
 def close_past_entries(db: Session, now: datetime) -> int:
@@ -58,12 +61,14 @@ def run_once(db: Session) -> TickResult:
                 reminders=reminders.send_due_reminders(db, now),
                 expired_offers=waitlist.expire_offers(db),
                 closed_entries=close_past_entries(db, now),
+                deleted_files=retry_file_deletions(db),
             )
             logger.info(
-                "scheduling_jobs reminders=%d expired_offers=%d closed_entries=%d",
+                "scheduling_jobs reminders=%d expired_offers=%d closed_entries=%d deleted_files=%d",
                 result.reminders,
                 result.expired_offers,
                 result.closed_entries,
+                result.deleted_files,
             )
             return result
         finally:

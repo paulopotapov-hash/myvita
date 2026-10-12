@@ -1,3 +1,4 @@
+import { ProfilePhotoSection } from '../../components/patientPhoto/ProfilePhotoSection'
 import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { ErrorState } from '../../components/ErrorState'
@@ -46,6 +47,7 @@ export function PatientProfilePage() {
           <Row label="Clínica" value={clinicName ?? '—'} />
         </dl>
       </section>
+      {user.patient_id && <ProfilePhotoSection name={user.full_name} />}
       {patient.isLoading && <LoadingSpinner label="A carregar dados do perfil…" />}
       {patient.isError && <ErrorState message="Não foi possível carregar os dados do perfil clínico." onRetry={() => patient.refetch()} />}
       {patient.data && <PersonalData patient={patient.data} />}

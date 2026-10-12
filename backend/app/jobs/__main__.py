@@ -3,8 +3,9 @@
     python -m app.jobs            # every JOBS_INTERVAL_SECONDS (default 60), until stopped
     python -m app.jobs --once     # one pass, then exit (cron, tests, manual runs)
 
-Each pass sends the due appointment reminders, expires waiting-list offers and closes
-waiting-list entries whose appointment has passed. Several runners are safe: a pass runs
+Each pass sends the due appointment reminders, expires waiting-list offers, closes
+waiting-list entries whose appointment has passed, and retries deleting the files of
+patient photos whose deletion failed. Several runners are safe: a pass runs
 only while it holds a database advisory lock, and every write is idempotent.
 """
 

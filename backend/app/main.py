@@ -50,6 +50,9 @@ from app.modules.medical_records.router import router as medical_records_router
 from app.modules.medications.router import router as medications_router
 from app.modules.messages.router import router as messages_router
 from app.modules.notifications.router import router as notifications_router
+from app.modules.patient_photos.images import MAX_BYTES as PHOTO_MAX_BYTES
+from app.modules.patient_photos.images import TOO_LARGE as PHOTO_TOO_LARGE
+from app.modules.patient_photos.router import router as patient_photos_router
 from app.modules.patients.router import router as patients_router
 from app.modules.scheduling.router import router as scheduling_router
 from app.modules.staff.router import router as staff_router
@@ -210,15 +213,20 @@ async def observability(request: Request, call_next: Callable[[Request], Awaitab
                 and request.url.path.startswith("/api/v1/patients/")
                 and request.url.path.endswith("/documents")
             )
+            # Profile photos (POST /api/v1/patient-photos): up to 5 MB plus form overhead.
+            is_photo_upload = request.method == "POST" and request.url.path == "/api/v1/patient-photos"
             body_limit = (
                 settings.DOCUMENT_MAX_UPLOAD_BYTES + 1_048_576
                 if is_document_upload
+                else PHOTO_MAX_BYTES + 1_048_576
+                if is_photo_upload
                 else settings.MAX_REQUEST_BODY_BYTES
             )
             if declared_size < 0:
                 response = JSONResponse(status_code=400, content={"detail": "Content-Length inválido."})
             elif declared_size > body_limit:
-                response = JSONResponse(status_code=413, content={"detail": "Pedido demasiado grande."})
+                too_large = PHOTO_TOO_LARGE if is_photo_upload else "Pedido demasiado grande."
+                response = JSONResponse(status_code=413, content={"detail": too_large})
             else:
                 response = await call_next(request)
         elif response is None:
@@ -323,5 +331,11 @@ app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"]
 app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"], dependencies=[Depends(module_limit("clinical_results"))])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"], dependencies=[Depends(module_limit("documents"))])
 app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"], dependencies=[Depends(module_limit("messages"))])
+app.include_router(
+    patient_photos_router,
+    prefix="/api/v1/patient-photos",
+    tags=["patient-photos"],
+    dependencies=[Depends(module_limit("patient_photos"))],
+)
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"], dependencies=[Depends(module_limit("notifications"))])

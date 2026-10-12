@@ -20,7 +20,9 @@ Idempotent: safe to run on every deployment. The runtime role ends up with:
   history of medical records, P2.5);
 - SELECT/INSERT plus column-level UPDATE (no DELETE) on conversations,
   messages, invitations, appointment_requests, medical_records,
-  clinical_results and the waiting list (see COLUMN_UPDATE_TABLES). For clinical results this means
+  clinical_results, the waiting list and storage_deletions (see COLUMN_UPDATE_TABLES);
+- the same plus DELETE on patient_photos only (COLUMN_UPDATE_DELETE_TABLES): photos no
+  longer in use are deleted at once, by decision; For clinical results this means
   a result can never be deleted or moved to another patient, clinic, author or
   correction chain by the app role; that a RELEASED result is never updated
   or deleted is enforced by a table trigger (migration 8d9e0f1a2b3c);
@@ -68,6 +70,8 @@ COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
         "proposed_at",
         "proposed_by_user_id",
     ),
+    # Files of deleted patient photos still to remove: marked done, never deleted.
+    "storage_deletions": ("attempts", "last_attempt_at", "deleted_at"),
     # Step 6: waiting list. Entries and offers end by status, never by deletion.
     "waitlist_entries": ("status", "ended_at"),
     "waitlist_offers": ("status", "decided_at", "new_appointment_id"),
@@ -142,6 +146,12 @@ COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
         "released_by_staff_id",
         "updated_at",
     ),
+}
+# Tables whose rows the app deletes for good, by decision: SELECT/INSERT, UPDATE on these
+# columns only, and DELETE. Patient photos no longer in use are deleted at once, row and
+# file (decision of 2026-10-12, docs/patient-photos.md). No other table gets DELETE.
+COLUMN_UPDATE_DELETE_TABLES: dict[str, tuple[str, ...]] = {
+    "patient_photos": ("status", "storage_key", "decided_by_staff_id", "decided_at", "rejection_reason"),
 }
 # Deprecated tables kept by integration decision (app/core/schema_policy.py): the app never
 # touches them, so the runtime role gets no privilege at all on them.
@@ -222,6 +232,11 @@ def provision_runtime_role(connection: Connection, *, role: str, password: str) 
         column_list = ", ".join(f'"{column}"' for column in columns)
         statements.append(f'REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON "{table}" FROM "{role}"')
         statements.append(f'GRANT SELECT, INSERT ON "{table}" TO "{role}"')
+        statements.append(f'GRANT UPDATE ({column_list}) ON "{table}" TO "{role}"')
+    for table, columns in COLUMN_UPDATE_DELETE_TABLES.items():
+        column_list = ", ".join(f'"{column}"' for column in columns)
+        statements.append(f'REVOKE UPDATE, TRUNCATE, REFERENCES, TRIGGER ON "{table}" FROM "{role}"')
+        statements.append(f'GRANT SELECT, INSERT, DELETE ON "{table}" TO "{role}"')
         statements.append(f'GRANT UPDATE ({column_list}) ON "{table}" TO "{role}"')
     for table in NO_ACCESS_TABLES:
         # Tolerate databases where a deprecated table never existed (e.g. built from Parent B).

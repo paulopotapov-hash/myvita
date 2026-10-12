@@ -60,6 +60,9 @@ class NotificationEvent(str, enum.Enum):
     APPOINTMENT_REQUEST_REOPENED = "appointment_request_reopened"
     WAITLIST_OFFER = "waitlist_offer"
     APPOINTMENT_REMINDER = "appointment_reminder"
+    PATIENT_PHOTO_SUBMITTED = "patient_photo_submitted"
+    PATIENT_PHOTO_APPROVED = "patient_photo_approved"
+    PATIENT_PHOTO_REJECTED = "patient_photo_rejected"
 
 
 # Generic wording only. Existing texts are kept verbatim: the frontend and
@@ -139,6 +142,15 @@ TEMPLATES: dict[NotificationEvent, tuple[str, str]] = {
         "Lembrete de consulta",
         "Tem uma consulta marcada para breve. Abra-a para confirmar a presença ou, se ainda estiver no prazo, cancelar.",
     ),
+    NotificationEvent.PATIENT_PHOTO_SUBMITTED: (
+        "Foto de perfil por aprovar",
+        "Um paciente enviou uma foto de perfil. Abra a ficha do paciente para a aprovar ou rejeitar.",
+    ),
+    NotificationEvent.PATIENT_PHOTO_APPROVED: ("Foto de perfil aprovada", "A sua foto de perfil foi aprovada."),
+    NotificationEvent.PATIENT_PHOTO_REJECTED: (
+        "Foto de perfil não aprovada",
+        "A sua foto de perfil não foi aprovada. Abra o seu perfil para ver o motivo e enviar outra.",
+    ),
 }
 
 
@@ -148,6 +160,7 @@ class TargetType(str, enum.Enum):
     RESULT = "result"
     MEDICAL_RECORD = "medical_record"
     APPOINTMENT = "appointment"
+    PATIENT = "patient"
 
 
 @dataclass(frozen=True)
@@ -164,6 +177,7 @@ class NotificationTarget:
             "result_target_id": self.id if self.type is TargetType.RESULT else None,
             "record_target_id": self.id if self.type is TargetType.MEDICAL_RECORD else None,
             "appointment_target_id": self.id if self.type is TargetType.APPOINTMENT else None,
+            "patient_target_id": self.id if self.type is TargetType.PATIENT else None,
         }
 
 
@@ -190,6 +204,7 @@ def notify(
             "result_target_id": None,
             "record_target_id": None,
             "appointment_target_id": None,
+            "patient_target_id": None,
         }
     )
     event_key = f"{event.value}:{dedupe_key}" if dedupe_key is not None else None

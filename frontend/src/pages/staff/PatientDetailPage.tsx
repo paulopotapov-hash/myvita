@@ -1,3 +1,7 @@
+import { Avatar } from '../../components/Avatar'
+import { PhotoReviewCard } from '../../components/patientPhoto/PhotoReviewCard'
+import { usePatientPhoto } from '../../hooks/usePatientPhoto'
+import { photoImageUrl } from '../../services/patientPhotos'
 import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { ClinicalResultsSection } from '../../components/ClinicalResultsSection'
@@ -129,6 +133,7 @@ function ClinicalPatientFile() {
   const [activeSection, setActiveSection] = useState<PatientSection>('personal')
   const id = routeId
   const patientQuery = usePatient(id)
+  const photo = usePatientPhoto(id)
   const appointments = useAppointments()
   const patient = patientQuery.data
   const patientAppointments = (appointments.data ?? []).filter((item) => item.view === 'staff' && item.patient_id === id)
@@ -147,10 +152,15 @@ function ClinicalPatientFile() {
     <div className="flex flex-col gap-6">
       <Breadcrumb name={patient.full_name} />
 
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{patient.full_name}</h1>
-        <p className="text-sm text-slate-500">Ficha do paciente</p>
+      <div className="flex items-center gap-4">
+        <Avatar name={patient.full_name} size="lg" photoUrl={photo.data?.approved ? photoImageUrl(photo.data.approved.id) : null} />
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">{patient.full_name}</h1>
+          <p className="text-sm text-slate-500">Ficha do paciente</p>
+        </div>
       </div>
+
+      {photo.data?.can_review && photo.data.pending && <PhotoReviewCard name={patient.full_name} pending={photo.data.pending} />}
 
       <nav role="tablist" aria-label="Secções da ficha" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
         {([
