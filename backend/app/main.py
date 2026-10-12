@@ -2,7 +2,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -27,7 +27,7 @@ from app.core.metrics import (
     render_prometheus_text,
     status_class,
 )
-from app.core.rate_limit import limiter
+from app.core.rate_limit import limiter, module_limit
 from app.core.request_context import (
     REQUEST_ID_HEADER,
     bind_request_id,
@@ -309,19 +309,19 @@ def _document_storage_writable() -> bool:
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(clinics_router, prefix="/api/v1/clinics", tags=["clinics"])
-app.include_router(patients_router, prefix="/api/v1/patients", tags=["patients"])
-app.include_router(staff_router, prefix="/api/v1/staff", tags=["staff"])
-app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
-app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["appointments"])
-app.include_router(appointment_requests_router, prefix="/api/v1/appointment-requests", tags=["appointment-requests"])
-app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
-app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
-app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
-app.include_router(clinical_history_router, prefix="/api/v1", tags=["clinical-history"])
-app.include_router(scheduling_router, prefix="/api/v1/scheduling", tags=["scheduling"])
-app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
-app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"])
-app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
-app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])
+app.include_router(patients_router, prefix="/api/v1/patients", tags=["patients"], dependencies=[Depends(module_limit("patients"))])
+app.include_router(staff_router, prefix="/api/v1/staff", tags=["staff"], dependencies=[Depends(module_limit("staff"))])
+app.include_router(users_router, prefix="/api/v1/users", tags=["users"], dependencies=[Depends(module_limit("users"))])
+app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["appointments"], dependencies=[Depends(module_limit("appointments"))])
+app.include_router(appointment_requests_router, prefix="/api/v1/appointment-requests", tags=["appointment-requests"], dependencies=[Depends(module_limit("appointment_requests"))])
+app.include_router(consents_router, prefix="/api/v1", tags=["consents"], dependencies=[Depends(module_limit("consents"))])
+app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"], dependencies=[Depends(module_limit("medical_records"))])
+app.include_router(medications_router, prefix="/api/v1", tags=["medications"], dependencies=[Depends(module_limit("medications"))])
+app.include_router(clinical_history_router, prefix="/api/v1", tags=["clinical-history"], dependencies=[Depends(module_limit("clinical_history"))])
+app.include_router(scheduling_router, prefix="/api/v1/scheduling", tags=["scheduling"], dependencies=[Depends(module_limit("scheduling"))])
+app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"], dependencies=[Depends(module_limit("waitlist"))])
+app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"], dependencies=[Depends(module_limit("clinical_results"))])
+app.include_router(documents_router, prefix="/api/v1", tags=["documents"], dependencies=[Depends(module_limit("documents"))])
+app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"], dependencies=[Depends(module_limit("messages"))])
 app.include_router(invitations_router, prefix="/api/v1/invitations", tags=["invitations"])
-app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"], dependencies=[Depends(module_limit("notifications"))])

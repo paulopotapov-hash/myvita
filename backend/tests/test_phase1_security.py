@@ -1226,11 +1226,13 @@ def test_login_rate_limit_returns_429_and_is_audited(world: World):
 
     limiter.reset()
     attacker = Actor("bruteforce", "rate-limit-probe@phase1.example")
+    # A different address each time: this is the per-IP limit (the per-account limit,
+    # 5 failures per address, is tested in test_rate_limits.py).
     codes = [
         attacker.client.post(
-            "/api/v1/auth/login", json={"email": attacker.email, "password": "x"}
+            "/api/v1/auth/login", json={"email": f"probe-{index}-{attacker.email}", "password": "x"}
         ).status_code
-        for _ in range(12)
+        for index in range(12)
     ]
     assert codes[:10] == [401] * 10 and set(codes[10:]) == {429}
     limited = attacker.client.post("/api/v1/auth/login", json={"email": attacker.email, "password": "x"})

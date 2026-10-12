@@ -15,3 +15,5 @@ pyjwt==2.15.1
 # AES-GCM encryption of staff TOTP seeds at rest (app/core/mfa.py).
 cryptography==50.0.2
 slowapi==0.1.10
+# Imported directly by app/core/rate_limit.py (per-user and per-account limits); slowapi's own dependency.
+limits==5.8.0

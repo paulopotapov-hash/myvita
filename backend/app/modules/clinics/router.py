@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import audit_request
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.rate_limit import REGISTRATION_RATE_LIMIT, limiter
+from app.core.rate_limit import REGISTRATION_RATE_LIMIT, per_ip
 from app.core.security import get_optional_user, set_session_cookie
 from app.models import AuditAction, Clinic, User
 from app.modules.clinics.schemas import ClinicOnboardingRequest, ClinicPublic, ClinicSummary
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("", response_model=ClinicPublic, status_code=201)
-@limiter.limit(REGISTRATION_RATE_LIMIT)
+@per_ip(REGISTRATION_RATE_LIMIT)
 def create_clinic(
     request: Request, payload: ClinicOnboardingRequest, response: Response, db: Session = Depends(get_db)
 ) -> Clinic:

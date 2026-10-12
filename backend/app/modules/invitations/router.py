@@ -7,7 +7,7 @@ from app.core.audit import audit_request, client_ip, record_audit_event
 from app.core.clinical_access import ClinicalAction, clinical_staff
 from app.core.database import get_db
 from app.core.email import deliver, invitation_email
-from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, INVITATION_PUBLIC_RATE_LIMIT, limiter
+from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, INVITATION_PUBLIC_RATE_LIMIT, limiter, per_ip
 from app.core.security import require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, User, UserRole
 from app.modules.auth.router import _public_user
@@ -109,7 +109,7 @@ def invite_patient(
 
 
 @router.post("/preview", response_model=InvitationPreview)
-@limiter.limit(INVITATION_PUBLIC_RATE_LIMIT)
+@per_ip(INVITATION_PUBLIC_RATE_LIMIT)
 def preview(
     payload: InvitationPreviewRequest,
     request: Request,
@@ -127,7 +127,7 @@ def preview(
 
 
 @router.post("/accept", response_model=UserPublic)
-@limiter.limit(INVITATION_PUBLIC_RATE_LIMIT)
+@per_ip(INVITATION_PUBLIC_RATE_LIMIT)
 def accept(
     payload: InvitationAcceptRequest,
     request: Request,

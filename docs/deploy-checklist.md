@@ -29,7 +29,7 @@ Never paste secret values, real credentials or clinical data into this checklist
 
 ### Rate limiting and processes
 - [ ] The backend runs **one** process (the image starts a single `uvicorn` with no `--workers`). Rate-limit counters live in that process's memory.
-- [ ] If this deploy runs **more than one** backend process or replica (uvicorn/gunicorn workers, or several containers), Redis must be configured for rate limiting **before** it goes live. Otherwise every process keeps its own counters, so limits multiply by the number of processes and the per-account login limit stops being reliable. This is not configured today. The switch is a storage setting of the rate limiter (see the module notes in `backend/app/core/rate_limit.py`), but it needs a Redis service and a test. Do not mark it done unless it was actually configured and tested.
+- [ ] If this deploy runs **more than one** backend process or replica (uvicorn/gunicorn workers, or several containers), Redis must be configured for rate limiting **before** it goes live. Otherwise every process keeps its own counters, so limits multiply by the number of processes and the per-account login limit stops being reliable. This is not configured today. The switch is the `RATE_LIMIT_STORAGE_URI` setting, but it needs a Redis service, the `redis` package and a test: follow `docs/rate-limiting.md`. Do not mark it done unless it was actually configured and tested.
 
 ## 2. Migrate, then provision the runtime role
 

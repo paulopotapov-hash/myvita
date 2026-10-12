@@ -65,7 +65,7 @@ function fakeBackend(
     }
     if (url.pathname === '/api/v1/conversations/conv-1/messages' && method === 'POST') {
       if (options.sendStatus === 403) return json({ detail: 'Esta conversa já não está activa. Para continuar, contacte a clínica.' }, 403)
-      if (options.sendStatus) return json({ detail: 'Demasiados pedidos' }, options.sendStatus)
+      if (options.sendStatus) return json({ detail: 'Demasiados pedidos em pouco tempo. Espera um momento e tenta novamente.' }, options.sendStatus)
       const body = JSON.parse(String(init?.body)).body as string
       const created = authored(options.currentUserId, { id: `msg-${messages.length + 1}`, body, created_at: '2026-10-03T10:00:00Z' })
       messages.push(created)

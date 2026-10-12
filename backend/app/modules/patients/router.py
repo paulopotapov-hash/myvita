@@ -7,7 +7,13 @@ from app.core.audit import audit_denials, client_ip, record_audit_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.pt_identifiers import mask
-from app.core.rate_limit import AUTHENTICATED_WRITE_RATE_LIMIT, REGISTRATION_RATE_LIMIT, limiter
+from app.core.rate_limit import (
+    AUTHENTICATED_WRITE_RATE_LIMIT,
+    IDENTIFIER_REVEAL_RATE_LIMIT,
+    REGISTRATION_RATE_LIMIT,
+    limiter,
+    per_ip,
+)
 from app.core.security import get_current_clinic_id, get_current_user, require_roles, set_session_cookie
 from app.models import AuditAction, AuditResult, Patient, User, UserRole
 from app.modules.patients.schemas import (
@@ -79,7 +85,7 @@ def _summary(patient: Patient) -> PatientSummary:
 
 
 @router.post("/register", response_model=PatientPublic, status_code=201)
-@limiter.limit(REGISTRATION_RATE_LIMIT)
+@per_ip(REGISTRATION_RATE_LIMIT)
 def register(
     request: Request, payload: PatientRegisterRequest, response: Response, db: Session = Depends(get_db)
 ) -> PatientPublic:
@@ -210,7 +216,7 @@ def identification(
 
 
 @router.post("/{patient_id}/identification/reveal", response_model=PatientIdentifiersRevealed)
-@limiter.limit(AUTHENTICATED_WRITE_RATE_LIMIT)
+@limiter.limit(IDENTIFIER_REVEAL_RATE_LIMIT)
 def reveal(
     patient_id: uuid.UUID,
     request: Request,

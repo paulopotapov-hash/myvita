@@ -26,7 +26,7 @@ export function toUserMessage(error: unknown): string {
       case 422:
         return 'Verifica os dados introduzidos.'
       case 429:
-        return 'Demasiados pedidos em pouco tempo. Espera um momento e tenta novamente.'
+        return error.detail ?? 'Demasiados pedidos em pouco tempo. Espera um momento e tenta novamente.'
       case 503:
         return 'O serviço está temporariamente indisponível. Tenta novamente dentro de instantes.'
       default:

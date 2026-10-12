@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     # over out of band unless e-mail delivery is configured below).
     PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=60, ge=5, le=1440)
 
+    # Rate-limit counters (docs/rate-limiting.md). In memory for the single backend process
+    # deployed today; with more than one process or replica, point it at a shared Redis
+    # (e.g. redis://redis:6379/0, which also needs the `redis` package) before going live.
+    RATE_LIMIT_STORAGE_URI: str = "memory://"
+
     # E-mail delivery (docs/email-delivery.md). Off by default: nothing is sent
     # and every response says `delivery: "disabled"`. When on, invitation and
     # reset links are e-mailed through an authenticated SMTP relay over TLS

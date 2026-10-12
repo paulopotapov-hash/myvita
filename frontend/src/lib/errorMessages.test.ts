@@ -18,6 +18,11 @@ describe('toUserMessage', () => {
       .toBe('Já existe uma consulta sobreposta.')
   })
 
+  it('shows why a request was limited when the backend says (e.g. an account locked after failed logins)', () => {
+    expect(toUserMessage(new ApiError(429, 'limited', { detail: 'Demasiadas tentativas falhadas para esta conta. Tenta novamente dentro de 15 minutos.' })))
+      .toBe('Demasiadas tentativas falhadas para esta conta. Tenta novamente dentro de 15 minutos.')
+  })
+
   it('distinguishes network errors from HTTP errors', () => {
     expect(toUserMessage(new NetworkError())).toContain('Sem ligação ao servidor')
   })

@@ -16,7 +16,11 @@ from app.core.rate_limit import (
     AUTHENTICATED_WRITE_RATE_LIMIT,
     LOGIN_RATE_LIMIT,
     PASSWORD_RESET_RATE_LIMIT,
+    check_account_not_locked,
+    clear_failed_logins,
     limiter,
+    per_ip,
+    record_failed_login,
 )
 from app.core.security import (
     clear_session_cookie,
@@ -105,17 +109,27 @@ def _clear_mfa_challenge(response: Response) -> None:
 
 
 @router.post("/login", response_model=UserPublic | MfaChallengeResponse)
-@limiter.limit(LOGIN_RATE_LIMIT)
+@per_ip(LOGIN_RATE_LIMIT)
 def login(
     request: Request, payload: LoginRequest, response: Response, db: Session = Depends(get_db)
 ) -> UserPublic | MfaChallengeResponse:
-    user = authenticate(
-        db,
-        payload.email,
-        payload.password,
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
+    # Per account as well as per IP: 5 failed attempts in 15 minutes lock this address
+    # out for the rest of the window, whatever IP they come from (app/core/rate_limit.py).
+    account = email_fingerprint(payload.email)
+    check_account_not_locked(request, account)
+    try:
+        user = authenticate(
+            db,
+            payload.email,
+            payload.password,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            record_failed_login(account)
+        raise
+    clear_failed_logins(account)
     if mfa_enabled_for(db, user):
         # No session yet: only a short-lived, path-scoped challenge that the
         # /mfa/verify endpoint exchanges for a session.
@@ -139,7 +153,7 @@ def login(
 
 
 @router.post("/mfa/verify", response_model=UserPublic)
-@limiter.limit(LOGIN_RATE_LIMIT)
+@per_ip(LOGIN_RATE_LIMIT)
 def verify_mfa(
     request: Request,
     payload: MfaCodeRequest,
@@ -315,7 +329,7 @@ def mfa_regenerate_recovery_codes(
 
 
 @router.post("/password-reset/confirm", status_code=204)
-@limiter.limit(PASSWORD_RESET_RATE_LIMIT)
+@per_ip(PASSWORD_RESET_RATE_LIMIT)
 def password_reset_confirm(
     payload: PasswordResetConfirmRequest,
     request: Request,
@@ -336,7 +350,7 @@ _RESET_REQUEST_ANSWER_EMAIL = (
 
 
 @router.post("/password-reset/request", status_code=202, response_model=GenericMessage)
-@limiter.limit(PASSWORD_RESET_RATE_LIMIT)
+@per_ip(PASSWORD_RESET_RATE_LIMIT)
 def password_reset_request(
     payload: PasswordResetRequest,
     request: Request,

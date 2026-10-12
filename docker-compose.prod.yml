@@ -133,6 +133,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to the public hostname}"]}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS as a JSON list of public hostnames}
       TRUSTED_PROXIES: '["172.30.0.10"]'
+      # In memory for this single backend process; shared Redis before any second process
+      # (docs/rate-limiting.md).
+      RATE_LIMIT_STORAGE_URI: ${RATE_LIMIT_STORAGE_URI:-memory://}
     depends_on:
       db:
         condition: service_healthy
