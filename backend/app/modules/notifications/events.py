@@ -59,6 +59,7 @@ class NotificationEvent(str, enum.Enum):
     APPOINTMENT_REQUEST_ANSWERED = "appointment_request_answered"
     APPOINTMENT_REQUEST_REOPENED = "appointment_request_reopened"
     WAITLIST_OFFER = "waitlist_offer"
+    APPOINTMENT_REMINDER = "appointment_reminder"
 
 
 # Generic wording only. Existing texts are kept verbatim: the frontend and
@@ -134,6 +135,10 @@ TEMPLATES: dict[NotificationEvent, tuple[str, str]] = {
         "Vaga mais cedo disponível",
         "Abriu uma vaga mais cedo para uma das suas consultas. Abra as suas consultas para a aceitar antes que expire.",
     ),
+    NotificationEvent.APPOINTMENT_REMINDER: (
+        "Lembrete de consulta",
+        "Tem uma consulta marcada para breve. Abra-a para confirmar a presença ou, se ainda estiver no prazo, cancelar.",
+    ),
 }
 
 
@@ -142,6 +147,7 @@ class TargetType(str, enum.Enum):
     CONVERSATION = "conversation"
     RESULT = "result"
     MEDICAL_RECORD = "medical_record"
+    APPOINTMENT = "appointment"
 
 
 @dataclass(frozen=True)
@@ -157,6 +163,7 @@ class NotificationTarget:
             "conversation_target_id": self.id if self.type is TargetType.CONVERSATION else None,
             "result_target_id": self.id if self.type is TargetType.RESULT else None,
             "record_target_id": self.id if self.type is TargetType.MEDICAL_RECORD else None,
+            "appointment_target_id": self.id if self.type is TargetType.APPOINTMENT else None,
         }
 
 
@@ -177,7 +184,13 @@ def notify(
     target_columns = (
         target.columns()
         if target is not None
-        else {"target_id": None, "conversation_target_id": None, "result_target_id": None, "record_target_id": None}
+        else {
+            "target_id": None,
+            "conversation_target_id": None,
+            "result_target_id": None,
+            "record_target_id": None,
+            "appointment_target_id": None,
+        }
     )
     event_key = f"{event.value}:{dedupe_key}" if dedupe_key is not None else None
 

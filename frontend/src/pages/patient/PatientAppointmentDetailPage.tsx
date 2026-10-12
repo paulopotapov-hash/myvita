@@ -7,7 +7,7 @@ import { ErrorState } from '../../components/ErrorState'
 import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { useAppointment } from '../../hooks/useClinicData'
-import { useBookingSettings, useCancelBooking } from '../../hooks/useScheduling'
+import { useBookingSettings, useCancelBooking, useConfirmBooking } from '../../hooks/useScheduling'
 import { useWaitlist, useWaitlistChange } from '../../hooks/useWaitlist'
 import { formatClinicDay, formatClinicTime } from '../../lib/clinicTime'
 import { toUserMessage } from '../../lib/errorMessages'
@@ -30,6 +30,7 @@ export function PatientAppointmentDetailPage() {
   const appointment = useAppointment(appointmentId)
   const settings = useBookingSettings()
   const cancel = useCancelBooking()
+  const confirmPresence = useConfirmBooking()
   const [confirming, setConfirming] = useState(false)
   const [cancelled, setCancelled] = useState(false)
   const [error, setError] = useState('')
@@ -76,6 +77,27 @@ export function PatientAppointmentDetailPage() {
             <dt className="text-slate-500">Estado</dt><dd><AppointmentStatusBadge status={data.status} /></dd>
             {data.reason && (<><dt className="text-slate-500">Motivo</dt><dd className="whitespace-pre-wrap">{data.reason}</dd></>)}
           </dl>
+        </section>
+      )}
+
+      {data && active && (data.can_confirm || data.patient_confirmed_at) && (
+        <section aria-label="Presença" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-5">
+          {data.patient_confirmed_at ? (
+            <p className="text-sm font-medium text-teal-800">Presença confirmada. Obrigado!</p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">Confirma que vens a esta consulta.</p>
+              <Button
+                isLoading={confirmPresence.isPending}
+                onClick={() => {
+                  setError('')
+                  confirmPresence.mutate(appointmentId, { onError: (failure) => setError(toUserMessage(failure)) })
+                }}
+              >
+                Confirmar presença
+              </Button>
+            </>
+          )}
         </section>
       )}
 

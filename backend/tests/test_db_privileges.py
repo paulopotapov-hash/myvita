@@ -149,6 +149,8 @@ _NEW_TABLE_GRANTS = {
             "proposed_staff_id", "proposed_start", "proposed_duration_minutes", "proposed_at", "proposed_by_user_id",
         },
     ),
+    # Step 7: a reminder sent is a fact: append-only.
+    "reminder_deliveries": ((True, True, False, False, False, False, False), set()),
     # Step 6: the waiting list ends by status, never by deletion.
     "waitlist_entries": ((True, True, False, False, False, False, False), {"status", "ended_at"}),
     "waitlist_offers": ((True, True, False, False, False, False, False), {"status", "decided_at", "new_appointment_id"}),

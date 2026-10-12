@@ -289,12 +289,16 @@ def test_target_columns_match_their_type():
         "conversation_target_id": None,
         "result_target_id": target_id,
         "record_target_id": None,
+        "appointment_target_id": None,
     }
     assert NotificationTarget(TargetType.MEDICAL_RECORD, target_id).columns() == {
         "target_id": None,
         "conversation_target_id": None,
         "result_target_id": None,
         "record_target_id": target_id,
+        "appointment_target_id": None,
     }
     assert NotificationTarget(TargetType.DOCUMENT, target_id).columns()["target_id"] == target_id
     assert NotificationTarget(TargetType.CONVERSATION, target_id).columns()["conversation_target_id"] == target_id
+    # Step 7: a reminder links to its appointment.
+    assert NotificationTarget(TargetType.APPOINTMENT, target_id).columns()["appointment_target_id"] == target_id

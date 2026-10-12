@@ -43,6 +43,7 @@ class AppointmentPublic(BaseModel):
     duration_minutes: int
     status: AppointmentStatus
     reason: str | None
+    patient_confirmed_at: datetime | None = None  # the patient confirmed they will come (step 7)
 
     model_config = {"from_attributes": True}
 
@@ -68,6 +69,10 @@ class AppointmentPatientView(BaseModel):
     can_change: bool
     change_until: datetime | None
     booking_mode: BookingMode | None
+    # Step 7: the patient's confirmation that they will come (from the reminder, or any time
+    # before the start while it is active).
+    patient_confirmed_at: datetime | None
+    can_confirm: bool
 
 
 AppointmentOut = Annotated[AppointmentPublic | AppointmentPatientView, Field(discriminator="view")]

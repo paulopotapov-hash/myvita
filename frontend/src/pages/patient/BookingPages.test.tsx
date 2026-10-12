@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   slotArgs: [] as unknown[][],
   rescheduleSlotArgs: [] as unknown[][],
   cancel: vi.fn(),
+  confirm: vi.fn(),
   reschedule: vi.fn(),
   ask: vi.fn(),
   waitlist: [] as unknown[],
@@ -62,6 +63,7 @@ vi.mock('../../hooks/useScheduling', () => ({
   },
   useBook: () => ({ mutate: h.book, isPending: false }),
   useCancelBooking: () => ({ mutate: h.cancel, isPending: false }),
+  useConfirmBooking: () => ({ mutate: h.confirm, isPending: false }),
   useReschedule: () => ({ mutate: h.reschedule, isPending: false }),
   useRescheduleSlots: (...args: unknown[]) => {
     h.rescheduleSlotArgs.push(args)
@@ -78,7 +80,8 @@ function appointment(id: string, days: number, status: string, type = 'Consulta 
   return {
     view: 'patient', id, staff_name: 'Dra. Rita', scheduled_at: iso(days, 10), ends_at: iso(days, 11), duration_minutes: 30, status,
     reason: null, appointment_type: type, specialty: 'Medicina Geral', location: 'Rua Sintética, 1',
-    can_change: status === 'confirmed' || status === 'scheduled', change_until: iso(days - 1, 10), booking_mode: 'direct', ...extra,
+    can_change: status === 'confirmed' || status === 'scheduled', change_until: iso(days - 1, 10), booking_mode: 'direct',
+    patient_confirmed_at: null, can_confirm: status === 'confirmed' || status === 'scheduled', ...extra,
   }
 }
 
@@ -110,6 +113,7 @@ beforeEach(() => {
   h.slotArgs = []
   h.rescheduleSlotArgs = []
   h.cancel.mockReset()
+  h.confirm.mockReset()
   h.reschedule.mockReset()
   h.ask.mockReset()
   h.ask.mockResolvedValue({ id: 'req-1' })
@@ -339,5 +343,19 @@ describe('Lista de espera', () => {
     act(() => callbacks.onSuccess({ id: 'earlier' }))
     expect(screen.getByTestId('location')).toHaveTextContent('/patient/consultas/earlier')
     expect(screen.getByText('Consulta antecipada. A anterior foi cancelada.')).toBeInTheDocument()
+  })
+})
+
+describe('Confirmar presença', () => {
+  it('confirms from the appointment page, and shows it once confirmed', async () => {
+    h.appointments = [appointment('soon', 1, 'confirmed', 'Consulta de rotina', { can_change: false })]
+    const user = userEvent.setup()
+    const view = renderAt('/patient/consultas/soon')
+    await user.click(within(screen.getByRole('region', { name: 'Presença' })).getByRole('button', { name: 'Confirmar presença' }))
+    expect(h.confirm).toHaveBeenCalledWith('soon', expect.any(Object))
+    view.unmount()
+    h.appointments = [appointment('soon', 1, 'confirmed', 'Consulta de rotina', { can_change: false, can_confirm: false, patient_confirmed_at: iso(0, 9) })]
+    renderAt('/patient/consultas/soon')
+    expect(screen.getByRole('region', { name: 'Presença' })).toHaveTextContent('Presença confirmada')
   })
 })

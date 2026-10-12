@@ -80,6 +80,7 @@ class AuditAction(str, enum.Enum):
     WAITLIST_LEFT = "waitlist_left"
     WAITLIST_OFFER_ACCEPTED = "waitlist_offer_accepted"
     WAITLIST_OFFER_DECLINED = "waitlist_offer_declined"
+    APPOINTMENT_PATIENT_CONFIRMED = "appointment_patient_confirmed"
     CLINIC_CREATED = "clinic_created"
     CONSENT_GRANTED = "consent_granted"
     CONSENT_REVOKED = "consent_revoked"

@@ -16,4 +16,5 @@ class NotificationPublic(BaseModel):
     conversation_target_id: uuid.UUID | None = None
     result_target_id: uuid.UUID | None = None
     record_target_id: uuid.UUID | None = None
+    appointment_target_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}

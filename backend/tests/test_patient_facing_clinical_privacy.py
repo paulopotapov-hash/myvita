@@ -154,6 +154,7 @@ def test_no_patient_facing_clinical_api_leaks_internal_identifiers(client: TestC
 PATIENT_APPOINTMENT_KEYS = {
     "view", "id", "staff_name", "scheduled_at", "ends_at", "duration_minutes", "status", "reason",
     "appointment_type", "specialty", "location", "can_change", "change_until", "booking_mode",
+    "patient_confirmed_at", "can_confirm",
 }
 PATIENT_CONSENT_KEYS = {
     "view",

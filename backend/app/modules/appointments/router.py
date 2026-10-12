@@ -71,6 +71,7 @@ def _public(
         duration_minutes=appointment.duration_minutes,
         status=appointment.status,
         reason=appointment.reason if may_read_reason else None,
+        patient_confirmed_at=appointment.patient_confirmed_at,
     )
 
 

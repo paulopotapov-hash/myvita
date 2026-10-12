@@ -80,6 +80,8 @@ def patient_views(db: Session, appointments: list[Appointment]) -> list[Appointm
                 can_change=change_until is not None and now < change_until,
                 change_until=change_until,
                 booking_mode=mode,
+                patient_confirmed_at=appointment.patient_confirmed_at,
+                can_confirm=active and appointment.patient_confirmed_at is None and now < appointment.scheduled_at,
             )
         )
     return views

@@ -80,6 +80,12 @@ export function useCancelBooking() {
   return useMutation({ mutationFn: (appointmentId: string) => schedulingService.cancelBooking(appointmentId), onSettled: refresh })
 }
 
+/** The patient confirms they will come. */
+export function useConfirmBooking() {
+  const refresh = useRefreshAppointments()
+  return useMutation({ mutationFn: (appointmentId: string) => schedulingService.confirmBooking(appointmentId), onSettled: refresh })
+}
+
 /** The patient moves their own appointment to a free slot; resolves to the new appointment. */
 export function useReschedule() {
   const refresh = useRefreshAppointments()

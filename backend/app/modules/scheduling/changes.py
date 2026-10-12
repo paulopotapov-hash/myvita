@@ -99,6 +99,20 @@ def cancel_by_patient(db: Session, user: User, appointment_id: uuid.UUID) -> tup
     return appointment, ended
 
 
+def confirm_by_patient(db: Session, user: User, appointment_id: uuid.UUID) -> tuple[Appointment, bool]:
+    """Record that the patient will come. Returns (appointment, whether it changed now)."""
+    patient = _patient(db, user)
+    appointment = own_appointment(db, patient, appointment_id)
+    if appointment.status not in ACTIVE or appointment.scheduled_at <= clock.now():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NOT_ACTIVE)
+    if appointment.patient_confirmed_at is not None:
+        return appointment, False
+    appointment.patient_confirmed_at = clock.now()
+    db.commit()
+    db.refresh(appointment)
+    return appointment, True
+
+
 def _direct_type(db: Session, appointment: Appointment) -> AppointmentType:
     appointment_type = db.get(AppointmentType, appointment.appointment_type_id) if appointment.appointment_type_id else None
     if appointment_type is None or not appointment_type.active or appointment_type.booking_mode != BookingMode.DIRECT:

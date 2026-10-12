@@ -62,6 +62,9 @@ export const schedulingService = {
     api.post<AppointmentPatientView>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/cancel`),
   rescheduleSlots: (appointmentId: string, from: string, to: string, professional: 'same' | 'any', signal?: AbortSignal) =>
     api.get<Slot[]>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/slots?${q({ from, to, professional })}`, signal),
+  /** The patient confirms they will come (idempotent). */
+  confirmBooking: (appointmentId: string) =>
+    api.post<AppointmentPatientView>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/confirm`),
   /** Returns the new appointment; 409 (nothing changed) if the slot was taken meanwhile. */
   reschedule: (appointmentId: string, payload: { starts_at: string; staff_id?: string }) =>
     api.post<AppointmentPatientView>(`${BASE}/bookings/${encodeURIComponent(appointmentId)}/reschedule`, payload),

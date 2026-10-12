@@ -40,7 +40,8 @@ Never paste secret values, real credentials or clinical data into this checklist
   Without this step, the new tables and columns keep the default grants, and the runtime role could DELETE medication or rewrite clinical history revisions.
 - [ ] Confirm the runtime role has only what the app needs. Run `backend/tests/test_db_privileges.py` against a staging copy, or check `has_table_privilege` / `has_column_privilege` for at least these:
   - `medications`, `clinical_history_entries`: no DELETE;
-  - `clinical_history_revisions`, `medical_record_revisions`, `audit_logs`, `documents`: no UPDATE or DELETE;
+  - `clinical_history_revisions`, `medical_record_revisions`, `audit_logs`, `documents`, `reminder_deliveries`: no UPDATE or DELETE;
+  - `waitlist_entries`, `waitlist_offers`, `appointment_requests`: no DELETE, UPDATE only on their status columns;
   - no DDL.
 
 ## 3. After the deploy
@@ -53,6 +54,8 @@ Never paste secret values, real credentials or clinical data into this checklist
   - the doctor cannot see a patient outside their care team.
 - [ ] The backend log shows no startup error and no `MFA dev bypass is ACTIVE` warning (see above). Alerts and monitoring report the new version as healthy.
 - [ ] The off-site backup job ran after the deploy, or is scheduled for the next window.
+- [ ] The scheduling `jobs` service is running (`docker compose -f docker-compose.prod.yml ps jobs`), and its log shows a `scheduling_jobs reminders=… expired_offers=… closed_entries=…` line every minute (counts only). Without it, no appointment reminder is sent and waiting-list offers never expire. More than one replica is safe: a database lock lets one pass run at a time.
+- [ ] Reminders go out **in the app only**. E-mail and SMS reminders are prepared in the data model but switched off: there is no sender for them, and turning them on needs its own review (transactional e-mail never carries clinical information, `docs/email-delivery.md`).
 
 ## 4. When to stop, and how to roll back
 

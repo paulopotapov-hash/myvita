@@ -24,6 +24,12 @@ describe('notificationLink', () => {
     expect(notificationLink(target, { role: 'staff' })).toEqual({ to: '/app/mensagens/conv-1', label: 'Abrir conversa' })
   })
 
+  it('opens the appointment of a reminder for the patient, and the agenda for staff', () => {
+    const target = notification({ title: 'Lembrete de consulta', target_type: 'appointment', appointment_target_id: 'ap-1' })
+    expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/consultas/ap-1', label: 'Abrir consulta' })
+    expect(notificationLink(target, { role: 'staff' })).toEqual({ to: '/app/consultas', label: 'Abrir consultas' })
+  })
+
   it('opens the patient documents with the document highlighted', () => {
     const target = notification({ title: 'Novo documento', target_type: 'document', target_id: 'doc-1' })
     expect(notificationLink(target, { role: 'patient' })).toEqual({ to: '/patient/documentos?document=doc-1', label: 'Abrir documento' })

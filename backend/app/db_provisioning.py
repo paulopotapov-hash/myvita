@@ -12,7 +12,8 @@ Idempotent: safe to run on every deployment. The runtime role ends up with:
   cannot create, alter or drop objects;
 - SELECT/INSERT/UPDATE/DELETE on application tables (including tables
   created by future migrations, via default privileges);
-- SELECT/INSERT only on audit_logs, documents and medical_record_revisions —
+- SELECT/INSERT only on audit_logs, documents, medical_record_revisions,
+  clinical_history_revisions and reminder_deliveries (a reminder sent is a fact) —
   it can append to each but never edit, delete or truncate them (a database
   trigger also stops accidental audit-history rewrites; documents are
   append-only by decision D3; record revisions are the edit and sharing
@@ -38,7 +39,7 @@ from sqlalchemy import String, create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
-APPEND_ONLY_TABLES = ("audit_logs", "documents", "medical_record_revisions", "clinical_history_revisions")
+APPEND_ONLY_TABLES = ("audit_logs", "documents", "medical_record_revisions", "clinical_history_revisions", "reminder_deliveries")
 READ_ONLY_TABLES = ("alembic_version",)
 # Tables the app inserts into and updates only specific columns of (column-level UPDATE,
 # no DELETE). Each column list is exactly what the services write, including onupdate columns.

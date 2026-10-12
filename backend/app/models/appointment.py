@@ -99,6 +99,8 @@ class Appointment(Base):
     )
     # The appointment this one replaces (a reschedule); at most one successor each.
     rescheduled_from_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # The patient confirmed they will come (step 7, usually from the reminder).
+    patient_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

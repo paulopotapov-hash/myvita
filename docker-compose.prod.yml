@@ -98,7 +98,7 @@ services:
     init: true
     stop_grace_period: 30s
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips", "172.30.0.10"]
-    environment:
+    environment: &backend-environment
       ENVIRONMENT: production
       DEBUG: "false"
       COOKIE_SECURE: "true"
@@ -160,6 +160,34 @@ services:
       start_period: 10s
     networks:
       - edge
+      - data
+
+  # Scheduling background jobs (step 7): appointment reminders, waiting-list offer expiry.
+  # Same image and runtime role as the backend; one pass a minute; several replicas are
+  # safe (a database advisory lock lets one pass run at a time). No port, no documents.
+  jobs:
+    build: ./backend
+    restart: always
+    logging: *default-logging
+    init: true
+    stop_grace_period: 30s
+    command: ["python", "-m", "app.jobs"]
+    environment:
+      <<: *backend-environment
+      JOBS_INTERVAL_SECONDS: ${JOBS_INTERVAL_SECONDS:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
       - data
 
   migrate:

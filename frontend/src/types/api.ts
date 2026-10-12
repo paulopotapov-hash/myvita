@@ -173,6 +173,9 @@ export interface AppointmentPatientView {
   change_until: string | null
   /** How it is rescheduled: free slots ("direct") or a request to the clinic; null without a type. */
   booking_mode: 'direct' | 'request' | null
+  /** The patient confirmed they will come (step 7). */
+  patient_confirmed_at: string | null
+  can_confirm: boolean
 }
 
 export type AppointmentView = AppointmentPublic | AppointmentPatientView
@@ -451,13 +454,14 @@ export interface NotificationPublic {
   read_at: string | null
   created_at: string
   /** Deep-link target: 'document' uses `target_id`, 'conversation' uses `conversation_target_id`,
-   * 'result' uses `result_target_id`, 'medical_record' uses `record_target_id`.
-   * The target page re-checks access on open. */
-  target_type: 'document' | 'conversation' | 'result' | 'medical_record' | null
+   * 'result' uses `result_target_id`, 'medical_record' uses `record_target_id`, 'appointment'
+   * (reminders) uses `appointment_target_id`. The target page re-checks access on open. */
+  target_type: 'document' | 'conversation' | 'result' | 'medical_record' | 'appointment' | null
   target_id: string | null
   conversation_target_id: string | null
   result_target_id?: string | null
   record_target_id?: string | null
+  appointment_target_id?: string | null
 }
 
 /** Uploader is exposed by display name only, never by internal user id. */

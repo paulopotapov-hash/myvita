@@ -288,6 +288,7 @@ def agenda(
                 status=appointment.status,
                 patient_name=patient_name,
                 appointment_type=type_name,
+                patient_confirmed=appointment.patient_confirmed_at is not None,
             )
             for appointment, patient_name, type_name in service.agenda_appointments(db, staff, day_from, day_to)
         ],
@@ -454,3 +455,16 @@ def reschedule_own(
     audit_released_assignment(request, user, ended, old.id, via="appointment_moved")
     audit_auto_assignment(request, user, created, new.id)
     return patient_views(db, [new])[0]
+
+
+@router.post("/bookings/{appointment_id}/confirm", response_model=AppointmentPatientView)
+def confirm_own(
+    appointment_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> AppointmentPatientView:
+    """The patient confirms they will come (step 7; usually from the reminder). Idempotent;
+    409 once the appointment is no longer active or has started."""
+    with _denials(request, user, "appointment", appointment_id):
+        appointment, changed = changes.confirm_by_patient(db, user, appointment_id)
+    if changed:
+        _audit_appointment(request, user, AuditAction.APPOINTMENT_PATIENT_CONFIRMED, appointment.id, patient_id=appointment.patient_id)
+    return patient_views(db, [appointment])[0]

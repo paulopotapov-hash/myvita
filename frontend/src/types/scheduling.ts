@@ -73,6 +73,8 @@ export interface AgendaAppointment {
   status: string
   patient_name: string
   appointment_type: string
+  /** The patient confirmed they will come (step 7). */
+  patient_confirmed?: boolean
 }
 
 export interface BookableProfessional {

@@ -182,6 +182,7 @@ class AgendaAppointment(BaseModel):
     status: AppointmentStatus
     patient_name: str
     appointment_type: str
+    patient_confirmed: bool = False  # step 7: the patient confirmed they will come
 
 
 class AgendaOut(BaseModel):

@@ -19,18 +19,27 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 # Kept in sync with migration 6b7c8d9e0f1a (constraint text is not autogenerate-compared).
-TARGET_TYPE_CHECK = (
-    "(target_type IS NULL AND target_id IS NULL AND conversation_target_id IS NULL "
-    "AND result_target_id IS NULL AND record_target_id IS NULL) OR "
-    "(target_type = 'document' AND target_id IS NOT NULL AND conversation_target_id IS NULL "
-    "AND result_target_id IS NULL AND record_target_id IS NULL) OR "
-    "(target_type = 'conversation' AND target_id IS NULL AND conversation_target_id IS NOT NULL "
-    "AND result_target_id IS NULL AND record_target_id IS NULL) OR "
-    "(target_type = 'result' AND target_id IS NULL AND conversation_target_id IS NULL "
-    "AND result_target_id IS NOT NULL AND record_target_id IS NULL) OR "
-    "(target_type = 'medical_record' AND target_id IS NULL AND conversation_target_id IS NULL "
-    "AND result_target_id IS NULL AND record_target_id IS NOT NULL)"
-)
+_TARGET_COLUMNS = {
+    "document": "target_id",
+    "conversation": "conversation_target_id",
+    "result": "result_target_id",
+    "medical_record": "record_target_id",
+    "appointment": "appointment_target_id",
+}
+
+
+def _target_type_check(columns: dict[str, str]) -> str:
+    """Exactly one target column per target type, or none at all."""
+    none = " AND ".join(f"{column} IS NULL" for column in columns.values())
+    branches = [f"(target_type IS NULL AND {none})"]
+    for kind, own in columns.items():
+        others = " AND ".join(f"{column} IS NULL" for column in columns.values() if column != own)
+        branches.append(f"(target_type = '{kind}' AND {own} IS NOT NULL AND {others})")
+    return " OR ".join(branches)
+
+
+# Kept in sync with migration c3e5a7b9d1f2 (constraint text is not autogenerate-compared).
+TARGET_TYPE_CHECK = _target_type_check(_TARGET_COLUMNS)
 
 
 class Notification(Base):
@@ -67,6 +76,13 @@ class Notification(Base):
             ondelete="RESTRICT",
             use_alter=True,
         ),
+        ForeignKeyConstraint(
+            ["appointment_target_id", "clinic_id"],
+            ["appointments.id", "appointments.clinic_id"],
+            name="fk_notification_appointment_target",
+            ondelete="CASCADE",
+            use_alter=True,
+        ),
         # Exactly one target column per target type (each has its own same-clinic foreign key).
         CheckConstraint(TARGET_TYPE_CHECK, name="ck_notification_target_type"),
         # Idempotency of domain events (app/modules/notifications/events.py): one
@@ -94,6 +110,7 @@ class Notification(Base):
     conversation_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     result_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     record_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    appointment_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     # Internal idempotency key, never exposed by the API.
     event_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

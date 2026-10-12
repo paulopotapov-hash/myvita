@@ -23,7 +23,7 @@ const inDays = (days: number) => new Date(Date.now() + days * DAY).toISOString()
 function appointment(id: string, days: number, status: AppointmentPatientView['status'], staff = 'Dra. Rita Sousa'): AppointmentPatientView {
   return {
     view: 'patient', id, staff_name: staff, scheduled_at: inDays(days), ends_at: inDays(days), duration_minutes: 30, status, reason: null,
-    appointment_type: 'Consulta', specialty: null, location: null, can_change: true, change_until: null, booking_mode: null,
+    appointment_type: 'Consulta', specialty: null, location: null, can_change: true, change_until: null, booking_mode: null, patient_confirmed_at: null, can_confirm: true,
   }
 }
 

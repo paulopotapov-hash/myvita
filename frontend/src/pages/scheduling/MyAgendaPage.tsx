@@ -104,6 +104,7 @@ export function MyAgendaPage() {
                     <li key={item.id} className="rounded-md border border-slate-100 px-3 py-2 text-sm">
                       <span className="font-medium">{formatClinicTime(item.scheduled_at)}–{formatClinicTime(item.ends_at)}</span> · {item.patient_name} · {item.appointment_type}
                       <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs">{STATUS_LABELS[item.status] ?? item.status}</span>
+                      {item.patient_confirmed && <span className="ml-2 rounded-full bg-teal-50 px-2 py-0.5 text-xs text-teal-900">Presença confirmada</span>}
                     </li>
                   ))}
                 </ul>
