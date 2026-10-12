@@ -28,6 +28,7 @@ from app.modules.appointment_requests.schemas import AppointmentRequestAccept, A
 from app.modules.appointments.schemas import AppointmentCreateRequest
 from app.modules.appointments.service import create_appointment
 from app.modules.notifications.events import NotificationEvent, notify
+from app.modules.scheduling.booking import AutoAssignment
 
 MAX_PENDING_PER_PATIENT = 5
 _NOT_FOUND = "Pedido de consulta não encontrado."
@@ -182,7 +183,7 @@ def _lock_for_clinic(db: Session, request_id: uuid.UUID, clinic_id: uuid.UUID) -
 
 def accept_request(
     db: Session, request_id: uuid.UUID, clinic_id: uuid.UUID, actor: User, payload: AppointmentRequestAccept
-) -> tuple[AppointmentRequest, Appointment]:
+) -> tuple[AppointmentRequest, Appointment, AutoAssignment | None]:
     request = _lock_for_clinic(db, request_id, clinic_id)
     if request.status != AppointmentRequestStatus.PENDING:
         raise _not_pending()
@@ -202,7 +203,7 @@ def accept_request(
     # Existing scheduling path: clinic advisory lock, staff/patient tenant
     # checks and overlap detection. It commits the request change, the
     # notifications and the appointment together; any error rolls all back.
-    appointment = create_appointment(
+    appointment, assignment = create_appointment(
         db,
         str(clinic_id),
         AppointmentCreateRequest(
@@ -212,11 +213,12 @@ def accept_request(
             duration_minutes=payload.duration_minutes,
             reason=request.reason,
         ),
+        actor.id,
     )
     request.appointment_id = appointment.id
     db.commit()
     db.refresh(request)
-    return request, appointment
+    return request, appointment, assignment
 
 
 def reject_request(db: Session, request_id: uuid.UUID, clinic_id: uuid.UUID, actor: User) -> AppointmentRequest:

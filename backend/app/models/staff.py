@@ -2,7 +2,16 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    ForeignKeyConstraint,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +32,12 @@ class Staff(Base):
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_staff_user_id"),
         UniqueConstraint("id", "clinic_id", name="uq_staff_id_clinic"),
+        ForeignKeyConstraint(
+            ["specialty_id", "clinic_id"],
+            ["specialties.id", "specialties.clinic_id"],
+            name="fk_staff_specialty_clinic",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -40,6 +55,10 @@ class Staff(Base):
     )
     specialty: Mapped[str | None] = mapped_column(String(255), nullable=True)
     license_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Scheduling: the bookable specialty (the free-text `specialty` above stays as the label)
+    # and whether patients who never had an appointment with this professional may book.
+    specialty_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    accepts_new_patients: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

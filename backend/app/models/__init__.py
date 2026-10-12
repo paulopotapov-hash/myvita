@@ -37,5 +37,17 @@ from app.models.medical_record import (  # noqa: F401
 from app.models.medication import Medication, MedicationStatus  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.patient import Patient  # noqa: F401
+from app.models.scheduling import (  # noqa: F401
+    CLINIC_TIME_ZONE,
+    AbsenceKind,
+    AppointmentType,
+    BookingMode,
+    BookingSource,
+    ClinicBookingSettings,
+    ScheduleAbsence,
+    ScheduleRule,
+    ScheduleRuleType,
+    Specialty,
+)
 from app.models.staff import Staff, StaffRole  # noqa: F401
 from app.models.user import User, UserRole  # noqa: F401

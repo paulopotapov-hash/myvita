@@ -275,11 +275,14 @@ def test_concurrent_overlapping_bookings_allow_only_one(client):
         duration_minutes=30,
     )
 
+    with client.test_session_factory() as lookup:
+        actor_id = lookup.query(User.id).filter(User.clinic_id == tenant["clinic_id"], User.role == "clinic_admin").scalar()
+
     def book() -> int:
         db = client.test_session_factory()
         try:
             barrier.wait()
-            create_appointment(db, tenant["clinic_id"], payload)
+            create_appointment(db, tenant["clinic_id"], payload, actor_id)
             return 201
         except HTTPException as exc:
             db.rollback()

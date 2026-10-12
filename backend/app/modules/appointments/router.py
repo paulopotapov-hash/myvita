@@ -22,6 +22,7 @@ from app.modules.appointments.service import (
     list_appointments_for_user,
     update_appointment,
 )
+from app.modules.scheduling.audit import audit_auto_assignment
 
 router = APIRouter()
 
@@ -153,7 +154,7 @@ def create(
         ):
             clinical_access(db, payload.patient_id, _staff_user, ClinicalAction.EDIT_APPOINTMENTS)
         _reject_admin_reason(payload, _staff_user, db, payload.patient_id)
-        appointment = create_appointment(db, clinic_id, payload)
+        appointment, assignment = create_appointment(db, clinic_id, payload, _staff_user.id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CREATED,
         result=AuditResult.SUCCESS,
@@ -166,6 +167,7 @@ def create(
         user_agent=request.headers.get("user-agent"),
         metadata={"patient_id": appointment.patient_id},
     )
+    audit_auto_assignment(request, _staff_user, assignment, appointment.id)
     return _public(appointment, _staff_user, db)
 
 
@@ -268,7 +270,7 @@ def update(
             clinical_access(db, current.patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
             clinical_access(db, patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
         _reject_admin_reason(payload, staff_user, db, patient_id)
-        appointment = update_appointment(db, appointment_id, clinic_id, payload)
+        appointment, assignment = update_appointment(db, appointment_id, clinic_id, payload, staff_user.id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_UPDATED,
         result=AuditResult.SUCCESS,
@@ -281,6 +283,7 @@ def update(
         user_agent=request.headers.get("user-agent"),
         metadata={"patient_id": appointment.patient_id, "status": appointment.status},
     )
+    audit_auto_assignment(request, staff_user, assignment, appointment.id)
     return _public(appointment, staff_user, db)
 
 

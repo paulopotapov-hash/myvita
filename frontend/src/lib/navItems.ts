@@ -59,6 +59,7 @@ export function navigationFor(user: Pick<UserPublic, 'role' | 'staff_role'>): Na
         { to: '/app', label: 'Início', icon: 'home' },
         { to: '/app/consultas', label: 'Consultas', icon: 'calendar' },
         { to: '/app/pacientes', label: 'Pacientes', icon: 'users' },
+        { to: '/app/agendas', label: 'Agendas', icon: 'calendarPlus' },
         { to: '/app/equipa', label: 'Equipa', icon: 'team' },
         { to: '/app/contas', label: 'Contas', icon: 'key' },
         { to: '/app/notificacoes', label: 'Notificações', icon: 'bell', badge: 'notifications' },
@@ -68,6 +69,10 @@ export function navigationFor(user: Pick<UserPublic, 'role' | 'staff_role'>): Na
   const items: NavItem[] = [
     { to: '/app', label: 'Início', icon: 'home' },
     { to: '/app/consultas', label: 'Consultas', icon: 'calendar' },
+    // Scheduling: administrative staff configure agendas; professionals see their own week.
+    ...(user.staff_role === 'admin'
+      ? [{ to: '/app/agendas', label: 'Agendas', icon: 'calendarPlus' } as NavItem]
+      : [{ to: '/app/agenda', label: 'A minha agenda', icon: 'calendarPlus' } as NavItem]),
     { to: '/app/pacientes', label: 'Pacientes', icon: 'users' },
     { to: '/app/mensagens', label: 'Mensagens', icon: 'chat', badge: 'messages' },
     { to: '/app/notificacoes', label: 'Notificações', icon: 'bell', badge: 'notifications' },

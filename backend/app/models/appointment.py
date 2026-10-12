@@ -1,12 +1,13 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, ForeignKeyConstraint, Index, String, Text, event, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.scheduling import BOOKING_SOURCE_ENUM, BookingSource
 
 
 class AppointmentStatus(str, enum.Enum):
@@ -29,7 +30,18 @@ class Appointment(Base):
     """
 
     __tablename__ = "appointments"
-    __table_args__ = (Index("ix_appointments_clinic_scheduled_at", "clinic_id", "scheduled_at"),)
+    __table_args__ = (
+        Index("ix_appointments_clinic_scheduled_at", "clinic_id", "scheduled_at"),
+        Index("ix_appointments_staff_scheduled_at", "staff_id", "scheduled_at"),
+        ForeignKeyConstraint(
+            ["appointment_type_id", "clinic_id"],
+            ["appointment_types.id", "appointment_types.clinic_id"],
+            name="fk_appointments_type_clinic",
+            ondelete="RESTRICT",
+        ),
+        # GiST exclusion constraints (no double booking of a professional or a patient)
+        # live in migration 7d2e4b9a1c3f; see app/models/scheduling.py for why.
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
@@ -45,6 +57,14 @@ class Appointment(Base):
 
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(default=30, nullable=False)
+    # Always scheduled_at + duration (set on every insert/update below); the exclusion
+    # constraints compare [scheduled_at, ends_at) intervals.
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # NULL for appointments created before appointment types existed (shown as "Consulta").
+    appointment_type_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    booked_via: Mapped[BookingSource] = mapped_column(
+        BOOKING_SOURCE_ENUM, nullable=False, default=BookingSource.STAFF, server_default="staff"
+    )
     status: Mapped[AppointmentStatus] = mapped_column(
         Enum(AppointmentStatus, name="appointment_status", values_callable=lambda e: [m.value for m in e]),
         default=AppointmentStatus.SCHEDULED,
@@ -61,3 +81,12 @@ class Appointment(Base):
     clinic = relationship("Clinic", back_populates="appointments")
     patient = relationship("Patient", back_populates="appointments")
     staff = relationship("Staff", back_populates="appointments")
+
+
+@event.listens_for(Appointment, "before_insert")
+@event.listens_for(Appointment, "before_update")
+def _keep_ends_at(_mapper: object, _connection: object, appointment: Appointment) -> None:
+    """ends_at is derived, never set by hand: the exclusion constraints rely on it."""
+    if appointment.duration_minutes is None:  # the column default is applied after this event
+        appointment.duration_minutes = 30
+    appointment.ends_at = appointment.scheduled_at + timedelta(minutes=appointment.duration_minutes)

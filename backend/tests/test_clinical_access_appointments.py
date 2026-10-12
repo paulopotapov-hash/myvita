@@ -48,6 +48,11 @@ def test_clinicians_list_only_assigned_patients_appointments_and_total_matches(w
         },
     )
     assert booked.status_code == 201, booked.text
+    # Booking puts the professional on the patient's care team (approved scheduling decision);
+    # once that assignment ends, the clinician no longer sees the patient's appointments.
+    assert unassigned.patient_id in {row["patient_id"] for row in tenant.doctor.get("/api/v1/appointments?page_size=100").json()}
+    ended = tenant.admin.call("DELETE", f"/api/v1/patients/{unassigned.patient_id}/care-team/{tenant.doctor.staff_id}")
+    assert ended.status_code == 200, ended.text
 
     seen_by_doctor = tenant.doctor.get("/api/v1/appointments?page_size=100")
     assert seen_by_doctor.status_code == 200

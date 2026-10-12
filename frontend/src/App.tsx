@@ -26,6 +26,8 @@ import { PatientMedicationPage } from './pages/patient/PatientMedicationPage'
 import { PatientResultsPage } from './pages/patient/PatientResultsPage'
 import { MessagesInboxPage } from './pages/messages/MessagesInboxPage'
 import { ConversationPage } from './pages/messages/ConversationPage'
+import { MyAgendaPage } from './pages/scheduling/MyAgendaPage'
+import { SchedulingAdminPage } from './pages/scheduling/SchedulingAdminPage'
 
 /** Old links to /patient/registos (e.g. earlier notifications) open the health summary, keeping ?record=. */
 function LegacyRecordsRedirect() {
@@ -59,6 +61,8 @@ export default function App() {
         <Route path="mensagens/:conversationId" element={<ConversationPage />} />
         <Route path="perfil" element={<AccountProfilePage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />
+        <Route path="agenda" element={<MyAgendaPage />} />
+        <Route path="agendas" element={<SchedulingAdminPage />} />
         <Route
           path="pacientes"
           element={

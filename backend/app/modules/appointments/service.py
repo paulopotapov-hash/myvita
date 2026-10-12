@@ -21,6 +21,13 @@ from app.modules.appointments.schemas import (
     AppointmentUpdateRequest,
 )
 from app.modules.notifications.events import NotificationEvent, notify
+from app.modules.scheduling.booking import (
+    PATIENT_TAKEN,
+    AutoAssignment,
+    booking_guard,
+    commit_booking,
+    ensure_care_assignment,
+)
 
 _VALID_STATUS_TRANSITIONS: dict[AppointmentStatus, set[AppointmentStatus]] = {
     AppointmentStatus.SCHEDULED: {AppointmentStatus.CONFIRMED},
@@ -80,7 +87,39 @@ def _ensure_no_conflict(
             )
 
 
-def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRequest) -> Appointment:
+def _ensure_patient_free(
+    db: Session,
+    *,
+    patient_id: uuid.UUID,
+    scheduled_at: datetime,
+    duration_minutes: int,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
+    """The same patient never has two active appointments at the same time (also enforced
+    by the database exclusion constraint; this gives the clearer message first)."""
+    end_at = scheduled_at + timedelta(minutes=duration_minutes)
+    query = db.query(Appointment).filter(
+        Appointment.patient_id == patient_id,
+        Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED]),
+        Appointment.scheduled_at < end_at,
+        Appointment.ends_at > scheduled_at,
+    )
+    if exclude_id is not None:
+        query = query.filter(Appointment.id != exclude_id)
+    if query.first() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=PATIENT_TAKEN)
+
+
+def create_appointment(
+    db: Session, clinic_id: str, payload: AppointmentCreateRequest, actor_user_id: uuid.UUID
+) -> tuple[Appointment, AutoAssignment | None]:
+    with booking_guard(db):
+        return _create_appointment(db, clinic_id, payload, actor_user_id)
+
+
+def _create_appointment(
+    db: Session, clinic_id: str, payload: AppointmentCreateRequest, actor_user_id: uuid.UUID
+) -> tuple[Appointment, AutoAssignment | None]:
     """
     clinic_id comes from the authenticated staff member's session, never
     from the request body. We still re-verify that both the patient and
@@ -110,6 +149,9 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
         scheduled_at=payload.scheduled_at,
         duration_minutes=payload.duration_minutes,
     )
+    _ensure_patient_free(
+        db, patient_id=patient.id, scheduled_at=payload.scheduled_at, duration_minutes=payload.duration_minutes
+    )
 
     appointment = Appointment(
         clinic_id=clinic_id,
@@ -125,9 +167,12 @@ def create_appointment(db: Session, clinic_id: str, payload: AppointmentCreateRe
         db, patient, event=NotificationEvent.APPOINTMENT_CREATED, dedupe_key=str(appointment.id)
     )
     _add_staff_notification(db, staff, event=NotificationEvent.APPOINTMENT_ASSIGNED, dedupe_key=str(appointment.id))
-    db.commit()
+    assignment = ensure_care_assignment(
+        db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=actor_user_id
+    )
+    commit_booking(db)
     db.refresh(appointment)
-    return appointment
+    return appointment, assignment
 
 
 def get_appointment_for_clinic(db: Session, appointment_id: uuid.UUID, clinic_id: str) -> Appointment:
@@ -142,8 +187,15 @@ def get_appointment_for_clinic(db: Session, appointment_id: uuid.UUID, clinic_id
 
 
 def update_appointment(
-    db: Session, appointment_id: uuid.UUID, clinic_id: str, payload: AppointmentUpdateRequest
-) -> Appointment:
+    db: Session, appointment_id: uuid.UUID, clinic_id: str, payload: AppointmentUpdateRequest, actor_user_id: uuid.UUID
+) -> tuple[Appointment, AutoAssignment | None]:
+    with booking_guard(db):
+        return _update_appointment(db, appointment_id, clinic_id, payload, actor_user_id)
+
+
+def _update_appointment(
+    db: Session, appointment_id: uuid.UUID, clinic_id: str, payload: AppointmentUpdateRequest, actor_user_id: uuid.UUID
+) -> tuple[Appointment, AutoAssignment | None]:
     _lock_clinic_schedule(db, clinic_id)
     appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
     if appointment.status in {
@@ -188,6 +240,9 @@ def update_appointment(
         duration_minutes=duration,
         exclude_id=appointment.id,
     )
+    _ensure_patient_free(
+        db, patient_id=patient_id, scheduled_at=scheduled_at, duration_minutes=duration, exclude_id=appointment.id
+    )
     meaningful_change = any(
         (
             patient_id != old_patient_id,
@@ -221,9 +276,14 @@ def update_appointment(
             _add_patient_notification(db, patient_recipient, event=event)
         for staff_recipient in recipient_staff.values():
             _add_staff_notification(db, staff_recipient, event=event)
-    db.commit()
+    assignment = None
+    if staff_id != old_staff_id or patient_id != old_patient_id:
+        assignment = ensure_care_assignment(
+            db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=actor_user_id
+        )
+    commit_booking(db)
     db.refresh(appointment)
-    return appointment
+    return appointment, assignment
 
 
 def cancel_appointment(db: Session, appointment_id: uuid.UUID, clinic_id: str) -> Appointment:

@@ -133,6 +133,16 @@ class AuditAction(str, enum.Enum):
     MEDICATION_HIDDEN = "medication_hidden"
     MEDICATION_SHOWN = "medication_shown"
     MEDICATION_DELETED = "medication_deleted"
+    # Scheduling configuration and agendas (ids only in metadata).
+    SPECIALTY_CREATED = "specialty_created"
+    SPECIALTY_UPDATED = "specialty_updated"
+    APPOINTMENT_TYPE_CREATED = "appointment_type_created"
+    APPOINTMENT_TYPE_UPDATED = "appointment_type_updated"
+    BOOKING_SETTINGS_UPDATED = "booking_settings_updated"
+    SCHEDULE_UPDATED = "schedule_updated"
+    STAFF_BOOKING_PROFILE_UPDATED = "staff_booking_profile_updated"
+    ABSENCE_CREATED = "absence_created"
+    ABSENCE_DELETED = "absence_deleted"
 
 
 class AuditResult(str, enum.Enum):

@@ -51,6 +51,7 @@ from app.modules.medications.router import router as medications_router
 from app.modules.messages.router import router as messages_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
+from app.modules.scheduling.router import router as scheduling_router
 from app.modules.staff.router import router as staff_router
 from app.modules.users.router import router as users_router
 
@@ -316,6 +317,7 @@ app.include_router(consents_router, prefix="/api/v1", tags=["consents"])
 app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-records"])
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
 app.include_router(clinical_history_router, prefix="/api/v1", tags=["clinical-history"])
+app.include_router(scheduling_router, prefix="/api/v1/scheduling", tags=["scheduling"])
 app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
 app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])

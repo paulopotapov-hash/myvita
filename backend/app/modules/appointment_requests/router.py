@@ -34,6 +34,7 @@ from app.modules.appointment_requests.service import (
     reject_request,
     request_patient_id,
 )
+from app.modules.scheduling.audit import audit_auto_assignment
 
 router = APIRouter()
 _patient_only = require_roles(UserRole.PATIENT)
@@ -167,8 +168,9 @@ def accept(
     """Accept a pending request: creates the appointment with the chosen professional
     and slot (existing overlap and tenant checks apply; 409 on overlap or if already processed)."""
     _require_decision_access(request, db, user, request_id, uuid.UUID(str(clinic_id)))
-    accepted, appointment = accept_request(db, request_id, uuid.UUID(str(clinic_id)), user, payload)
+    accepted, appointment, assignment = accept_request(db, request_id, uuid.UUID(str(clinic_id)), user, payload)
     _audit(request, user, AuditAction.APPOINTMENT_REQUEST_ACCEPTED, accepted, {"appointment_id": str(appointment.id)})
+    audit_auto_assignment(request, user, assignment, appointment.id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CREATED,
         result=AuditResult.SUCCESS,

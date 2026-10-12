@@ -25,8 +25,17 @@ describe('navigationFor', () => {
     expect(labels('staff', 'admin')).not.toContain('Mensagens')
   })
 
+  it('gives administrative staff the agenda configuration and professionals their own agenda', () => {
+    expect(labels('staff', 'admin')).toContain('Agendas')
+    expect(labels('staff', 'admin')).not.toContain('A minha agenda')
+    for (const role of ['doctor', 'nurse', 'physiotherapist'] as const) {
+      expect(labels('staff', role)).toContain('A minha agenda')
+      expect(labels('staff', role)).not.toContain('Agendas')
+    }
+  })
+
   it('gives clinic administrators team and account management, without clinical messaging', () => {
-    expect(labels('clinic_admin')).toEqual(['Início', 'Consultas', 'Pacientes', 'Equipa', 'Contas', 'Notificações'])
+    expect(labels('clinic_admin')).toEqual(['Início', 'Consultas', 'Pacientes', 'Agendas', 'Equipa', 'Contas', 'Notificações'])
     expect(labels('staff', 'doctor')).not.toContain('Equipa')
   })
 })
