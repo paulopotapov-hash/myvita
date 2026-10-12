@@ -15,7 +15,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Query, Session
 
 from app.core.clinical_access import ClinicalAction, clinical_access, clinical_staff
-from app.models import HistoryOrigin, Medication, MedicationStatus, Staff, User, UserRole
+from app.core.partial_dates import PartialDateError, parse_partial_date
+from app.models import DatePrecision, HistoryOrigin, Medication, MedicationStatus, Staff, User, UserRole
 from app.modules.medications.schemas import (
     MedicationConfirmRequest,
     MedicationCreateRequest,
@@ -35,6 +36,27 @@ def _field_error(field: str, message: str) -> HTTPException:
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=[{"type": "value_error", "loc": ["body", field], "msg": message}],
     )
+
+
+def _start(raw: str | None, *, professional: bool) -> tuple[date | None, DatePrecision | None]:
+    """Start date and its precision. Complete and required from professionals; optional
+    and possibly partial ("2020", "2020-03") in a patient's declaration."""
+    if raw is None:
+        if professional:
+            raise _field_error("start_date", "Indica a data de início.")
+        return None, None
+    try:
+        parsed, precision = parse_partial_date(raw, allow_future=True)
+    except PartialDateError as exc:
+        raise _field_error("start_date", str(exc)) from exc
+    if professional and precision != DatePrecision.DAY:
+        raise _field_error("start_date", "Indica a data de início completa.")
+    return parsed, precision
+
+
+def _check_order(medication: Medication) -> None:
+    if medication.end_date is not None and medication.start_date is not None and medication.end_date < medication.start_date:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Data final inválida.")
 
 
 def is_own_open_declaration(medication: Medication, user: User) -> bool:
@@ -96,6 +118,8 @@ def create_medication(
     db: Session, patient_id: uuid.UUID, payload: MedicationCreateRequest, user: User
 ) -> Medication:
     values = payload.model_dump()
+    professional = user.role != UserRole.PATIENT
+    values["start_date"], values["start_precision"] = _start(values.get("start_date"), professional=professional)
     if user.role == UserRole.PATIENT:
         patient = clinical_access(db, patient_id, user, ClinicalAction.DECLARE_CLINICAL_HISTORY)
         medication = Medication(
@@ -119,6 +143,7 @@ def create_medication(
             confirmed_at=datetime.now(UTC),
             **values,
         )
+    _check_order(medication)
     db.add(medication)
     db.commit()
     db.refresh(medication)
@@ -142,10 +167,13 @@ def update_medication(
         and changes.get("end_date") is None
     ):
         changes["end_date"] = date.today()
+    if "start_date" in changes:
+        changes["start_date"], changes["start_precision"] = _start(
+            changes["start_date"], professional=user.role != UserRole.PATIENT
+        )
     for field, value in changes.items():
         setattr(medication, field, value)
-    if medication.end_date is not None and medication.end_date < medication.start_date:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Data final inválida.")
+    _check_order(medication)
     db.commit()
     db.refresh(medication)
     return medication
@@ -162,8 +190,9 @@ def deactivate_medication(
     if medication.status != MedicationStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Medicação já terminada.")
     requested_end = payload.end_date if payload is not None else None
-    end_date = requested_end or max(date.today(), medication.start_date)
-    if end_date < medication.start_date:
+    start = medication.start_date or date.today()
+    end_date = requested_end or max(date.today(), start)
+    if end_date < start:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Data final inválida.")
     medication.status = MedicationStatus.DISCONTINUED
     medication.end_date = end_date
@@ -181,6 +210,10 @@ def confirm_medication(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esta medicação já está confirmada.")
     if payload.dosage is not None:
         medication.dosage = payload.dosage
+    if payload.start_date is not None:
+        # Completing the patient's partial (or missing) start date with the full date.
+        medication.start_date, medication.start_precision = payload.start_date, DatePrecision.DAY
+        _check_order(medication)
     medication.confirmed_by_staff_id, medication.confirmed_at = staff.id, datetime.now(UTC)
     db.commit()
     db.refresh(medication)

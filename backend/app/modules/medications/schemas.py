@@ -8,6 +8,8 @@ from app.core.schemas import RequestModel
 from app.models.clinical_history import HistoryOrigin
 from app.models.medication import MedicationStatus
 
+PartialDateText = Annotated[str, Field(min_length=4, max_length=10)]
+
 
 class MedicationCreateRequest(RequestModel):
     """A professional's prescription (dose required) or a patient's declaration (dose optional, D6)."""
@@ -18,7 +20,9 @@ class MedicationCreateRequest(RequestModel):
     route: str | None = Field(default=None, min_length=1, max_length=100)
     frequency: str | None = Field(default=None, min_length=1, max_length=100)
     instructions: str | None = Field(default=None, min_length=1, max_length=2000)
-    start_date: date
+    # "2020", "2020-03" or "2020-03-12". A professional must give the complete date; in a
+    # patient's declaration it is optional and may be partial (checked by the service).
+    start_date: PartialDateText | None = None
     end_date: date | None = None
 
     @field_validator("name", "dosage")
@@ -31,11 +35,6 @@ class MedicationCreateRequest(RequestModel):
             raise ValueError("must not be blank")
         return value
 
-    @model_validator(mode="after")
-    def dates_are_ordered(self) -> "MedicationCreateRequest":
-        if self.end_date is not None and self.end_date < self.start_date:
-            raise ValueError("end_date must not precede start_date")
-        return self
 
 
 class MedicationUpdateRequest(RequestModel):
@@ -47,7 +46,8 @@ class MedicationUpdateRequest(RequestModel):
     frequency: str | None = Field(default=None, min_length=1, max_length=100)
     instructions: str | None = Field(default=None, min_length=1, max_length=2000)
     status: MedicationStatus | None = None
-    start_date: date | None = None
+    # Null (clearing it) is only accepted from the patient, for their own declaration.
+    start_date: PartialDateText | None = None
     end_date: date | None = None
 
     @field_validator("name", "dosage", "route", "frequency")
@@ -64,7 +64,7 @@ class MedicationUpdateRequest(RequestModel):
     def at_least_one_field(self) -> "MedicationUpdateRequest":
         if not self.model_fields_set:
             raise ValueError("At least one field is required.")
-        for name in ("name", "dosage", "status", "start_date"):
+        for name in ("name", "dosage", "status"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} must not be null")
         return self
@@ -75,6 +75,8 @@ class MedicationConfirmRequest(RequestModel):
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     dosage: str | None = Field(default=None, min_length=1, max_length=200)
+    # The professional may complete a partial or missing start date with the full date.
+    start_date: date | None = None
 
 
 class MedicationHideRequest(RequestModel):
@@ -109,7 +111,7 @@ class MedicationPublic(BaseModel):
     frequency: str | None
     instructions: str | None
     status: MedicationStatus
-    start_date: date
+    start_date: str | None  # "2020", "2020-03" or "2020-03-12"
     end_date: date | None
     # Clinical history (commit 3): origin, confirmation and hiding from the patient (D4).
     origin: HistoryOrigin
@@ -138,7 +140,7 @@ class MedicationPatientView(BaseModel):
     frequency: str | None
     instructions: str | None
     status: MedicationStatus
-    start_date: date
+    start_date: str | None  # "2020", "2020-03" or "2020-03-12"
     end_date: date | None
     origin: HistoryOrigin
     confirmed: bool

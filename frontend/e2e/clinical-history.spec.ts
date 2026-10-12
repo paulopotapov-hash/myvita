@@ -73,10 +73,13 @@ test.describe.serial('clinical history', () => {
     await page.goto('/patient/medicacao')
     const medication = page.getByRole('region', { name: 'Medicação' })
     await medication.getByLabel('Medicamento').fill('Vitamina D E2E')
-    await medication.getByLabel('Data de início').fill('2026-01-01')
+    // Only the year is known: it stays "2025", never a fabricated 01/01/2025.
+    await medication.getByLabel('Data de início: ano').fill('2025')
     await medication.getByRole('button', { name: 'Declarar medicação' }).click()
     await expect(medication.getByRole('status')).toContainText('Medicação declarada')
-    await expect(medication.getByRole('listitem').filter({ hasText: 'Vitamina D E2E' })).toContainText('Declarado pelo paciente')
+    const declared = medication.getByRole('listitem').filter({ hasText: 'Vitamina D E2E' })
+    await expect(declared).toContainText('Declarado pelo paciente')
+    await expect(declared).toContainText('Início 2025')
   })
 
   test('the doctor confirms the declarations (completing the dose) and hides an entry with a reason', async ({ page }) => {
@@ -101,8 +104,10 @@ test.describe.serial('clinical history', () => {
     await declared.getByRole('button', { name: 'Confirmar' }).click()
     const confirm = page.getByRole('alertdialog', { name: 'Confirmar medicação' })
     await confirm.getByLabel('Dosagem (opcional)').fill('1000 UI')
+    await confirm.getByLabel(/Data de início completa \(opcional\), declarada: 2025/).fill('2025-02-03')
     await confirm.getByRole('button', { name: 'Confirmar' }).click()
     await expect(declared).toContainText('Vitamina D E2E · 1000 UI')
+    await expect(declared).toContainText('Início 03/02/2025')
     await expect(declared).toContainText('Confirmado pelo profissional')
   })
 

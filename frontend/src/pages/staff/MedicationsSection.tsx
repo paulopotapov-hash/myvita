@@ -9,6 +9,7 @@ import { ReasonDialog } from '../../components/ReasonDialog'
 import { TextAreaField } from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
 import { EntryBadges } from '../../components/clinicalHistory/EntryBadges'
+import { PartialDateField } from '../../components/clinicalHistory/PartialDateField'
 import {
   useCreateMedication,
   useDeactivateMedication,
@@ -18,6 +19,7 @@ import {
 } from '../../hooks/useClinicalData'
 import { formErrorsFrom, toUserMessage } from '../../lib/errorMessages'
 import { formatDate } from '../../lib/formatDate'
+import { formatPartialDate } from '../../lib/partialDate'
 import {
   EMPTY_MEDICATION_FORM,
   medicationToForm,
@@ -79,6 +81,7 @@ export function MedicationsSection({ patientId, canWrite, canDeclare = false }: 
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [dialogError, setDialogError] = useState('')
   const [dose, setDose] = useState('')
+  const [startDate, setStartDate] = useState('')
   const declaring = !canWrite && canDeclare
   const showForm = canWrite || canDeclare
 
@@ -166,6 +169,7 @@ export function MedicationsSection({ patientId, canWrite, canDeclare = false }: 
     setErrors({})
     setDialogError('')
     setDose(next.medication.dosage ?? '')
+    setStartDate('')
     setDialog(next)
   }
 
@@ -202,7 +206,7 @@ export function MedicationsSection({ patientId, canWrite, canDeclare = false }: 
             <EntryBadges confirmed={medication.confirmed} hidden={hidden} />
           </div>
           <p className="text-sm text-slate-500">
-            Início {formatDate(medication.start_date)}
+            {medication.start_date ? `Início ${formatPartialDate(medication.start_date)}` : 'Início não indicado'}
             {medication.end_date && ` · Fim ${formatDate(medication.end_date)}`}
             {medication.route && ` · Via ${medication.route}`}
             {medication.frequency && ` · ${medication.frequency}`}
@@ -259,7 +263,11 @@ export function MedicationsSection({ patientId, canWrite, canDeclare = false }: 
           <TextField label={declaring ? 'Dosagem (opcional)' : 'Dosagem'} required={!declaring} value={form.dosage} onChange={(event) => setField('dosage', event.target.value)} error={errors.dosage} maxLength={200} />
           <TextField label="Via de administração (opcional)" value={form.route} onChange={(event) => setField('route', event.target.value)} error={errors.route} maxLength={100} />
           <TextField label="Frequência (opcional)" value={form.frequency} onChange={(event) => setField('frequency', event.target.value)} error={errors.frequency} maxLength={100} />
-          <TextField label="Data de início" required type="date" value={form.start_date} onChange={(event) => setField('start_date', event.target.value)} error={errors.start_date} />
+          {declaring ? (
+            <PartialDateField label="Data de início" value={form.start_date} onChange={(value) => setField('start_date', value)} error={errors.start_date} />
+          ) : (
+            <TextField label="Data de início" required type="date" value={form.start_date} onChange={(event) => setField('start_date', event.target.value)} error={errors.start_date} />
+          )}
           <TextField label="Data de fim (opcional)" type="date" value={form.end_date} onChange={(event) => setField('end_date', event.target.value)} error={errors.end_date} />
           <div className="sm:col-span-2">
             <TextAreaField label="Instruções (opcional)" value={form.instructions} onChange={(event) => setField('instructions', event.target.value)} error={errors.instructions} maxLength={2000} />
@@ -307,9 +315,25 @@ export function MedicationsSection({ patientId, canWrite, canDeclare = false }: 
           confirmLabel="Confirmar"
           isPending={action.isPending}
           onCancel={() => setDialog(null)}
-          onConfirm={() => runAction({ kind: 'confirm', id: dialog.medication.id, dosage: dose.trim() || undefined }, 'Medicação confirmada.')}
+          onConfirm={() =>
+            runAction(
+              { kind: 'confirm', id: dialog.medication.id, dosage: dose.trim() || undefined, startDate: startDate || undefined },
+              'Medicação confirmada.',
+            )
+          }
         >
-          <div className="mt-4"><TextField label="Dosagem (opcional)" value={dose} maxLength={200} onChange={(event) => setDose(event.target.value)} /></div>
+          <div className="mt-4 flex flex-col gap-3">
+            <TextField label="Dosagem (opcional)" value={dose} maxLength={200} onChange={(event) => setDose(event.target.value)} />
+            {/* The patient may have given only "2020" or "março 2020", or no date at all. */}
+            {(dialog.medication.start_date?.length ?? 0) !== 10 && (
+              <TextField
+                label={`Data de início completa (opcional)${dialog.medication.start_date ? `, declarada: ${formatPartialDate(dialog.medication.start_date)}` : ''}`}
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            )}
+          </div>
           {dialogError && <p role="alert" className="mt-3 text-sm text-red-600">{dialogError}</p>}
         </ConfirmDialog>
       )}

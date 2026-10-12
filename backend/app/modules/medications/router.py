@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import record_access, record_denied_access
 from app.core.database import get_db
+from app.core.partial_dates import format_partial_date
 from app.core.security import get_current_user
 from app.models import AuditAction, Medication, MedicationStatus, User, UserRole
 from app.modules.medications import service
@@ -36,7 +37,7 @@ def _for_audience(medication: Medication, user: User) -> View:
         "frequency": medication.frequency,
         "instructions": medication.instructions,
         "status": medication.status,
-        "start_date": medication.start_date,
+        "start_date": format_partial_date(medication.start_date, medication.start_precision),
         "end_date": medication.end_date,
         "origin": medication.origin,
         "confirmed": medication.confirmed_at is not None,

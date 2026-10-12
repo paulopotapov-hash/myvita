@@ -13,6 +13,7 @@ import { SEVERITY_LABELS } from '../../lib/clinicalHistoryLabels'
 import { RESULT_CATEGORY_LABELS } from '../../lib/clinicalResultForm'
 import { toUserMessage } from '../../lib/errorMessages'
 import { formatDate, formatDateTime } from '../../lib/formatDate'
+import { formatPartialDate } from '../../lib/partialDate'
 import { PatientSectionPage } from './PatientSectionPage'
 
 const LATEST_RESULTS = 3
@@ -88,7 +89,10 @@ function MedicationCategory({ patientId }: { patientId: string }) {
                 <span className="font-medium">{item.name}</span>
                 {item.dosage && ` · ${item.dosage}`}
                 {item.frequency && ` · ${item.frequency}`}
-                <span className="text-slate-500"> · desde {formatDate(item.start_date)}{item.end_date && ` até ${formatDate(item.end_date)}`}</span>
+                <span className="text-slate-500">
+                  {item.start_date && ` · desde ${formatPartialDate(item.start_date)}`}
+                  {item.end_date && ` até ${formatDate(item.end_date)}`}
+                </span>
                 <div className="mt-1"><EntryBadges confirmed={item.confirmed} /></div>
               </li>
             ))}

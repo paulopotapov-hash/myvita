@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.models.clinical_history import HISTORY_ORIGIN_ENUM, HistoryOrigin
+from app.models.clinical_history import DATE_PRECISION_ENUM, HISTORY_ORIGIN_ENUM, DatePrecision, HistoryOrigin
 
 
 class MedicationStatus(str, enum.Enum):
@@ -61,8 +61,20 @@ class Medication(Base):
         # a patient's declaration names the patient's account and may lack the dose.
         CheckConstraint(
             "origin <> 'professional' OR (prescribed_by_staff_id IS NOT NULL AND dosage IS NOT NULL "
-            "AND confirmed_at IS NOT NULL)",
+            "AND confirmed_at IS NOT NULL AND start_date IS NOT NULL AND start_precision = 'day')",
             name="ck_medications_professional",
+        ),
+        # The start date carries its precision and is stored as the first day of its period
+        # (same model as the clinical history): a patient's "2020" never becomes 01/01/2020.
+        CheckConstraint("(start_date IS NULL) = (start_precision IS NULL)", name="ck_medications_start_precision"),
+        CheckConstraint(
+            "start_precision IS DISTINCT FROM 'year' OR "
+            "(EXTRACT(MONTH FROM start_date) = 1 AND EXTRACT(DAY FROM start_date) = 1)",
+            name="ck_medications_start_year_start",
+        ),
+        CheckConstraint(
+            "start_precision IS DISTINCT FROM 'month' OR EXTRACT(DAY FROM start_date) = 1",
+            name="ck_medications_start_month_start",
         ),
         CheckConstraint(
             "origin <> 'patient_declared' OR (declared_by_user_id IS NOT NULL AND prescribed_by_staff_id IS NULL)",
@@ -99,7 +111,10 @@ class Medication(Base):
         nullable=False,
         default=MedicationStatus.ACTIVE,
     )
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Required and complete for a professional; optional and possibly partial in a
+    # patient's declaration (year, month and year, or the full date).
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    start_precision: Mapped[DatePrecision | None] = mapped_column(DATE_PRECISION_ENUM, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Clinical history (commit 3): origin and confirmation, hiding from the patient (D4), soft delete.
     origin: Mapped[HistoryOrigin] = mapped_column(

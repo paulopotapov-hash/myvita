@@ -163,7 +163,7 @@ _NEW_TABLE_GRANTS = {
     "medications": (
         (True, True, False, False, False, False, False),
         {
-            "name", "dosage", "route", "frequency", "instructions", "status", "start_date", "end_date",
+            "name", "dosage", "route", "frequency", "instructions", "status", "start_date", "start_precision", "end_date",
             "confirmed_by_staff_id", "confirmed_at", "hidden_by_staff_id", "hidden_at", "hidden_reason",
             "updated_at", "deleted_at", "deleted_by_user_id", "deletion_reason",
         },

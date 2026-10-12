@@ -413,3 +413,59 @@ describe('MedicationsSection — declarations, confirmation and hiding (commit 3
     expect(h.action.mutate.mock.calls[2][0]).toEqual({ kind: 'remove', id: 'med-1', reason: 'Registo duplicado' })
   })
 })
+
+describe('MedicationsSection — partial start dates of declarations (step 1)', () => {
+  const declaredMonth: MedicationPublic = {
+    ...active, id: 'med-7', name: 'Ómega 3', dosage: null, start_date: '2020-03', origin: 'patient_declared', confirmed: false,
+    confirmed_at: null, confirmed_by_staff_id: null, prescribed_by_staff_id: null,
+  }
+  type Callbacks = { onSuccess?: () => void }
+
+  beforeEach(() => {
+    h.action = { mutate: vi.fn(), isPending: false }
+    h.create = { mutate: vi.fn(), isPending: false }
+  })
+
+  it('shows the start date with the precision the patient gave, or that it is missing', () => {
+    h.list = {
+      data: { items: [declaredMonth, { ...declaredMonth, id: 'med-8', name: 'Magnésio', start_date: null }, { ...declaredMonth, id: 'med-9', name: 'Ferro', start_date: '2019' }], total: 3 },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    }
+    render(<MedicationsSection patientId="patient-1" canWrite />)
+    expect(screen.getByText('Ómega 3').closest('li')).toHaveTextContent('Início março 2020')
+    expect(screen.getByText('Magnésio').closest('li')).toHaveTextContent('Início não indicado')
+    expect(screen.getByText('Ferro').closest('li')).toHaveTextContent('Início 2019')
+  })
+
+  it('lets the professional complete the start date when confirming', async () => {
+    h.list = { data: { items: [declaredMonth], total: 1 }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+    const user = userEvent.setup()
+    render(<MedicationsSection patientId="patient-1" canWrite />)
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Confirmar medicação' })
+    const field = within(dialog).getByLabelText(/Data de início completa \(opcional\), declarada: março 2020/)
+    fireEvent.change(field, { target: { value: '2020-03-12' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar' }))
+    expect(h.action.mutate.mock.calls[0][0]).toEqual({ kind: 'confirm', id: 'med-7', dosage: undefined, startDate: '2020-03-12' })
+    act(() => (h.action.mutate.mock.calls[0][1] as Callbacks).onSuccess?.())
+  })
+
+  it('does not ask for a start date when the declaration already has a complete one', async () => {
+    h.list = { data: { items: [{ ...declaredMonth, start_date: '2020-03-12' }], total: 1 }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+    const user = userEvent.setup()
+    render(<MedicationsSection patientId="patient-1" canWrite />)
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(within(screen.getByRole('alertdialog')).queryByLabelText(/Data de início completa/)).not.toBeInTheDocument()
+  })
+
+  it('declares with a month-precision start date from the patient page', async () => {
+    h.list = { data: { items: [], total: 0 }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+    const user = userEvent.setup()
+    render(<MedicationsSection patientId="patient-1" canWrite={false} canDeclare />)
+    await user.type(screen.getByLabelText('Medicamento'), 'Ómega 3')
+    await user.selectOptions(screen.getByLabelText('Data de início: precisão'), 'month')
+    fireEvent.change(screen.getByLabelText('Data de início: mês'), { target: { value: '2020-03' } })
+    await user.click(screen.getByRole('button', { name: 'Declarar medicação' }))
+    expect(h.create.mutate).toHaveBeenCalledWith({ name: 'Ómega 3', start_date: '2020-03' }, expect.any(Object))
+  })
+})

@@ -17,7 +17,9 @@ class PartialDateError(ValueError):
     pass
 
 
-def parse_partial_date(value: str, *, today: date | None = None) -> tuple[date, DatePrecision]:
+def parse_partial_date(
+    value: str, *, today: date | None = None, allow_future: bool = False
+) -> tuple[date, DatePrecision]:
     match = _PATTERN.match(value.strip())
     if match is None:
         raise PartialDateError("Usa o formato AAAA, AAAA-MM ou AAAA-MM-DD.")
@@ -30,7 +32,7 @@ def parse_partial_date(value: str, *, today: date | None = None) -> tuple[date, 
         raise PartialDateError("Data inválida.") from exc
     if year < MIN_YEAR:
         raise PartialDateError(f"O ano tem de ser {MIN_YEAR} ou posterior.")
-    if parsed > (today or date.today()):
+    if not allow_future and parsed > (today or date.today()):
         raise PartialDateError("A data não pode ser no futuro.")
     precision = DatePrecision.DAY if match["day"] else DatePrecision.MONTH if match["month"] else DatePrecision.YEAR
     return parsed, precision

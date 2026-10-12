@@ -168,9 +168,16 @@ describe('A minha medicação', () => {
 
     // The dose is optional in a declaration; professional-only controls never appear.
     await user.type(screen.getByLabelText('Medicamento'), 'Vitamina D')
-    await user.type(screen.getByLabelText('Data de início'), '2026-01-01')
     await user.click(screen.getByRole('button', { name: 'Declarar medicação' }))
-    expect(h.medicationCreate).toHaveBeenCalledWith({ name: 'Vitamina D', start_date: '2026-01-01' }, expect.any(Object))
+    // Dose and start date are optional in a declaration.
+    expect(h.medicationCreate).toHaveBeenLastCalledWith({ name: 'Vitamina D' }, expect.any(Object))
+
+    // A partial start date keeps its precision: "2020" stays "2020".
+    await user.clear(screen.getByLabelText('Medicamento'))
+    await user.type(screen.getByLabelText('Medicamento'), 'Ómega 3')
+    await user.type(screen.getByLabelText('Data de início: ano'), '2020')
+    await user.click(screen.getByRole('button', { name: 'Declarar medicação' }))
+    expect(h.medicationCreate).toHaveBeenLastCalledWith({ name: 'Ómega 3', start_date: '2020' }, expect.any(Object))
     for (const name of ['Confirmar', 'Concluir', 'Descontinuar', 'Ocultar ao paciente']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }

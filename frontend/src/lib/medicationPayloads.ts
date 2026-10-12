@@ -18,7 +18,7 @@ export function medicationToForm(medication: MedicationFields): MedicationFormVa
     route: medication.route ?? '',
     frequency: medication.frequency ?? '',
     instructions: medication.instructions ?? '',
-    start_date: medication.start_date,
+    start_date: medication.start_date ?? '',
     end_date: medication.end_date ?? '',
   }
 }
@@ -27,7 +27,8 @@ export function medicationToForm(medication: MedicationFields): MedicationFormVa
 export function toCreatePayload(values: MedicationFormValues): MedicationCreateRequest {
   return {
     name: values.name,
-    start_date: values.start_date,
+    // Optional (and possibly partial) only in a patient's declaration; the backend enforces it.
+    ...(values.start_date ? { start_date: values.start_date } : {}),
     // A patient's declaration may leave the dose empty; the backend requires it from professionals.
     ...(values.dosage ? { dosage: values.dosage } : {}),
     ...(values.route ? { route: values.route } : {}),
@@ -43,7 +44,7 @@ export function toUpdatePayload(values: MedicationFormValues, original: Medicati
   const payload: MedicationUpdateRequest = {}
   if (values.name !== before.name) payload.name = values.name
   if (values.dosage !== before.dosage && values.dosage) payload.dosage = values.dosage
-  if (values.start_date !== before.start_date) payload.start_date = values.start_date
+  if (values.start_date !== before.start_date) payload.start_date = values.start_date || null
   if (values.route !== before.route) payload.route = values.route || null
   if (values.frequency !== before.frequency) payload.frequency = values.frequency || null
   if (values.instructions !== before.instructions) payload.instructions = values.instructions || null

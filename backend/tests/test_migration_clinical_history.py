@@ -55,7 +55,7 @@ def test_upgrade_keeps_existing_medication_as_confirmed_by_its_prescriber(client
             text("SELECT name, dosage, status, start_date, created_at, prescribed_by_staff_id FROM medications WHERE id = :id"),
             {"id": medication_id},
         ).one()
-    command.upgrade(config, THIS)
+    command.upgrade(config, "head")
     with engine.connect() as connection:
         after = connection.execute(
             text(
@@ -85,7 +85,9 @@ def test_downgrade_refuses_while_new_clinical_data_exists(client: TestClient, en
     with pytest.raises(RuntimeError, match="Refusing to downgrade"):
         command.downgrade(alembic_config(), PREVIOUS)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == THIS
+        # Nothing was applied: the database is still at head.
+        (head,) = ScriptDirectory.from_config(alembic_config()).get_heads()
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
         assert connection.execute(text("SELECT count(*) FROM clinical_history_entries")).scalar() + connection.execute(
             text("SELECT count(*) FROM medications WHERE origin = 'patient_declared'")
         ).scalar() == 1

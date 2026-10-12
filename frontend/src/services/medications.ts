@@ -19,8 +19,9 @@ export const medicationsService = {
   update: (medicationId: string, payload: MedicationUpdateRequest) => api.patch<MedicationView>(`/api/v1/medications/${medicationId}`, payload),
   deactivate: (medicationId: string, payload?: MedicationDeactivateRequest) =>
     api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/deactivate`, payload),
-  confirm: (medicationId: string, dosage?: string) =>
-    api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/confirm`, dosage ? { dosage } : {}),
+  /** Confirms a declaration; the professional may complete the dose and the (full) start date. */
+  confirm: (medicationId: string, completion: { dosage?: string; start_date?: string } = {}) =>
+    api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/confirm`, completion),
   hide: (medicationId: string, reason: string) => api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/hide`, { reason }),
   show: (medicationId: string) => api.post<MedicationPublic>(`/api/v1/medications/${medicationId}/show`),
   remove: (medicationId: string, reason?: string) =>

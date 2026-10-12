@@ -371,7 +371,8 @@ export interface MedicationFields {
   frequency: string | null
   instructions: string | null
   status: MedicationStatus
-  start_date: string
+  /** "2020", "2020-03" or "2020-03-12"; always complete for a professional's prescription, optional in a declaration. */
+  start_date: string | null
   end_date: string | null
   origin: HistoryOrigin
   confirmed: boolean
@@ -547,7 +548,8 @@ export interface MedicationCreateRequest {
   route?: string
   frequency?: string
   instructions?: string
-  start_date: string
+  /** Required and complete for professionals; optional and possibly partial in a declaration. */
+  start_date?: string
   end_date?: string
 }
 /** Only the fields the backend marks nullable can be cleared with `null`. */
@@ -558,7 +560,8 @@ export interface MedicationUpdateRequest {
   frequency?: string | null
   instructions?: string | null
   status?: MedicationStatus
-  start_date?: string
+  /** `null` only in the patient's own declaration. */
+  start_date?: string | null
   end_date?: string | null
 }
 export interface MedicationDeactivateRequest {

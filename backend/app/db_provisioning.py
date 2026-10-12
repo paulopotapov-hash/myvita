@@ -99,6 +99,7 @@ COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
         "instructions",
         "status",
         "start_date",
+        "start_precision",
         "end_date",
         "confirmed_by_staff_id",
         "confirmed_at",

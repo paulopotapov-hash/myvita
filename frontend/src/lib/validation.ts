@@ -118,6 +118,10 @@ export const medicalRecordSchema = z.object({
 
 const optionalText = (max: number, message: string) => z.string().trim().max(max, message)
 
+function periodStart(partial: string): string {
+  return partial.length === 4 ? `${partial}-01-01` : partial.length === 7 ? `${partial}-01` : partial
+}
+
 /** Mirrors backend/app/modules/medications/schemas.py limits and the end >= start constraint.
  * The dose is required from professionals and optional in a patient's declaration. */
 function medicationSchema(dosageRequired: boolean) {
@@ -130,10 +134,13 @@ function medicationSchema(dosageRequired: boolean) {
       route: optionalText(100, 'A via de administração pode ter no máximo 100 caracteres.'),
       frequency: optionalText(100, 'A frequência pode ter no máximo 100 caracteres.'),
       instructions: optionalText(2000, 'As instruções podem ter no máximo 2000 caracteres.'),
-      start_date: z.string().min(1, 'Indica a data de início.'),
+      start_date: dosageRequired
+        ? z.string().min(1, 'Indica a data de início.')
+        : z.string().refine((value) => value === '' || /^\d{4}(-\d{2}(-\d{2})?)?$/.test(value), 'Data incompleta ou inválida.'),
       end_date: z.string(),
     })
-    .refine((value) => !value.end_date || value.end_date >= value.start_date, {
+    // A partial start ("2020", "2020-03") counts from the first day of its period.
+    .refine((value) => !value.end_date || !value.start_date || value.end_date >= periodStart(value.start_date), {
       path: ['end_date'],
       message: 'A data de fim não pode ser anterior à data de início.',
     })
