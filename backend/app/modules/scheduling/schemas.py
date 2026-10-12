@@ -74,7 +74,9 @@ class BookingSettingsUpdate(BookingSettings, RequestModel):
 
 
 class BookingSettingsOut(BookingSettings):
+    # Shown to patients: where appointments take place, and whom to call after the deadline.
     clinic_phone: str | None
+    clinic_address: str | None
 
 
 # --- professionals, weekly schedules and absences -----------------------------------------------
@@ -187,3 +189,35 @@ class AgendaOut(BaseModel):
     appointments: list[AgendaAppointment]
     absences: list[AbsenceOut]
     rules: list[ScheduleRuleOut]
+
+
+# --- patient booking ----------------------------------------------------------------------------
+
+
+class BookableProfessional(BaseModel):
+    id: uuid.UUID
+    full_name: str
+    # The patient already had an appointment with them (listed first).
+    known: bool
+
+
+class BookingIn(RequestModel):
+    """A patient's own booking of a free slot ("Marcação direta")."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    appointment_type_id: uuid.UUID
+    staff_id: uuid.UUID | None = None  # None: "Qualquer disponível"
+    starts_at: datetime
+    reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator("starts_at")
+    @classmethod
+    def with_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Indica o fuso horário.")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def blank_is_none(cls, value: str | None) -> str | None:
+        return value or None

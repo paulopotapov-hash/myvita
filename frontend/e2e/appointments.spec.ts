@@ -90,17 +90,15 @@ test.describe.serial('appointments', () => {
     test('sees only their own appointments and cannot create or change them', async ({ page }) => {
       // Merged UI: the patient area lives under /patient.
       await page.goto('/patient/consultas')
-      await expect(page.getByRole('heading', { name: 'Consultas', level: 1 })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Marcar consulta' })).toHaveCount(0)
-      const row = page.getByRole('listitem').filter({ hasText: 'E2E primeira' })
-      await expect(row).toBeVisible()
-
-      await row.getByRole('button', { name: 'Detalhes' }).click()
-      const dialog = page.getByRole('dialog', { name: 'Detalhe da consulta' })
-      await expect(dialog.getByRole('button', { name: 'Guardar alterações' })).toHaveCount(0)
-      await expect(dialog.getByRole('button', { name: 'Cancelar consulta' })).toHaveCount(0)
-      await page.keyboard.press('Escape')
-      await expect(dialog).toBeHidden()
+      await expect(page.getByRole('heading', { name: 'As minhas consultas', level: 1 })).toBeVisible()
+      // The staff scheduling form is never offered; the patient books through "Marcar consulta" instead.
+      await expect(page.getByLabel('Paciente', { exact: true })).toHaveCount(0)
+      const listing = await (await page.request.get('/api/v1/appointments')).json() as Array<{ id: string; reason: string | null }>
+      const own = listing.find((item) => item.reason === 'E2E primeira')!
+      await page.goto(`/patient/consultas/${own.id}`)
+      const details = page.getByRole('region', { name: 'Detalhes da consulta' })
+      await expect(details).toContainText('E2E primeira')
+      await expect(page.getByRole('button', { name: 'Guardar alterações' })).toHaveCount(0)
     })
   })
 })

@@ -192,9 +192,10 @@ def get_settings(db: Session, clinic_id: uuid.UUID | str | None) -> ClinicBookin
     )
 
 
-def clinic_phone(db: Session, clinic_id: uuid.UUID | str | None) -> str | None:
+def clinic_contact(db: Session, clinic_id: uuid.UUID | str | None) -> tuple[str | None, str | None]:
+    """(phone, address) of the clinic."""
     clinic = db.get(Clinic, clinic_id)
-    return clinic.phone if clinic is not None else None
+    return (clinic.phone, clinic.address) if clinic is not None else (None, None)
 
 
 def update_settings(db: Session, payload: BookingSettingsUpdate, user: User) -> ClinicBookingSettings:

@@ -48,6 +48,11 @@ def _lock_clinic_schedule(db: Session, clinic_id: str) -> None:
     )
 
 
+# Public name for the other booking paths (patient self-booking, requests, waitlist).
+def lock_clinic_schedule(db: Session, clinic_id: object) -> None:
+    _lock_clinic_schedule(db, str(clinic_id))
+
+
 def _add_patient_notification(
     db: Session, patient: Patient, *, event: NotificationEvent, dedupe_key: str | None = None
 ) -> None:

@@ -1,8 +1,11 @@
 import { api } from '../lib/apiClient'
+import type { AppointmentPatientView } from '../types/api'
 import type {
   Absence,
   AbsenceKind,
   Agenda,
+  BookableProfessional,
+  BookingRequest,
   AppointmentTypeOption,
   BookingMode,
   BookingSettings,
@@ -45,6 +48,11 @@ export const schedulingService = {
   deleteAbsence: (id: string) => api.post<void>(`${BASE}/absences/${encodeURIComponent(id)}/delete`),
   agenda: (from: string, to: string, staffId?: string, signal?: AbortSignal) =>
     api.get<Agenda>(`${BASE}/agenda?${q({ from, to, staff_id: staffId })}`, signal),
+
+  bookableProfessionals: (typeId: string, signal?: AbortSignal) =>
+    api.get<BookableProfessional[]>(`${BASE}/bookable-professionals?${q({ appointment_type_id: typeId })}`, signal),
+  /** The patient's own booking; the server re-checks the slot and answers 409 if it was taken. */
+  book: (payload: BookingRequest) => api.post<AppointmentPatientView>(`${BASE}/bookings`, payload),
 
   slots: (typeId: string, from: string, to: string, staffId?: string, signal?: AbortSignal) =>
     api.get<Slot[]>(`${BASE}/slots?${q({ appointment_type_id: typeId, from, to, staff_id: staffId })}`, signal),

@@ -15,6 +15,7 @@ vi.mock('./pages/DashboardPage', () => ({ DashboardPage: () => <div>App dashboar
 vi.mock('./pages/patient/PatientDashboard', () => ({ PatientDashboard: () => <div>Patient dashboard</div> }))
 vi.mock('./pages/patient/PatientProfilePage', () => ({ PatientProfilePage: () => <div>Patient profile</div> }))
 vi.mock('./pages/staff/AppointmentsPage', () => ({ AppointmentsPage: () => <div>Appointments</div> }))
+vi.mock('./pages/patient/PatientAppointmentsPage', () => ({ PatientAppointmentsPage: () => <div>Appointments</div> }))
 vi.mock('./pages/staff/PatientDetailPage', () => ({ PatientDetailPage: () => <div>Staff patient file</div> }))
 vi.mock('./pages/patient/HealthSummaryPage', () => ({ HealthSummaryPage: () => <div>Patient health</div> }))
 vi.mock('./pages/patient/PatientResultsPage', () => ({ PatientResultsPage: () => <div>Patient results</div> }))

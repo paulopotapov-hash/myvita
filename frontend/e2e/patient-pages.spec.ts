@@ -20,7 +20,8 @@ test.describe('patient section pages', () => {
       await page.goto(path)
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(title)
       await expect(page).toHaveTitle(`${title} · myVita`)
-      await expect(page.getByRole('tablist')).toHaveCount(0)
+      // The staff's tabbed patient file never appears in the patient area.
+      await expect(page.getByRole('tablist', { name: 'Secções da ficha' })).toHaveCount(0)
       await expectNoHorizontalOverflow(page, `${path} @ 375px`)
     })
   }

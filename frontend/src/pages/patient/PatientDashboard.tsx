@@ -2,7 +2,6 @@ import { ErrorState } from '../../components/ErrorState'
 import { HighlightCard } from '../../components/HighlightCard'
 import { HomeTile } from '../../components/HomeTile'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
-import { REQUEST_FORM_ANCHOR } from '../../components/AppointmentRequestsPanel'
 import { useAppointments } from '../../hooks/useClinicData'
 import { UNREAD_CONVERSATIONS_SCAN, useConversations } from '../../hooks/useMessages'
 import { useUnopenedResultIds } from '../../hooks/useResultNotifications'
@@ -32,7 +31,7 @@ export function PatientDashboard() {
 
       <nav aria-label="Atalhos">
         <ul className="grid grid-cols-3 gap-3 sm:gap-4 lg:grid-cols-6">
-          <li><HomeTile to={`/patient/consultas#${REQUEST_FORM_ANCHOR}`} label="Marcar consulta" icon="calendarPlus" /></li>
+          <li><HomeTile to="/patient/consultas/marcar" label="Marcar consulta" icon="calendarPlus" /></li>
           <li>
             <HomeTile
               to="/patient/mensagens"
@@ -68,7 +67,7 @@ export function PatientDashboard() {
             title="Próxima consulta"
             icon="calendar"
             actionLabel="Ver detalhes"
-            actionTo={`/patient/consultas?consulta=${encodeURIComponent(upcoming.id)}`}
+            actionTo={`/patient/consultas/${encodeURIComponent(upcoming.id)}`}
           >
             <p className="font-medium text-slate-900 first-letter:uppercase">{formatLongDate(upcoming.scheduled_at)}</p>
             <p>às {formatTime(upcoming.scheduled_at)}</p>
@@ -81,7 +80,7 @@ export function PatientDashboard() {
             title="Sem consultas marcadas"
             icon="calendar"
             actionLabel="Marcar consulta"
-            actionTo={`/patient/consultas#${REQUEST_FORM_ANCHOR}`}
+            actionTo="/patient/consultas/marcar"
           >
             <p>Peça uma consulta e a clínica confirma o dia e a hora.</p>
           </HighlightCard>

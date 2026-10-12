@@ -6,13 +6,16 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.audit import record_denied_access
+from app.core.audit import record_audit_event, record_denied_access
+from app.core.client_ip import get_client_ip
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import AppointmentType, AuditAction, ScheduleAbsence, User, UserRole
-from app.modules.scheduling import service
-from app.modules.scheduling.audit import audit_scheduling
-from app.modules.scheduling.availability import TZ, free_slots
+from app.models import AppointmentType, AuditAction, AuditResult, ScheduleAbsence, User, UserRole
+from app.modules.appointments.schemas import AppointmentPatientView
+from app.modules.appointments.views import patient_views
+from app.modules.scheduling import bookings, service
+from app.modules.scheduling.audit import audit_auto_assignment, audit_scheduling
+from app.modules.scheduling.availability import TZ, free_slots, patient_busy_intervals
 from app.modules.scheduling.eligibility import bookable_professionals, own_patient
 from app.modules.scheduling.schemas import (
     AbsenceIn,
@@ -22,6 +25,8 @@ from app.modules.scheduling.schemas import (
     AppointmentTypeCreate,
     AppointmentTypeOut,
     AppointmentTypeUpdate,
+    BookableProfessional,
+    BookingIn,
     BookingSettingsOut,
     BookingSettingsUpdate,
     ProfessionalOut,
@@ -49,12 +54,14 @@ def _denials(request: Request, user: User, resource_type: str, resource_id: obje
 
 def _settings_out(db: Session, clinic_id: object) -> BookingSettingsOut:
     settings = service.get_settings(db, clinic_id)  # type: ignore[arg-type]
+    phone, address = service.clinic_contact(db, clinic_id)  # type: ignore[arg-type]
     return BookingSettingsOut(
         cancellation_deadline_hours=settings.cancellation_deadline_hours,
         waitlist_offer_minutes=settings.waitlist_offer_minutes,
         reminder_hours_before=settings.reminder_hours_before,
         booking_horizon_days=settings.booking_horizon_days,
-        clinic_phone=service.clinic_phone(db, clinic_id),  # type: ignore[arg-type]
+        clinic_phone=phone,
+        clinic_address=address,
     )
 
 
@@ -317,14 +324,58 @@ def slots(
     staff_ids = [staff_id] if staff_id is not None else list(names)
     if staff_id is not None and staff_id not in names:
         return []
+    found = free_slots(
+        db,
+        clinic_id=user.clinic_id,  # type: ignore[arg-type]
+        appointment_type=appointment_type,
+        staff_ids=staff_ids,
+        day_from=day_from,
+        day_to=day_to,
+    )
+    if patient is not None:
+        # Never offer a time the patient is already booked at (it would only end in a 409).
+        busy = patient_busy_intervals(db, patient.id, found)
+        found = [slot for slot in found if not any(start < slot.ends_at and end > slot.starts_at for start, end in busy)]
     return [
         SlotOut(starts_at=slot.starts_at, ends_at=slot.ends_at, staff_id=slot.staff_id, staff_name=names[slot.staff_id])
-        for slot in free_slots(
-            db,
-            clinic_id=user.clinic_id,  # type: ignore[arg-type]
-            appointment_type=appointment_type,
-            staff_ids=staff_ids,
-            day_from=day_from,
-            day_to=day_to,
-        )
+        for slot in found
     ]
+
+
+# --- patient booking ----------------------------------------------------------------------------
+
+
+@router.get("/bookable-professionals", response_model=list[BookableProfessional])
+def bookable_professionals_for_type(
+    appointment_type_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> list[BookableProfessional]:
+    """Professionals with a schedule for this type; for a patient, known ones first and
+    without those who do not accept new patients (unless already known)."""
+    return [
+        BookableProfessional(id=staff.id, full_name=name, known=known)
+        for staff, name, known in bookings.bookable_for_patient(db, user, appointment_type_id)
+    ]
+
+
+@router.post("/bookings", response_model=AppointmentPatientView, status_code=201)
+def book(
+    payload: BookingIn, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> AppointmentPatientView:
+    if user.role != UserRole.PATIENT:
+        raise HTTPException(status_code=403, detail="Só pacientes marcam consultas aqui.")
+    with _denials(request, user, "appointment", "booking"):
+        appointment, assignment = bookings.book_for_patient(db, user, payload)
+    record_audit_event(
+        action=AuditAction.APPOINTMENT_CREATED,
+        result=AuditResult.SUCCESS,
+        clinic_id=user.clinic_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        resource_type="appointment",
+        resource_id=appointment.id,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        metadata={"patient_id": appointment.patient_id, "staff_id": appointment.staff_id, "via": "patient"},
+    )
+    audit_auto_assignment(request, user, assignment, appointment.id)
+    return patient_views(db, [appointment])[0]

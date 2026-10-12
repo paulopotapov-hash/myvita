@@ -20,6 +20,9 @@ import { AccountSecurityPage } from './pages/AccountSecurityPage'
 import { AccountProfilePage } from './pages/AccountProfilePage'
 import { PatientDashboard } from './pages/patient/PatientDashboard'
 import { HealthSummaryPage } from './pages/patient/HealthSummaryPage'
+import { BookingFlowPage } from './pages/patient/BookingFlowPage'
+import { PatientAppointmentDetailPage } from './pages/patient/PatientAppointmentDetailPage'
+import { PatientAppointmentsPage } from './pages/patient/PatientAppointmentsPage'
 import { PatientConsentsPage } from './pages/patient/PatientConsentsPage'
 import { PatientDocumentsPage } from './pages/patient/PatientDocumentsPage'
 import { PatientMedicationPage } from './pages/patient/PatientMedicationPage'
@@ -108,7 +111,9 @@ export default function App() {
         }
       >
         <Route index element={<PatientDashboard />} />
-        <Route path="consultas" element={<AppointmentsPage />} />
+        <Route path="consultas" element={<PatientAppointmentsPage />} />
+        <Route path="consultas/marcar" element={<BookingFlowPage />} />
+        <Route path="consultas/:appointmentId" element={<PatientAppointmentDetailPage />} />
         <Route path="perfil" element={<PatientProfilePage />} />
         <Route path="consentimentos" element={<PatientConsentsPage />} />
         <Route path="seguranca" element={<AccountSecurityPage />} />

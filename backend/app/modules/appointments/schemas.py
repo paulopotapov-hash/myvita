@@ -54,9 +54,13 @@ class AppointmentPatientView(BaseModel):
     id: uuid.UUID
     staff_name: str
     scheduled_at: datetime
+    ends_at: datetime
     duration_minutes: int
     status: AppointmentStatus
     reason: str | None
+    appointment_type: str  # "Consulta" for appointments created before appointment types
+    specialty: str | None
+    location: str | None  # the clinic's address
 
 
 AppointmentOut = Annotated[AppointmentPublic | AppointmentPatientView, Field(discriminator="view")]

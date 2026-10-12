@@ -22,6 +22,7 @@ from app.modules.appointments.service import (
     list_appointments_for_user,
     update_appointment,
 )
+from app.modules.appointments.views import patient_views
 from app.modules.scheduling.audit import audit_auto_assignment
 
 router = APIRouter()
@@ -33,7 +34,6 @@ router = APIRouter()
 _staff_or_admin_only = require_roles(UserRole.STAFF, UserRole.CLINIC_ADMIN)
 
 
-_UNKNOWN_PROFESSIONAL = "Profissional de saúde"
 
 
 def _staff_names(db: Session, staff_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
@@ -49,19 +49,7 @@ def _for_audience(
     """Explicit per-audience schemas: patients get the professional's display name, never ids."""
     if user.role != UserRole.PATIENT:
         return [_public(appointment, user, db, may_read_reason=may_read_reason) for appointment in appointments]
-    names = _staff_names(db, {appointment.staff_id for appointment in appointments})
-    return [
-        AppointmentPatientView(
-            id=appointment.id,
-            staff_name=names.get(appointment.staff_id, _UNKNOWN_PROFESSIONAL),
-            scheduled_at=appointment.scheduled_at,
-            duration_minutes=appointment.duration_minutes,
-            status=appointment.status,
-            # A patient always reads the reason of their own appointment.
-            reason=appointment.reason,
-        )
-        for appointment in appointments
-    ]
+    return list(patient_views(db, appointments))
 
 
 def _public(

@@ -116,6 +116,23 @@ def free_slots(
     return sorted(unique.values(), key=lambda slot: (slot.starts_at, str(slot.staff_id)))
 
 
+def patient_busy_intervals(db: Session, patient_id: uuid.UUID, slots: list[Slot]) -> list[tuple[datetime, datetime]]:
+    """The patient's active appointments within the span of `slots`."""
+    if not slots:
+        return []
+    start = min(slot.starts_at for slot in slots)
+    end = max(slot.ends_at for slot in slots)
+    return [
+        (scheduled_at, ends_at)
+        for scheduled_at, ends_at in db.query(Appointment.scheduled_at, Appointment.ends_at).filter(
+            Appointment.patient_id == patient_id,
+            Appointment.status.in_(ACTIVE),
+            Appointment.scheduled_at < end,
+            Appointment.ends_at > start,
+        )
+    ]
+
+
 def slot_is_free(
     db: Session,
     *,

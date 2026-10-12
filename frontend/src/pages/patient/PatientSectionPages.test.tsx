@@ -208,7 +208,7 @@ describe('Resumo de saúde', () => {
     expect(medicationCard).not.toHaveTextContent('Amoxicilina')
 
     const appointmentCard = screen.getByRole('region', { name: 'Próxima consulta' })
-    expect(within(appointmentCard).getByRole('link', { name: 'Ver detalhes' })).toHaveAttribute('href', '/patient/consultas?consulta=a-next')
+    expect(within(appointmentCard).getByRole('link', { name: 'Ver detalhes' })).toHaveAttribute('href', '/patient/consultas/a-next')
 
     const resultsCard = screen.getByRole('region', { name: 'Últimos resultados' })
     expect(within(resultsCard).getByRole('link', { name: 'Hemograma' })).toHaveAttribute('href', '/patient/resultados?result=r1')

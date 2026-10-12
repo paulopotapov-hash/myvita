@@ -263,7 +263,7 @@ test('pilot flow and cross-tenant security through browser proxy', async ({ page
   await signIn(page, patientEmail, password)
   await expect(page).toHaveURL(/\/patient/)
   await page.goto('/patient/consultas')
-  await expect(page.locator('span').filter({ hasText: 'Confirmada' })).toBeVisible()
+  await expect(page.getByText('Confirmada', { exact: true })).toBeVisible()
   await page.goto('/patient/saude')
   await expect(page.getByText('Conteúdo clínico sintético atualizado.')).toBeVisible()
   await page.goto('/patient/notificacoes')

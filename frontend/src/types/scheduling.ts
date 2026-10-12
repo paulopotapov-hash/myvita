@@ -28,6 +28,7 @@ export interface BookingSettings {
 
 export interface BookingSettingsOut extends BookingSettings {
   clinic_phone: string | null
+  clinic_address: string | null
 }
 
 export interface Professional {
@@ -72,6 +73,21 @@ export interface AgendaAppointment {
   status: string
   patient_name: string
   appointment_type: string
+}
+
+export interface BookableProfessional {
+  id: string
+  full_name: string
+  /** The patient already had an appointment with them (listed first). */
+  known: boolean
+}
+
+export interface BookingRequest {
+  appointment_type_id: string
+  /** Omitted: "Qualquer disponível". */
+  staff_id?: string
+  starts_at: string
+  reason?: string
 }
 
 export interface Agenda {

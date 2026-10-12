@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { schedulingService } from '../services/scheduling'
-import type { AbsenceKind, BookingMode, BookingSettings, ScheduleRule, Specialty, AppointmentTypeOption } from '../types/scheduling'
+import type { AbsenceKind, AppointmentTypeOption, BookingMode, BookingRequest, BookingSettings, ScheduleRule, Specialty } from '../types/scheduling'
 
 const KEY = ['scheduling'] as const
 
@@ -34,6 +34,26 @@ export function useSlots(typeId: string, from: string, to: string, staffId?: str
     queryKey: [...KEY, 'slots', typeId, from, to, staffId ?? 'any'],
     queryFn: ({ signal }) => schedulingService.slots(typeId, from, to, staffId, signal),
     enabled: Boolean(typeId && from && to),
+  })
+}
+
+export function useBookableProfessionals(typeId: string) {
+  return useQuery({
+    queryKey: [...KEY, 'bookable', typeId],
+    queryFn: ({ signal }) => schedulingService.bookableProfessionals(typeId, signal),
+    enabled: Boolean(typeId),
+  })
+}
+
+/** The patient's booking: on success the appointment lists and the slots are refreshed. */
+export function useBook() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: BookingRequest) => schedulingService.book(payload),
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: KEY }),
+      client.invalidateQueries({ queryKey: ['appointments'] }),
+    ]),
   })
 }
 

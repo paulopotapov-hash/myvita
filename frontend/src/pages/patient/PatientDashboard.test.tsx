@@ -21,7 +21,10 @@ const DAY = 86_400_000
 const inDays = (days: number) => new Date(Date.now() + days * DAY).toISOString()
 
 function appointment(id: string, days: number, status: AppointmentPatientView['status'], staff = 'Dra. Rita Sousa'): AppointmentPatientView {
-  return { view: 'patient', id, staff_name: staff, scheduled_at: inDays(days), duration_minutes: 30, status, reason: null }
+  return {
+    view: 'patient', id, staff_name: staff, scheduled_at: inDays(days), ends_at: inDays(days), duration_minutes: 30, status, reason: null,
+    appointment_type: 'Consulta', specialty: null, location: null,
+  }
 }
 
 function conversation(id: string, unread: number, updatedAt: string, staff = 'Dr. Rui'): ConversationPublic {
@@ -60,7 +63,7 @@ describe('PatientDashboard', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Olá, Ana!' })).toBeInTheDocument()
     const shortcuts = within(screen.getByRole('navigation', { name: 'Atalhos' })).getAllByRole('link')
     expect(shortcuts.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['Marcar consulta', '/patient/consultas#pedir-consulta'],
+      ['Marcar consulta', '/patient/consultas/marcar'],
       ['Mensagens', '/patient/mensagens'],
       ['Resultados', '/patient/resultados'],
       ['Medicação', '/patient/medicacao'],
@@ -125,14 +128,14 @@ describe('PatientDashboard', () => {
     expect(card).toHaveTextContent('Com Dra. Rita Sousa')
     expect(card).toHaveTextContent(/às \d{2}:\d{2}/)
     expect(card).not.toHaveTextContent('Dr. Mais Tarde')
-    expect(within(card).getByRole('link', { name: 'Ver detalhes' })).toHaveAttribute('href', '/patient/consultas?consulta=next')
+    expect(within(card).getByRole('link', { name: 'Ver detalhes' })).toHaveAttribute('href', '/patient/consultas/next')
   })
 
   it('offers to book when nothing is scheduled, and hides empty message and result cards', async () => {
     vi.mocked(appointmentsService.list).mockResolvedValue([appointment('past', -2, 'completed')])
     renderHome()
     const empty = await screen.findByRole('region', { name: 'Sem consultas marcadas' })
-    expect(within(empty).getByRole('link', { name: 'Marcar consulta' })).toHaveAttribute('href', '/patient/consultas#pedir-consulta')
+    expect(within(empty).getByRole('link', { name: 'Marcar consulta' })).toHaveAttribute('href', '/patient/consultas/marcar')
     expect(screen.queryByRole('region', { name: 'Mensagem por ler' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Resultados por abrir' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Mensagens' })).toBeInTheDocument() // no badge text

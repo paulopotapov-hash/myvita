@@ -26,6 +26,9 @@ STAFF_OVERLAP_CONSTRAINT = "ex_appointments_staff_no_overlap"
 PATIENT_OVERLAP_CONSTRAINT = "ex_appointments_patient_no_overlap"
 STAFF_TAKEN = "Este horário já não está disponível para este profissional."
 PATIENT_TAKEN = "O paciente já tem uma consulta a essa hora."
+# Wording for the patient's own booking screens.
+SLOT_TAKEN_FOR_PATIENT = "Este horário já não está disponível. Escolhe outro."
+OWN_OVERLAP_FOR_PATIENT = "Já tens uma consulta a essa hora."
 CLINICAL_ROLES = frozenset({StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.PHYSIOTHERAPIST})
 
 
@@ -36,19 +39,19 @@ class AutoAssignment:
     staff_id: uuid.UUID
 
 
-def overlap_message(exc: IntegrityError) -> str | None:
+def overlap_message(exc: IntegrityError, *, patient_facing: bool = False) -> str | None:
     """The 409 message for an exclusion violation, or None for any other integrity error."""
     diag = getattr(exc.orig, "diag", None)
     constraint = getattr(diag, "constraint_name", None)
     if constraint == STAFF_OVERLAP_CONSTRAINT:
-        return STAFF_TAKEN
+        return SLOT_TAKEN_FOR_PATIENT if patient_facing else STAFF_TAKEN
     if constraint == PATIENT_OVERLAP_CONSTRAINT:
-        return PATIENT_TAKEN
+        return OWN_OVERLAP_FOR_PATIENT if patient_facing else PATIENT_TAKEN
     return None
 
 
 @contextmanager
-def booking_guard(db: Session) -> Iterator[None]:
+def booking_guard(db: Session, *, patient_facing: bool = False) -> Iterator[None]:
     """Wrap a whole booking change: an exclusion violation can surface at any flush (an
     autoflush before a query, the explicit flush, or the commit). It becomes a 409 and the
     transaction is rolled back; any other integrity error propagates unchanged."""
@@ -56,7 +59,7 @@ def booking_guard(db: Session) -> Iterator[None]:
         yield
     except IntegrityError as exc:
         db.rollback()
-        message = overlap_message(exc)
+        message = overlap_message(exc, patient_facing=patient_facing)
         if message is None:
             raise
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message) from exc

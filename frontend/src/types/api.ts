@@ -158,9 +158,15 @@ export interface AppointmentPatientView {
   id: string
   staff_name: string
   scheduled_at: string // ISO datetime
+  ends_at: string
   duration_minutes: number
   status: AppointmentStatus
   reason: string | null
+  /** "Consulta" for appointments made before appointment types existed. */
+  appointment_type: string
+  specialty: string | null
+  /** The clinic's address. */
+  location: string | null
 }
 
 export type AppointmentView = AppointmentPublic | AppointmentPatientView

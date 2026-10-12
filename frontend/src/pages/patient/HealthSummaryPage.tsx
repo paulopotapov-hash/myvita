@@ -142,7 +142,7 @@ function NextAppointment() {
     <SummaryCard
       id="summary-appointment"
       title="Próxima consulta"
-      link={upcoming ? { to: `/patient/consultas?consulta=${upcoming.id}`, label: 'Ver detalhes' } : { to: '/patient/consultas', label: 'Ver as minhas consultas' }}
+      link={upcoming ? { to: `/patient/consultas/${upcoming.id}`, label: 'Ver detalhes' } : { to: '/patient/consultas/marcar', label: 'Marcar consulta' }}
     >
       {appointments.isLoading && <LoadingSpinner />}
       {appointments.isError && <ErrorState message={toUserMessage(appointments.error)} onRetry={() => appointments.refetch()} />}

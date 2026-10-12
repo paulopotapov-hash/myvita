@@ -17,7 +17,7 @@ vi.mock('../../hooks/useScheduling', () => ({
     isError: false,
   }),
   useBookingSettings: () => ({
-    data: { cancellation_deadline_hours: 24, waitlist_offer_minutes: 60, reminder_hours_before: 24, booking_horizon_days: 90, clinic_phone: null },
+    data: { cancellation_deadline_hours: 24, waitlist_offer_minutes: 60, reminder_hours_before: 24, booking_horizon_days: 90, clinic_phone: null, clinic_address: null },
     isLoading: false,
     isError: false,
   }),

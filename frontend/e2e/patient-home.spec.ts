@@ -32,14 +32,15 @@ test.describe('patient home', () => {
     const card = page.getByRole('region', { name: 'Próxima consulta' })
     await expect(card).toContainText(`Com ${seed.names.doctor}`)
     await card.getByRole('link', { name: 'Ver detalhes' }).click()
-    await expect(page).toHaveURL(/\/patient\/consultas\?consulta=/)
-    await expect(page.getByRole('dialog')).toContainText(seed.names.doctor)
+    await expect(page).toHaveURL(/\/patient\/consultas\/[0-9a-f-]{36}$/)
+    await expect(page.getByRole('region', { name: 'Detalhes da consulta' })).toContainText(seed.names.doctor)
   })
 
-  test('Marcar consulta lands on the request form, and Medicação on the medication list', async ({ page }) => {
+  test('Marcar consulta opens the booking flow, and Medicação the medication list', async ({ page }) => {
     await page.goto('/patient')
     await page.getByRole('navigation', { name: 'Atalhos' }).getByRole('link', { name: 'Marcar consulta' }).click()
-    await expect(page.getByLabel('Data e hora pretendidas')).toBeFocused()
+    await expect(page).toHaveURL(/\/patient\/consultas\/marcar$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Marcar consulta' })).toBeVisible()
 
     await page.goto('/patient')
     await page.getByRole('navigation', { name: 'Atalhos' }).getByRole('link', { name: 'Medicação' }).click()

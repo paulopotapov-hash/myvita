@@ -180,3 +180,37 @@ export async function signOut(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Menu da conta' }).click()
   await page.getByRole('button', { name: 'Sair' }).click()
 }
+
+/** GET as an already-logged-in role (for seeding lookups). */
+export async function apiGet<T>(role: Role, url: string): Promise<T> {
+  const context = await request.newContext({ baseURL: FRONTEND_URL, storageState: authState(role) })
+  try {
+    const response = await context.get(url)
+    expect(response.ok(), `GET ${url} -> ${response.status()}`).toBe(true)
+    return (await response.json()) as T
+  } finally {
+    await context.dispose()
+  }
+}
+
+/**
+ * Scheduling for the nurse (kept apart from the doctor, whom scheduling-admin.spec configures
+ * through the UI): specialty "Enfermagem E2E", a direct-booking type, Monday-Friday 14:00-17:00.
+ * Idempotent: safe to call from several specs. Returns the type id.
+ */
+export async function seedNurseBooking(): Promise<string> {
+  const seed = loadSeed()
+  await apiAs('clinic_admin', 'POST', '/api/v1/scheduling/specialties', { name: 'Enfermagem E2E' }, [409])
+  const specialties = await apiGet<Array<{ id: string; name: string }>>('clinic_admin', '/api/v1/scheduling/specialties')
+  const specialtyId = specialties.find((item) => item.name === 'Enfermagem E2E')!.id
+  await apiAs('clinic_admin', 'POST', '/api/v1/scheduling/appointment-types', {
+    name: 'Consulta de enfermagem E2E', duration_minutes: 30, specialty_id: specialtyId, booking_mode: 'direct',
+  }, [409])
+  const types = await apiGet<Array<{ id: string; name: string }>>('clinic_admin', '/api/v1/scheduling/appointment-types')
+  const typeId = types.find((item) => item.name === 'Consulta de enfermagem E2E')!.id
+  await apiAs('clinic_admin', 'PATCH', `/api/v1/scheduling/professionals/${seed.staffIds.nurse}`, { specialty_id: specialtyId })
+  await apiAs('clinic_admin', 'POST', `/api/v1/scheduling/professionals/${seed.staffIds.nurse}/schedule`, {
+    rules: [0, 1, 2, 3, 4].map((weekday) => ({ weekday, start_time: '14:00', end_time: '17:00', appointment_type_ids: [typeId] })),
+  })
+  return typeId
+}

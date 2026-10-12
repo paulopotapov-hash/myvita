@@ -70,7 +70,7 @@ describe('patient area: one page per section', () => {
     expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     // The tabbed patient file is staff-only.
-    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tablist', { name: 'Secções da ficha' })).not.toBeInTheDocument()
     expect(screen.queryByText('Ficha do paciente')).not.toBeInTheDocument()
     await waitFor(() => expect(document.title).toBe(documentTitle))
   })
