@@ -2,7 +2,18 @@ import enum
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import DateTime, Enum, ForeignKey, ForeignKeyConstraint, Index, String, Text, event, func
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +44,8 @@ class Appointment(Base):
     __table_args__ = (
         Index("ix_appointments_clinic_scheduled_at", "clinic_id", "scheduled_at"),
         Index("ix_appointments_staff_scheduled_at", "staff_id", "scheduled_at"),
+        # Target of same-clinic composite foreign keys (the care assignment a booking created).
+        UniqueConstraint("id", "clinic_id", name="uq_appointments_id_clinic"),
         ForeignKeyConstraint(
             ["appointment_type_id", "clinic_id"],
             ["appointment_types.id", "appointment_types.clinic_id"],

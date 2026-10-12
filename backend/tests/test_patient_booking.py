@@ -49,9 +49,10 @@ def test_patient_books_a_free_slot_confirmed_at_once(client: TestClient, tenant:
     with client.session_factory() as db:  # type: ignore[attr-defined]
         appointment = db.get(Appointment, uuid.UUID(body["id"]))
         assert appointment.booked_via == BookingSource.PATIENT
-        assert db.query(ClinicalCareAssignment).filter_by(
+        link = db.query(ClinicalCareAssignment).filter_by(
             patient_id=uuid.UUID(tenant.other_patient_id), staff_id=uuid.UUID(tenant.staff_ids["doctor"]), active=True
-        ).count() == 1
+        ).one()
+        assert link.origin_appointment_id == appointment.id
         audit = db.query(AuditLog).filter(AuditLog.action == AuditAction.APPOINTMENT_CREATED).all()
         assert audit[-1].event_metadata["via"] == "patient"
         assert "Rotina" not in str(audit[-1].event_metadata)

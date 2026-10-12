@@ -33,8 +33,10 @@ def test_revision_graph_has_exactly_one_head():
     # The merge revision e1f2a3b4c5d6 is followed by the integration Phase 4 migration,
     # then by clinical results / record visibility / notification events (P2.4-P2.6),
     # the released-result guard, the patient identifiers and address, the clinical history
-    # and the partial start date of declared medication.
-    assert heads == ["7d2e4b9a1c3f"], f"expected a single head, got {heads}"
+    # the partial start date of declared medication, scheduling and the origin of the
+    # automatic care assignment.
+    assert heads == ["8e3f5a7c9b1d"], f"expected a single head, got {heads}"
+    assert script.get_revision("8e3f5a7c9b1d").down_revision == "7d2e4b9a1c3f"
     assert script.get_revision("7d2e4b9a1c3f").down_revision == "5f3a9c1e7b2d"
     assert script.get_revision("5f3a9c1e7b2d").down_revision == "a0b1c2d3e4f5"
     assert script.get_revision("a0b1c2d3e4f5").down_revision == "9e0f1a2b3c4d"

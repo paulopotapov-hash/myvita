@@ -229,6 +229,13 @@ def assign_clinical_staff(
         )
         .first()
     )
+    if existing is not None and existing.origin_appointment_id is not None:
+        # Created by a booking: the admin's explicit assignment makes it permanent, so
+        # cancelling that appointment no longer ends it.
+        existing.origin_appointment_id = None
+        db.commit()
+        db.refresh(existing)
+        return existing
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Profissional já associado ao paciente.")
     assignment = ClinicalCareAssignment(

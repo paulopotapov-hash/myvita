@@ -27,6 +27,7 @@ from app.modules.scheduling.booking import (
     booking_guard,
     commit_booking,
     ensure_care_assignment,
+    release_care_assignment,
 )
 
 _VALID_STATUS_TRANSITIONS: dict[AppointmentStatus, set[AppointmentStatus]] = {
@@ -173,7 +174,12 @@ def _create_appointment(
     )
     _add_staff_notification(db, staff, event=NotificationEvent.APPOINTMENT_ASSIGNED, dedupe_key=str(appointment.id))
     assignment = ensure_care_assignment(
-        db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=actor_user_id
+        db,
+        clinic_id=patient.clinic_id,
+        patient_id=patient.id,
+        staff=staff,
+        actor_user_id=actor_user_id,
+        appointment_id=appointment.id,
     )
     commit_booking(db)
     db.refresh(appointment)
@@ -193,14 +199,16 @@ def get_appointment_for_clinic(db: Session, appointment_id: uuid.UUID, clinic_id
 
 def update_appointment(
     db: Session, appointment_id: uuid.UUID, clinic_id: str, payload: AppointmentUpdateRequest, actor_user_id: uuid.UUID
-) -> tuple[Appointment, AutoAssignment | None]:
+) -> tuple[Appointment, AutoAssignment | None, AutoAssignment | None]:
+    """Returns the appointment, the care assignment it created (if any) and the one it
+    ended (if moved away from the professional or patient whose link it had created)."""
     with booking_guard(db):
         return _update_appointment(db, appointment_id, clinic_id, payload, actor_user_id)
 
 
 def _update_appointment(
     db: Session, appointment_id: uuid.UUID, clinic_id: str, payload: AppointmentUpdateRequest, actor_user_id: uuid.UUID
-) -> tuple[Appointment, AutoAssignment | None]:
+) -> tuple[Appointment, AutoAssignment | None, AutoAssignment | None]:
     _lock_clinic_schedule(db, clinic_id)
     appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
     if appointment.status in {
@@ -281,17 +289,28 @@ def _update_appointment(
             _add_patient_notification(db, patient_recipient, event=event)
         for staff_recipient in recipient_staff.values():
             _add_staff_notification(db, staff_recipient, event=event)
-    assignment = None
+    assignment = ended = None
     if staff_id != old_staff_id or patient_id != old_patient_id:
+        db.flush()
+        ended = release_care_assignment(db, appointment=appointment, patient_id=old_patient_id, staff_id=old_staff_id)
         assignment = ensure_care_assignment(
-            db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=actor_user_id
+            db,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.id,
+            staff=staff,
+            actor_user_id=actor_user_id,
+            appointment_id=appointment.id,
         )
     commit_booking(db)
     db.refresh(appointment)
-    return appointment, assignment
+    return appointment, assignment, ended
 
 
-def cancel_appointment(db: Session, appointment_id: uuid.UUID, clinic_id: str) -> Appointment:
+def cancel_appointment(
+    db: Session, appointment_id: uuid.UUID, clinic_id: str
+) -> tuple[Appointment, AutoAssignment | None]:
+    """Returns the cancelled appointment and the care assignment it had created, if that
+    link ended with it (for the caller to audit)."""
     _lock_clinic_schedule(db, clinic_id)
     appointment = get_appointment_for_clinic(db, appointment_id, clinic_id)
     if appointment.status == AppointmentStatus.CANCELLED:
@@ -310,9 +329,13 @@ def cancel_appointment(db: Session, appointment_id: uuid.UUID, clinic_id: str) -
         _add_staff_notification(
             db, staff, event=NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF, dedupe_key=str(appointment.id)
         )
+    db.flush()
+    ended = release_care_assignment(
+        db, appointment=appointment, patient_id=appointment.patient_id, staff_id=appointment.staff_id
+    )
     db.commit()
     db.refresh(appointment)
-    return appointment
+    return appointment, ended
 
 
 def list_appointments_for_user(

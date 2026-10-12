@@ -118,7 +118,12 @@ def book_for_patient(db: Session, user: User, payload: BookingIn) -> tuple[Appoi
             dedupe_key=str(appointment.id),
         )
         assignment = ensure_care_assignment(
-            db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=user.id
+            db,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.id,
+            staff=staff,
+            actor_user_id=user.id,
+            appointment_id=appointment.id,
         )
         db.commit()
     db.refresh(appointment)

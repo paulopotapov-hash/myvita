@@ -9,7 +9,14 @@ from app.core.database import Base
 
 
 class ClinicalCareAssignment(Base):
-    """Explicit, revocable link between a clinic professional and a patient."""
+    """Explicit, revocable link between a clinic professional and a patient.
+
+    `origin_appointment_id` is set only when a booking created the link automatically: it
+    names the appointment that justifies it, and cancelling that appointment ends the link
+    unless another active appointment with the same professional remains
+    (app/modules/scheduling/booking.py). NULL means assigned by an admin: never ended
+    automatically.
+    """
 
     __tablename__ = "clinical_care_assignments"
     __table_args__ = (
@@ -28,6 +35,13 @@ class ClinicalCareAssignment(Base):
         ForeignKeyConstraint(
             ["assigned_by_user_id"], ["users.id"], name="fk_care_assignment_assigned_by", ondelete="RESTRICT"
         ),
+        ForeignKeyConstraint(
+            ["origin_appointment_id", "clinic_id"],
+            ["appointments.id", "appointments.clinic_id"],
+            name="fk_care_assignment_origin_appointment_clinic",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_care_assignments_origin_appointment", "origin_appointment_id"),
         Index("ix_care_assignments_clinic_patient_active", "clinic_id", "patient_id", "active"),
         Index(
             "uq_care_assignment_active_staff_patient",
@@ -48,3 +62,4 @@ class ClinicalCareAssignment(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    origin_appointment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

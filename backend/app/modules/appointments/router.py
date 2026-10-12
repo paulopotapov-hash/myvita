@@ -23,7 +23,7 @@ from app.modules.appointments.service import (
     update_appointment,
 )
 from app.modules.appointments.views import patient_views
-from app.modules.scheduling.audit import audit_auto_assignment
+from app.modules.scheduling.audit import audit_auto_assignment, audit_released_assignment
 
 router = APIRouter()
 
@@ -258,7 +258,7 @@ def update(
             clinical_access(db, current.patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
             clinical_access(db, patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
         _reject_admin_reason(payload, staff_user, db, patient_id)
-        appointment, assignment = update_appointment(db, appointment_id, clinic_id, payload, staff_user.id)
+        appointment, assignment, ended = update_appointment(db, appointment_id, clinic_id, payload, staff_user.id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_UPDATED,
         result=AuditResult.SUCCESS,
@@ -271,6 +271,7 @@ def update(
         user_agent=request.headers.get("user-agent"),
         metadata={"patient_id": appointment.patient_id, "status": appointment.status},
     )
+    audit_released_assignment(request, staff_user, ended, appointment.id, via="appointment_moved")
     audit_auto_assignment(request, staff_user, assignment, appointment.id)
     return _public(appointment, staff_user, db)
 
@@ -288,7 +289,7 @@ def cancel(
         actor_staff = staff_profile(db, staff_user) if staff_user.role == UserRole.STAFF else None
         if actor_staff is not None and actor_staff.staff_role != StaffRole.ADMIN:
             clinical_access(db, current.patient_id, staff_user, ClinicalAction.EDIT_APPOINTMENTS)
-        appointment = cancel_appointment(db, appointment_id, clinic_id)
+        appointment, ended = cancel_appointment(db, appointment_id, clinic_id)
     record_audit_event(
         action=AuditAction.APPOINTMENT_CANCELLED,
         result=AuditResult.SUCCESS,
@@ -301,4 +302,5 @@ def cancel(
         user_agent=request.headers.get("user-agent"),
         metadata={"patient_id": appointment.patient_id},
     )
+    audit_released_assignment(request, staff_user, ended, appointment.id, via="appointment_cancelled")
     return _public(appointment, staff_user, db)
