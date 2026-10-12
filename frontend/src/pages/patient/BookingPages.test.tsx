@@ -21,6 +21,15 @@ const h = vi.hoisted(() => ({
   cancel: vi.fn(),
   reschedule: vi.fn(),
   ask: vi.fn(),
+  waitlist: [] as unknown[],
+  waitlistChange: vi.fn(),
+  acceptOffer: vi.fn(),
+}))
+
+vi.mock('../../hooks/useWaitlist', () => ({
+  useWaitlist: () => ({ data: h.waitlist, isSuccess: true }),
+  useWaitlistChange: () => ({ mutate: h.waitlistChange, isPending: false }),
+  useAcceptOffer: () => ({ mutate: h.acceptOffer, isPending: false, variables: undefined }),
 }))
 
 vi.mock('../../services/appointmentRequests', () => ({
@@ -104,6 +113,9 @@ beforeEach(() => {
   h.reschedule.mockReset()
   h.ask.mockReset()
   h.ask.mockResolvedValue({ id: 'req-1' })
+  h.waitlist = []
+  h.waitlistChange.mockReset()
+  h.acceptOffer.mockReset()
   h.professionals = [
     { id: 'd-known', full_name: 'Dra. Rita', known: true },
     { id: 'd-new', full_name: 'Dr. Rui', known: false },
@@ -282,5 +294,50 @@ describe('Remarcar', () => {
     await user.click(within(form).getByRole('button', { name: 'Enviar pedido de remarcação' }))
     expect(h.ask).toHaveBeenCalledWith(expect.objectContaining({ reschedule_of_id: 'req', preferred_period: 'morning' }))
     await screen.findByText('/patient/consultas/req')
+  })
+})
+
+describe('Lista de espera', () => {
+  it('joins with the chosen scope from the appointment page, and shows how to leave', async () => {
+    h.appointments = [appointment('up', 9, 'confirmed')]
+    const user = userEvent.setup()
+    const view = renderAt('/patient/consultas/up')
+    const section = screen.getByRole('region', { name: 'Lista de espera' })
+    await user.click(within(section).getByRole('radio', { name: 'Qualquer profissional da especialidade' }))
+    await user.click(within(section).getByRole('button', { name: 'Entrar na lista de espera' }))
+    expect(h.waitlistChange).toHaveBeenCalledWith({ kind: 'join', appointmentId: 'up', scope: 'specialty' }, expect.any(Object))
+
+    h.waitlist = [{ id: 'e1', appointment_id: 'up', scope: 'professional', status: 'active', created_at: iso(0, 9), offers: [] }]
+    view.unmount()
+    renderAt('/patient/consultas/up')
+    const listed = screen.getByRole('region', { name: 'Lista de espera' })
+    expect(listed).toHaveTextContent('Estás na lista de espera (com Dra. Rita)')
+    await user.click(within(listed).getByRole('button', { name: 'Sair da lista de espera' }))
+    expect(h.waitlistChange).toHaveBeenLastCalledWith({ kind: 'leave', entryId: 'e1' }, expect.any(Object))
+  })
+
+  it('is not offered for "só por pedido" appointments', () => {
+    h.appointments = [appointment('req', 9, 'confirmed', 'Primeira consulta', { booking_mode: 'request' })]
+    renderAt('/patient/consultas/req')
+    expect(screen.queryByRole('region', { name: 'Lista de espera' })).not.toBeInTheDocument()
+  })
+
+  it('offers earlier slots on "As minhas consultas" and opens the new appointment once accepted', async () => {
+    h.appointments = [appointment('up', 9, 'confirmed')]
+    h.waitlist = [{
+      id: 'e1', appointment_id: 'up', scope: 'professional', status: 'active', created_at: iso(0, 9),
+      offers: [{ id: 'o1', starts_at: iso(2, 9), ends_at: iso(2, 10), staff_name: 'Dra. Rita', expires_at: iso(0, 23) }],
+    }]
+    const user = userEvent.setup()
+    renderAt('/patient/consultas')
+    const offers = screen.getByRole('list', { name: 'Vagas oferecidas' })
+    expect(offers).toHaveTextContent('Dra. Rita')
+    await user.click(within(offers).getByRole('button', { name: 'Aceitar vaga' }))
+    const [offerId, callbacks] = h.acceptOffer.mock.calls[0] as [string, { onSuccess: (value: { id: string }) => void }]
+    expect(offerId).toBe('o1')
+    h.appointments = [...h.appointments, appointment('earlier', 2, 'confirmed')]
+    act(() => callbacks.onSuccess({ id: 'earlier' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/patient/consultas/earlier')
+    expect(screen.getByText('Consulta antecipada. A anterior foi cancelada.')).toBeInTheDocument()
   })
 })

@@ -8,15 +8,18 @@ import { FormMessage } from '../../components/FormMessage'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { useAppointment } from '../../hooks/useClinicData'
 import { useBookingSettings, useCancelBooking } from '../../hooks/useScheduling'
+import { useWaitlist, useWaitlistChange } from '../../hooks/useWaitlist'
 import { formatClinicDay, formatClinicTime } from '../../lib/clinicTime'
 import { toUserMessage } from '../../lib/errorMessages'
+import type { WaitlistScope } from '../../types/scheduling'
 
-type Notice = { booked?: boolean; rescheduled?: boolean; rescheduleRequested?: boolean }
+type Notice = { booked?: boolean; rescheduled?: boolean; rescheduleRequested?: boolean; fromWaitlist?: boolean }
 
 const NOTICES: Array<[keyof Notice, string]> = [
   ['booked', 'Consulta marcada e confirmada.'],
   ['rescheduled', 'Consulta remarcada. A anterior foi cancelada.'],
   ['rescheduleRequested', 'Pedido de remarcação enviado. A clínica responde na app; até lá, a consulta mantém-se.'],
+  ['fromWaitlist', 'Consulta antecipada. A anterior foi cancelada.'],
 ]
 
 /** One appointment of the patient: when, with whom, where, its state, and what they may
@@ -34,6 +37,10 @@ export function PatientAppointmentDetailPage() {
   const data = appointment.data?.view === 'patient' ? appointment.data : null
   const active = data !== null && (data.status === 'scheduled' || data.status === 'confirmed')
   const phone = settings.data?.clinic_phone
+  const waitlist = useWaitlist()
+  const waitlistChange = useWaitlistChange()
+  const [scope, setScope] = useState<WaitlistScope>('professional')
+  const entry = waitlist.data?.find((item) => item.appointment_id === appointmentId)
 
   function confirmCancel() {
     setError('')
@@ -88,6 +95,52 @@ export function PatientAppointmentDetailPage() {
             </Link>
             <Button variant="secondary" onClick={() => setConfirming(true)}>Cancelar consulta</Button>
           </div>
+        </section>
+      )}
+
+      {data && active && data.can_change && data.booking_mode === 'direct' && waitlist.isSuccess && (
+        <section aria-labelledby="waitlist-heading" className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5">
+          <h2 id="waitlist-heading" className="text-base font-semibold text-slate-900">Lista de espera</h2>
+          {entry ? (
+            <>
+              <p className="text-sm text-slate-600">
+                Estás na lista de espera ({entry.scope === 'professional' ? `com ${data.staff_name}` : 'qualquer profissional da especialidade'}). Avisamos-te na app se abrir uma vaga mais cedo.
+              </p>
+              <div>
+                <Button
+                  variant="secondary"
+                  isLoading={waitlistChange.isPending}
+                  onClick={() => waitlistChange.mutate({ kind: 'leave', entryId: entry.id }, { onError: (failure) => setError(toUserMessage(failure)) })}
+                >
+                  Sair da lista de espera
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">Queres uma vaga mais cedo? Se alguém cancelar, avisamos-te na app.</p>
+              <fieldset className="flex flex-wrap gap-2">
+                <legend className="sr-only">Que vagas aceitas</legend>
+                {([['professional', `Com ${data.staff_name}`], ['specialty', 'Qualquer profissional da especialidade']] as Array<[WaitlistScope, string]>).map(([value, label]) => (
+                  <label key={value} className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm">
+                    <input type="radio" name="waitlist-scope" checked={scope === value} onChange={() => setScope(value)} />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+              <div>
+                <Button
+                  isLoading={waitlistChange.isPending}
+                  onClick={() => {
+                    setError('')
+                    waitlistChange.mutate({ kind: 'join', appointmentId, scope }, { onError: (failure) => setError(toUserMessage(failure)) })
+                  }}
+                >
+                  Entrar na lista de espera
+                </Button>
+              </div>
+            </>
+          )}
         </section>
       )}
 

@@ -161,13 +161,16 @@ def cancel_in_transaction(
     notify_patient: bool,
     notify_staff: bool,
     release_link: bool = True,
+    offer_slot: bool = True,
 ) -> AutoAssignment | None:
     """Cancel an active appointment inside the caller's transaction (under the clinic
     lock): record who and when, notify, free the slot (flushed, so the caller's next
     availability or overlap check already sees it) and end the care link it created.
     Returns that link, for the caller to audit after the commit. A reschedule passes
     `release_link=False` and releases it once the new appointment exists, so a link to
-    the same professional moves to the new appointment instead of ending."""
+    the same professional moves to the new appointment instead of ending; it also passes
+    `offer_slot=False` and offers the old slot to the waiting list once the new appointment
+    exists (the new one may take part of it)."""
     appointment.status = AppointmentStatus.CANCELLED
     appointment.cancelled_at = datetime.now(UTC)
     appointment.cancelled_by_user_id = actor_user_id
@@ -184,6 +187,12 @@ def cancel_in_transaction(
                 db, staff, event=NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF, dedupe_key=str(appointment.id)
             )
     db.flush()
+    # The waiting list: this appointment's own entry ends, and its slot is offered.
+    from app.modules.scheduling import waitlist
+
+    waitlist.close_for_appointment(db, appointment.id)
+    if offer_slot:
+        waitlist.offer_freed_slot(db, appointment)
     if not release_link:
         return None
     return release_care_assignment(
@@ -235,6 +244,7 @@ def _create_appointment(
                 notify_patient=False,
                 notify_staff=replaces.staff_id != staff.id,
                 release_link=False,
+                offer_slot=False,
             )
         else:
             replaces = None  # cancelled or finished meanwhile: the new appointment simply stands alone
@@ -269,6 +279,9 @@ def _create_appointment(
     _add_staff_notification(db, staff, event=NotificationEvent.APPOINTMENT_ASSIGNED, dedupe_key=str(appointment.id))
     ended = None
     if replaces is not None:
+        from app.modules.scheduling import waitlist
+
+        waitlist.offer_freed_slot(db, replaces)
         # The old appointment's link: moves to this one (same professional) or ends.
         ended = release_care_assignment(db, appointment=replaces, patient_id=replaces.patient_id, staff_id=replaces.staff_id)
     assignment = ensure_care_assignment(
@@ -366,6 +379,20 @@ def _update_appointment(
     )
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(appointment, field, value)
+    moved = staff_id != old_staff_id or scheduled_at != old_scheduled_at or patient_id != old_patient_id
+    if moved or appointment.status in (AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW):
+        # The waiting list: an entry was for this professional and time; a moved slot is offered.
+        from app.modules.scheduling import waitlist
+
+        db.flush()
+        waitlist.close_for_appointment(db, appointment.id)
+        if moved and old_status in (AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED):
+            waitlist.offer_freed_slot(
+                db,
+                waitlist.FreedSlot(
+                    clinic_id=appointment.clinic_id, patient_id=old_patient_id, staff_id=old_staff_id, scheduled_at=old_scheduled_at
+                ),
+            )
     status_events = {
         AppointmentStatus.CONFIRMED: NotificationEvent.APPOINTMENT_CONFIRMED,
         AppointmentStatus.COMPLETED: NotificationEvent.APPOINTMENT_COMPLETED,

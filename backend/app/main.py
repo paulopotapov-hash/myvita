@@ -54,6 +54,7 @@ from app.modules.patients.router import router as patients_router
 from app.modules.scheduling.router import router as scheduling_router
 from app.modules.staff.router import router as staff_router
 from app.modules.users.router import router as users_router
+from app.modules.waitlist.router import router as waitlist_router
 
 # JSON in anything that isn't plain local development — staging logs get
 # shipped/ingested the same way production's do, so they need the same
@@ -318,6 +319,7 @@ app.include_router(medical_records_router, prefix="/api/v1", tags=["medical-reco
 app.include_router(medications_router, prefix="/api/v1", tags=["medications"])
 app.include_router(clinical_history_router, prefix="/api/v1", tags=["clinical-history"])
 app.include_router(scheduling_router, prefix="/api/v1/scheduling", tags=["scheduling"])
+app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
 app.include_router(clinical_results_router, prefix="/api/v1", tags=["clinical-results"])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
 app.include_router(messages_router, prefix="/api/v1/conversations", tags=["messages"])

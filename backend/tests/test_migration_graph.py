@@ -34,8 +34,9 @@ def test_revision_graph_has_exactly_one_head():
     # then by clinical results / record visibility / notification events (P2.4-P2.6),
     # the released-result guard, the patient identifiers and address, the clinical history
     # the partial start date of declared medication, scheduling, the origin of the
-    # automatic care assignment and cancellation / rescheduling.
-    assert heads == ["9a4c6e8f0b2d"], f"expected a single head, got {heads}"
+    # automatic care assignment, cancellation / rescheduling and the waiting list.
+    assert heads == ["b2d4f6a8c0e1"], f"expected a single head, got {heads}"
+    assert script.get_revision("b2d4f6a8c0e1").down_revision == "9a4c6e8f0b2d"
     assert script.get_revision("9a4c6e8f0b2d").down_revision == "8e3f5a7c9b1d"
     assert script.get_revision("8e3f5a7c9b1d").down_revision == "7d2e4b9a1c3f"
     assert script.get_revision("7d2e4b9a1c3f").down_revision == "5f3a9c1e7b2d"

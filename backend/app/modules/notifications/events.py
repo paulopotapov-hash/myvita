@@ -58,6 +58,7 @@ class NotificationEvent(str, enum.Enum):
     APPOINTMENT_REQUEST_PROPOSED = "appointment_request_proposed"
     APPOINTMENT_REQUEST_ANSWERED = "appointment_request_answered"
     APPOINTMENT_REQUEST_REOPENED = "appointment_request_reopened"
+    WAITLIST_OFFER = "waitlist_offer"
 
 
 # Generic wording only. Existing texts are kept verbatim: the frontend and
@@ -128,6 +129,10 @@ TEMPLATES: dict[NotificationEvent, tuple[str, str]] = {
     NotificationEvent.APPOINTMENT_REQUEST_REOPENED: (
         "Pedido de consulta reaberto",
         "O horário proposto a um paciente já não estava livre quando aceitou. Proponha outro horário.",
+    ),
+    NotificationEvent.WAITLIST_OFFER: (
+        "Vaga mais cedo disponível",
+        "Abriu uma vaga mais cedo para uma das suas consultas. Abra as suas consultas para a aceitar antes que expire.",
     ),
 }
 

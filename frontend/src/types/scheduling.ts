@@ -96,3 +96,23 @@ export interface Agenda {
   absences: Absence[]
   rules: ScheduleRule[]
 }
+
+/** Waiting list ("Fast Pass", step 6): earlier slots for one of the patient's appointments. */
+export type WaitlistScope = 'professional' | 'specialty'
+
+export interface WaitlistOffer {
+  id: string
+  starts_at: string
+  ends_at: string
+  staff_name: string
+  expires_at: string
+}
+
+export interface WaitlistEntry {
+  id: string
+  appointment_id: string
+  scope: WaitlistScope
+  status: 'active' | 'fulfilled' | 'left' | 'closed'
+  created_at: string
+  offers: WaitlistOffer[]
+}

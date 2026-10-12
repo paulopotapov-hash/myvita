@@ -18,8 +18,8 @@ Idempotent: safe to run on every deployment. The runtime role ends up with:
   append-only by decision D3; record revisions are the edit and sharing
   history of medical records, P2.5);
 - SELECT/INSERT plus column-level UPDATE (no DELETE) on conversations,
-  messages, invitations, appointment_requests, medical_records and
-  clinical_results (see COLUMN_UPDATE_TABLES). For clinical results this means
+  messages, invitations, appointment_requests, medical_records,
+  clinical_results and the waiting list (see COLUMN_UPDATE_TABLES). For clinical results this means
   a result can never be deleted or moved to another patient, clinic, author or
   correction chain by the app role; that a RELEASED result is never updated
   or deleted is enforced by a table trigger (migration 8d9e0f1a2b3c);
@@ -67,6 +67,9 @@ COLUMN_UPDATE_TABLES: dict[str, tuple[str, ...]] = {
         "proposed_at",
         "proposed_by_user_id",
     ),
+    # Step 6: waiting list. Entries and offers end by status, never by deletion.
+    "waitlist_entries": ("status", "ended_at"),
+    "waitlist_offers": ("status", "decided_at", "new_appointment_id"),
     "medical_records": (
         "title",
         "content",

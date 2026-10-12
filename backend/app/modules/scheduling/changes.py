@@ -177,78 +177,105 @@ def _reschedule(
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profissional não disponível.")
             candidates = [staff_id]
 
-        # Free the old time first (flushed): the new slot may overlap it.
-        cancel_in_transaction(db, old, actor_user_id=user.id, notify_patient=False, notify_staff=False, release_link=False)
-        chosen = next(
-            (
-                candidate
-                for candidate in candidates
-                if slot_is_free(
-                    db,
-                    clinic_id=patient.clinic_id,
-                    appointment_type=appointment_type,
-                    staff_id=candidate,
-                    starts_at=starts_at,
-                    now=at,
-                )
-            ),
-            None,
-        )
-        if chosen is None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=SLOT_TAKEN_FOR_PATIENT)
-        ends_at = starts_at + timedelta(minutes=appointment_type.duration_minutes)
-        overlapping = (
-            db.query(Appointment.id)
-            .filter(
-                Appointment.patient_id == patient.id,
-                Appointment.status.in_(ACTIVE),
-                Appointment.scheduled_at < ends_at,
-                Appointment.ends_at > starts_at,
-            )
-            .first()
-        )
-        if overlapping is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OWN_OVERLAP_FOR_PATIENT)
-        new = Appointment(
-            clinic_id=patient.clinic_id,
-            patient_id=patient.id,
-            staff_id=chosen,
-            scheduled_at=starts_at,
-            duration_minutes=appointment_type.duration_minutes,
-            appointment_type_id=appointment_type.id,
-            booked_via=BookingSource.PATIENT,
-            status=AppointmentStatus.CONFIRMED,
-            reason=old.reason,
-            rescheduled_from_id=old.id,
-        )
-        db.add(new)
-        db.flush()
-        staff = db.get(Staff, chosen)
-        assert staff is not None
-        if chosen == old.staff_id:
-            notify(db, NotificationEvent.APPOINTMENT_UPDATED, clinic_id=patient.clinic_id, recipient_user_id=staff.user_id)
-        else:
-            old_staff = db.get(Staff, old.staff_id)
-            if old_staff is not None:
-                notify(
-                    db,
-                    NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF,
-                    clinic_id=patient.clinic_id,
-                    recipient_user_id=old_staff.user_id,
-                    dedupe_key=str(old.id),
-                )
-            notify(
-                db,
-                NotificationEvent.APPOINTMENT_ASSIGNED,
-                clinic_id=patient.clinic_id,
-                recipient_user_id=staff.user_id,
-                dedupe_key=str(new.id),
-            )
-        ended = release_care_assignment(db, appointment=old, patient_id=patient.id, staff_id=old.staff_id)
-        created = ensure_care_assignment(
-            db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=user.id, appointment_id=new.id
+        new, created, ended = book_replacement(
+            db, user=user, patient=patient, old=old, appointment_type=appointment_type, candidates=candidates,
+            starts_at=starts_at, booked_via=BookingSource.PATIENT, at=at,
         )
         db.commit()
     db.refresh(new)
     db.refresh(old)
     return new, old, created, ended
+
+
+def book_replacement(
+    db: Session,
+    *,
+    user: User,
+    patient: Patient,
+    old: Appointment,
+    appointment_type: AppointmentType,
+    candidates: list[uuid.UUID],
+    starts_at: datetime,
+    booked_via: BookingSource,
+    at: datetime,
+) -> tuple[Appointment, AutoAssignment | None, AutoAssignment | None]:
+    """Move `old` to `starts_at` with the first candidate free then, inside the caller's
+    transaction and clinic lock (a reschedule, or an accepted waiting-list offer). The old
+    time is freed first (flushed), since the new slot may overlap it; a 409 leaves the
+    caller to roll everything back. Returns (new appointment, care link created, ended)."""
+    cancel_in_transaction(
+        db, old, actor_user_id=user.id, notify_patient=False, notify_staff=False, release_link=False, offer_slot=False
+    )
+    chosen = next(
+        (
+            candidate
+            for candidate in candidates
+            if slot_is_free(
+                db,
+                clinic_id=patient.clinic_id,
+                appointment_type=appointment_type,
+                staff_id=candidate,
+                starts_at=starts_at,
+                now=at,
+            )
+        ),
+        None,
+    )
+    if chosen is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=SLOT_TAKEN_FOR_PATIENT)
+    ends_at = starts_at + timedelta(minutes=appointment_type.duration_minutes)
+    overlapping = (
+        db.query(Appointment.id)
+        .filter(
+            Appointment.patient_id == patient.id,
+            Appointment.status.in_(ACTIVE),
+            Appointment.scheduled_at < ends_at,
+            Appointment.ends_at > starts_at,
+        )
+        .first()
+    )
+    if overlapping is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OWN_OVERLAP_FOR_PATIENT)
+    new = Appointment(
+        clinic_id=patient.clinic_id,
+        patient_id=patient.id,
+        staff_id=chosen,
+        scheduled_at=starts_at,
+        duration_minutes=appointment_type.duration_minutes,
+        appointment_type_id=appointment_type.id,
+        booked_via=booked_via,
+        status=AppointmentStatus.CONFIRMED,
+        reason=old.reason,
+        rescheduled_from_id=old.id,
+    )
+    db.add(new)
+    db.flush()
+    staff = db.get(Staff, chosen)
+    assert staff is not None
+    if chosen == old.staff_id:
+        notify(db, NotificationEvent.APPOINTMENT_UPDATED, clinic_id=patient.clinic_id, recipient_user_id=staff.user_id)
+    else:
+        old_staff = db.get(Staff, old.staff_id)
+        if old_staff is not None:
+            notify(
+                db,
+                NotificationEvent.APPOINTMENT_CANCELLED_FOR_STAFF,
+                clinic_id=patient.clinic_id,
+                recipient_user_id=old_staff.user_id,
+                dedupe_key=str(old.id),
+            )
+        notify(
+            db,
+            NotificationEvent.APPOINTMENT_ASSIGNED,
+            clinic_id=patient.clinic_id,
+            recipient_user_id=staff.user_id,
+            dedupe_key=str(new.id),
+        )
+    from app.modules.scheduling import waitlist
+
+    waitlist.offer_freed_slot(db, old)  # now that the new appointment holds its part of the time
+    ended = release_care_assignment(db, appointment=old, patient_id=patient.id, staff_id=old.staff_id)
+    created = ensure_care_assignment(
+        db, clinic_id=patient.clinic_id, patient_id=patient.id, staff=staff, actor_user_id=user.id, appointment_id=new.id
+    )
+    return new, created, ended

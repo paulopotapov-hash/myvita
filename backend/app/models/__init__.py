@@ -56,3 +56,10 @@ from app.models.scheduling import (  # noqa: F401
 )
 from app.models.staff import Staff, StaffRole  # noqa: F401
 from app.models.user import User, UserRole  # noqa: F401
+from app.models.waitlist import (  # noqa: F401
+    WaitlistEntry,
+    WaitlistOffer,
+    WaitlistOfferStatus,
+    WaitlistScope,
+    WaitlistStatus,
+)

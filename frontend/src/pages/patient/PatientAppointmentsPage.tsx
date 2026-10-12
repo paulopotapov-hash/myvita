@@ -6,6 +6,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { FormMessage } from '../../components/FormMessage'
 import { Icon } from '../../components/Icon'
+import { WaitlistOffersPanel } from '../../components/scheduling/WaitlistOffersPanel'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
 import { useAppointments } from '../../hooks/useClinicData'
 import { formatClinicDay, formatClinicTime } from '../../lib/clinicTime'
@@ -50,6 +51,8 @@ export function PatientAppointmentsPage() {
       </div>
 
       {requested && <FormMessage kind="success">Pedido enviado. A clínica responde na app: confirma ou propõe um horário.</FormMessage>}
+
+      <WaitlistOffersPanel />
 
       <div role="tablist" aria-label="Consultas" className="flex gap-2 border-b border-slate-200">
         {([['upcoming', `Próximas (${upcoming.length})`], ['past', 'Passadas']] as Array<[Tab, string]>).map(([key, label]) => (
