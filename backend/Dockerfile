@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 # DOCUMENT_STORAGE_DIR points at the image's private, writable document store
